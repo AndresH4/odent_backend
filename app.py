@@ -1,20 +1,24 @@
 from flask import Flask
+from db import get_db_connection
 
-from modulo_usuarios.routes import usuarios_bp
-from modulo_eps.routes import eps_bp
-from modulo_citas.routes import citas_bp
+# ─── Importar blueprints de cada módulo ───────────────────────────────────────
+from modulo_usuario.routes import usuario_bp
+from modulo_eps.routes     import eps_bp
+from modulo_citas.routes   import citas_bp
 from modulo_historial.routes import historial_bp
 
 app = Flask(__name__)
 
-app.register_blueprint(usuarios_bp)
-app.register_blueprint(eps_bp)
-app.register_blueprint(citas_bp)
-app.register_blueprint(historial_bp)
+# ─── Registrar blueprints con prefijo de URL ──────────────────────────────────
+app.register_blueprint(usuario_bp,  url_prefix='/api')
+app.register_blueprint(eps_bp,      url_prefix='/api')
+app.register_blueprint(citas_bp,    url_prefix='/api')
+app.register_blueprint(historial_bp, url_prefix='/api')
 
-@app.route("/")
-def home():
-    return {"mensaje": "API ODENT funcionando"}
+# ─── Ruta de prueba ───────────────────────────────────────────────────────────
+@app.route('/')
+def index():
+    return {'mensaje': 'Odent API corriendo correctamente'}
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     app.run(debug=True)
