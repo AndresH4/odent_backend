@@ -23,72 +23,78 @@ def init_db():
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS rol (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT NOT NULL
+        rol_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        descripcion TEXT NOT NULL
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS estado_usuario (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT NOT NULL
+        estado_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre_estado TEXT NOT NULL
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS genero (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT NOT NULL
+        genero_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre_genero TEXT NOT NULL
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS tipo_de_documento (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT NOT NULL
+        tipo_documento_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre_documento TEXT NOT NULL
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS usuario (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT,
-        email TEXT,
-        password TEXT,
-        rol_id INTEGER,
-        estado_usuario_id INTEGER,
-        genero_id INTEGER,
+        usuario_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombres TEXT,
+        apellidos TEXT,
         tipo_de_documento_id INTEGER,
-        FOREIGN KEY (rol_id) REFERENCES rol(id),
-        FOREIGN KEY (estado_usuario_id) REFERENCES estado_usuario(id),
-        FOREIGN KEY (genero_id) REFERENCES genero(id),
-        FOREIGN KEY (tipo_de_documento_id) REFERENCES tipo_de_documento(id)
+        numero_documento TEXT,
+        contraseña TEXT,
+        fecha_nacimiento DATE,
+        genero_id INTEGER,
+        correo TEXT,
+        telefono TEXT,
+        estado_usuario_id INTEGER,
+        rol_id INTEGER,
+        FOREIGN KEY (rol_id) REFERENCES rol(rol_id),
+        FOREIGN KEY (estado_usuario_id) REFERENCES estado_usuario(estado_id),
+        FOREIGN KEY (genero_id) REFERENCES genero(genero_id),
+        FOREIGN KEY (tipo_de_documento_id) REFERENCES tipo_de_documento(tipo_documento_id)
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS administrador (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        administrador_id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER,
-        FOREIGN KEY (usuario_id) REFERENCES usuario(id)
+        FOREIGN KEY (usuario_id) REFERENCES usuario(usuario_id)
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS aseguramiento_de_datos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        aseguramiento_id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER,
         fecha TEXT,
-        FOREIGN KEY (usuario_id) REFERENCES usuario(id)
+        accion_id INTEGER,
+        descripcion TEXT,
+        FOREIGN KEY (usuario_id) REFERENCES usuario(usuario_id),
+        FOREIGN KEY (accion_id) REFERENCES accion_aseg_datos(accion_id)
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS accion_aseg_datos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        aseguramiento_id INTEGER,
-        accion TEXT,
-        FOREIGN KEY (aseguramiento_id) REFERENCES aseguramiento_de_datos(id)
+        accion_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre_accion TEXT,
+        FOREIGN KEY (aseguramiento_id) REFERENCES aseguramiento_de_datos(aseguramiento_id)
     )
     """)
 
@@ -98,61 +104,61 @@ def init_db():
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS tipoeps (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT NOT NULL
+        tipoeps_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre_tipoeps TEXT NOT NULL
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS regimen_eps (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT NOT NULL
+        regimen_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre_regimen TEXT NOT NULL
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS eps (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        eps_id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT,
         tipoeps_id INTEGER,
         regimen_eps_id INTEGER,
-        FOREIGN KEY (tipoeps_id) REFERENCES tipoeps(id),
-        FOREIGN KEY (regimen_eps_id) REFERENCES regimen_eps(id)
+        FOREIGN KEY (tipoeps_id) REFERENCES tipoeps(tipoeps_id),
+        FOREIGN KEY (regimen_eps_id) REFERENCES regimen_eps(regimen_id)
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS afiliacion (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        afiliacion_id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER,
         eps_id INTEGER,
         fecha TEXT,
-        FOREIGN KEY (usuario_id) REFERENCES usuario(id),
-        FOREIGN KEY (eps_id) REFERENCES eps(id)
+        FOREIGN KEY (usuario_id) REFERENCES usuario(usuario_id),
+        FOREIGN KEY (eps_id) REFERENCES eps(eps_id)
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS paciente (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        paciente_id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER,
-        FOREIGN KEY (usuario_id) REFERENCES usuario(id)
+        FOREIGN KEY (usuario_id) REFERENCES usuario(usuario_id)
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS tabla_pregunta (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pregunta_id INTEGER PRIMARY KEY AUTOINCREMENT,
         texto TEXT
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS tabla_respuesta (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        respuesta_id INTEGER PRIMARY KEY AUTOINCREMENT,
         pregunta_id INTEGER,
         texto TEXT,
-        FOREIGN KEY (pregunta_id) REFERENCES tabla_pregunta(id)
+        FOREIGN KEY (pregunta_id) REFERENCES tabla_pregunta(pregunta_id)
     )
     """)
 
@@ -162,74 +168,74 @@ def init_db():
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS especialistas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        especialista_id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER,
-        FOREIGN KEY (usuario_id) REFERENCES usuario(id)
+        FOREIGN KEY (usuario_id) REFERENCES usuario(usuario_id)
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS especialidad (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        especialidad_id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS especialista_especialidad (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        especialista_especialidad_id INTEGER PRIMARY KEY AUTOINCREMENT,
         especialista_id INTEGER,
         especialidad_id INTEGER,
-        FOREIGN KEY (especialista_id) REFERENCES especialistas(id),
-        FOREIGN KEY (especialidad_id) REFERENCES especialidad(id)
+        FOREIGN KEY (especialista_id) REFERENCES especialistas(especialista_id),
+        FOREIGN KEY (especialidad_id) REFERENCES especialidad(especialidad_id)
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS estado_agenda (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        estado_agenda_id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS agenda (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agenda_id INTEGER PRIMARY KEY AUTOINCREMENT,
         especialista_id INTEGER,
         fecha TEXT,
         estado_agenda_id INTEGER,
-        FOREIGN KEY (especialista_id) REFERENCES especialistas(id),
-        FOREIGN KEY (estado_agenda_id) REFERENCES estado_agenda(id)
+        FOREIGN KEY (especialista_id) REFERENCES especialistas(especialista_id),
+        FOREIGN KEY (estado_agenda_id) REFERENCES estado_agenda(estado_agenda_id)
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS cita (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cita_id INTEGER PRIMARY KEY AUTOINCREMENT,
         paciente_id INTEGER,
         especialista_id INTEGER,
         fecha TEXT,
         estado TEXT,
-        FOREIGN KEY (paciente_id) REFERENCES paciente(id),
-        FOREIGN KEY (especialista_id) REFERENCES especialistas(id)
+        FOREIGN KEY (paciente_id) REFERENCES paciente(paciente_id),
+        FOREIGN KEY (especialista_id) REFERENCES especialistas(especialista_id)
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS estado_multa (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        estado_multa_id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS multa (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        multa_id INTEGER PRIMARY KEY AUTOINCREMENT,
         paciente_id INTEGER,
         monto REAL,
         estado_multa_id INTEGER,
-        FOREIGN KEY (paciente_id) REFERENCES paciente(id),
-        FOREIGN KEY (estado_multa_id) REFERENCES estado_multa(id)
+        FOREIGN KEY (paciente_id) REFERENCES paciente(paciente_id),
+        FOREIGN KEY (estado_multa_id) REFERENCES estado_multa(estado_multa_id)
     )
     """)
 
@@ -239,45 +245,45 @@ def init_db():
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS historial_clinico (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        historial_id INTEGER PRIMARY KEY AUTOINCREMENT,
         paciente_id INTEGER,
         descripcion TEXT,
-        FOREIGN KEY (paciente_id) REFERENCES paciente(id)
+        FOREIGN KEY (paciente_id) REFERENCES paciente(paciente_id)
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS tabla_diagnostico (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        diagnostico_id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS historial_diagnostico (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        historial_diagnostico_id INTEGER PRIMARY KEY AUTOINCREMENT,
         historial_id INTEGER,
         diagnostico_id INTEGER,
-        FOREIGN KEY (historial_id) REFERENCES historial_clinico(id),
-        FOREIGN KEY (diagnostico_id) REFERENCES tabla_diagnostico(id)
+        FOREIGN KEY (historial_id) REFERENCES historial_clinico(historial_id),
+        FOREIGN KEY (diagnostico_id) REFERENCES tabla_diagnostico(diagnostico_id)
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS tratamiento (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tratamiento_id INTEGER PRIMARY KEY AUTOINCREMENT,
         historial_id INTEGER,
         descripcion TEXT,
-        FOREIGN KEY (historial_id) REFERENCES historial_clinico(id)
+        FOREIGN KEY (historial_id) REFERENCES historial_clinico(historial_id)
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS tabla_puntuacion_especialista (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tabla_puntuacion_especialista_id INTEGER PRIMARY KEY AUTOINCREMENT,
         especialista_id INTEGER,
         puntuacion INTEGER,
-        FOREIGN KEY (especialista_id) REFERENCES especialistas(id)
+        FOREIGN KEY (especialista_id) REFERENCES especialistas(especialista_id)
     )
     """)
 
