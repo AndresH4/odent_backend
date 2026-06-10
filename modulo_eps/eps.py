@@ -1,90 +1,124 @@
-import sqlite3
-def eps():
-    return {"mensaje": "eps"}
+from flask import Flask, render_template, request, redirect, url_for
+import mysql.connector
 
+app = Flask(__name__)
+
+# =========================================
+# CONEXIÓN MYSQL
+# =========================================
 def conectar():
-    conn = sqlite3.connect('odent.db')
-    conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
+    return mysql.connector.connect(
+        host='localhost',
+        user='root',
+        password='',
+        database='odent'  # Usando tu misma base de datos
+    )
 
-# =====================================================================
-# OPERACIONES CRUD
-# =====================================================================
+# =========================================
+# MOSTRAR EPS (READ)
+# =========================================
+@app.route('/eps')
+def eps():
+    con = conectar()
+    cur = con.cursor(dictionary=True)
+    
+    # Trae todas las EPS registradas
+    cur.execute('SELECT * FROM eps')
+    lista_eps = cur.fetchall()
+    
+    cur.close()
+    con.close()
+    
+    return render_template(
+        'eps.html',
+        lista_eps=lista_eps
+    )
 
+# =========================================
+# CREAR EPS (CREATE)
+# =========================================
+@app.route('/crear_eps', methods=['POST'])
+def crear_eps():
+    # Capturando los datos enviados desde los inputs del formulario
+    nombre = request.form['nombre']
+    tipoeps_id = request.form['tipoeps_id']
+    regimen_eps_id = request.form['regimen_eps_id']
 
-# CREATE (Insertar un nuevo registro)
-def crear_eps(nombre, tipoeps_id, regimen_eps_id):
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        query = """INSERT INTO eps (nombre, tipoeps_id, regimen_eps_id) 
-                   VALUES (?, ?, ?)"""
-        cursor.execute(query, (nombre, tipoeps_id, regimen_eps_id))
-        conn.commit()
-        print(f"¡EPS '{nombre}' creada con éxito! ID asignado: {cursor.lastrowid}")
-    except sqlite3.IntegrityError as e:
-        print(
-            f"Error de integridad (verifica que los IDs de tipo y régimen existan): {e}"
+    con = conectar()
+    cur = con.cursor()
+
+    sql = '''
+        INSERT INTO eps (
+            nombre,
+            tipoeps_id,
+            regimen_eps_id
         )
-    finally:
-        conn.close()
+        VALUES (%s, %s, %s)
+    '''
+    
+    valores = (nombre, tipoeps_id, regimen_eps_id)
+    
+    cur.execute(sql, valores)
+    con.commit()
+    
+    cur.close()
+    con.close()
+    
+    return redirect(url_for('eps'))
 
+# =========================================
+# ACTUALIZAR EPS (UPDATE)
+# =========================================
+@app.route('/actualizar_eps/<int:id>', methods=['POST'])
+def actualizar_eps(id):
+    # Capturando los nuevos datos para modificar la EPS existente
+    nombre = request.form['nombre']
+    tipoeps_id = request.form['tipoeps_id']
+    regimen_eps_id = request.form['regimen_eps_id']
 
-# READ (Leer/Consultar registros)
-def obtener_todas_las_eps():
-    """Devuelve todas las EPS registradas."""
-    conn = conectar()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM eps")
-    resultados = cursor.fetchall()
-    conn.close()
-    return resultados
+    con = conectar()
+    cur = con.cursor()
 
+    sql = '''
+        UPDATE eps
+        SET
+            nombre = %s,
+            tipoeps_id = %s,
+            regimen_eps_id = %s
+        WHERE id = %s
+    '''
+    
+    valores = (nombre, tipoeps_id, regimen_eps_id, id)
+    
+    cur.execute(sql, valores)
+    con.commit()
+    
+    cur.close()
+    con.close()
+    
+    return redirect(url_for('eps'))
 
-def obtener_eps_por_id(eps_id):
-    """Busca y devuelve una EPS específica por su ID."""
-    conn = conectar()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM eps WHERE id = ?", (eps_id,))
-    resultado = cursor.fetchone()
-    conn.close()
-    return resultado
+# =========================================
+# ELIMINAR EPS (DELETE)
+# =========================================
+@app.route('/eliminar_eps/<int:id>', methods=['POST'])
+def eliminar_eps(id):
+    con = conectar()
+    cur = con.cursor()
 
+    cur.execute(
+        'DELETE FROM eps WHERE id = %s',
+        (id,)
+    )
 
-# UPDATE (Actualizar un registro existente)
-def actualizar_eps(eps_id, nuevo_nombre, nuevo_tipo_id, nuevo_regimen_id):
-    """Actualiza los datos de una EPS existente mediante su ID."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        query = """UPDATE eps 
-                   SET nombre = ?, tipoeps_id = ?, regimen_eps_id = ? 
-                   WHERE id = ?"""
-        cursor.execute(
-            query, (nuevo_nombre, nuevo_tipo_id, nuevo_regimen_id, eps_id)
-        )
-        conn.commit()
+    con.commit()
+    cur.close()
+    con.close()
 
-        if cursor.rowcount > 0:
-            print(f"¡EPS con ID {eps_id} actualizada correctamente!")
-        else:
-            print(f"No se encontró ninguna EPS con el ID {eps_id}.")
-    except sqlite3.IntegrityError as e:
-        print(f"Error al actualizar (violación de llave foránea): {e}")
-    finally:
-        conn.close()
+    return redirect(url_for('eps'))
 
-# Eliminar 
-def eliminar_eps(eps_id):
-    """Elimina una EPS de la base de datos por su ID."""
-    conn = conectar()
-    cursor = conn.cursor()
-    query = "DELETE FROM eps WHERE id = ?"
-    cursor.execute(query, (eps_id,))
-    conn.commit()
-
-    if cursor.rowcount > 0:
-        print(f"¡EPS con ID {eps_id} eliminada correctamente!")
-    else:
-        print(f"No se encontró ninguna EPS con el ID {eps_id}.")
-    conn.close()
+# =========================================
+# EJECUTAR APP
+# =========================================
+if __name__ == '__main__':
+    app.run(debug=True)
