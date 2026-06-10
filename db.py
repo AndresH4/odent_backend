@@ -1,8 +1,15 @@
-import sqlite3
+
+import mysql.connector
 
 def get_connection():
-    conn = sqlite3.connect("odent.db")
-    conn.execute("PRAGMA foreign_keys = ON")
+
+    conn = mysql.connector.connect(
+        host='localhost',
+        user='root',
+        password='',
+        database='odent'
+    )
+
     return conn
 
 
