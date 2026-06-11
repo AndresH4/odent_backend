@@ -1,142 +1,99 @@
-from flask import Flask, render_template, request, redirect, url_for
-import mysql.connector
-
-app = Flask(__name__)
-
-# =========================================
-# CONEXIÓN MYSQL
-# =========================================
-
-def conectar():
-
-    return mysql.connector.connect(
-        host='localhost',
-        user='root',
-        password='',
-        database='odent'
-    )
-
-# =========================================
-# MOSTRAR ACCIONES
-# READ
-# =========================================
-
-@app.route('/acciones_aseguramiento')
-def acciones_aseguramiento():
-
-    con = conectar()
-
-    cur = con.cursor(dictionary=True)
-
-    cur.execute('SELECT * FROM accion_aseguramiento')
-
-    acciones = cur.fetchall()
-
-    cur.close()
-    con.close()
-
-    return render_template(
-        'acciones_aseguramiento.html',
-        acciones=acciones
-    )
-
-# =========================================
-# CREAR ACCIÓN
-# CREATE
-# =========================================
-
-@app.route('/crear_accion_aseguramiento', methods=['POST'])
-def crear_accion_aseguramiento():
-
-    nombre_accion = request.form['nombre_accion']
-
-    con = conectar()
-
-    cur = con.cursor()
-
-    sql = '''
-
-        INSERT INTO accion_aseguramiento
-        (NombreAccion)
-
-        VALUES (%s)
-
-    '''
-
-    cur.execute(sql, (nombre_accion,))
-
-    con.commit()
-
-    cur.close()
-    con.close()
-
-    return redirect(url_for('acciones_aseguramiento'))
-
-# =========================================
-# ACTUALIZAR ACCIÓN
-# UPDATE
-# =========================================
-
-@app.route('/actualizar_accion_aseguramiento/<int:id>', methods=['POST'])
-def actualizar_accion_aseguramiento(id):
-
-    nombre_accion = request.form['nombre_accion']
-
-    con = conectar()
-
-    cur = con.cursor()
-
-    sql = '''
-
-        UPDATE accion_aseguramiento
-
-        SET NombreAccion = %s
-
-        WHERE Accion_ID = %s
-
-    '''
-
-    cur.execute(sql, (nombre_accion, id))
-
-    con.commit()
-
-    cur.close()
-    con.close()
-
-    return redirect(url_for('acciones_aseguramiento'))
-
-# =========================================
-# ELIMINAR ACCIÓN
-# DELETE
-# =========================================
-
-@app.route('/eliminar_accion_aseguramiento/<int:id>', methods=['POST'])
-def eliminar_accion_aseguramiento(id):
-
-    con = conectar()
-
-    cur = con.cursor()
-
-    sql = '''
-
-        DELETE FROM accion_aseguramiento
-
-        WHERE Accion_ID = %s
-
-    '''
-
-    cur.execute(sql, (id,))
-
-    con.commit()
-
-    cur.close()
-    con.close()
-
-    return redirect(url_for('acciones_aseguramiento'))
-
-# =========================================
-# EJECUTAR APP
-# =========================================
-
-if __name__ == '__main__':
-    app.run(debug=True)
+"""
+modulo_usuarios/accion_aseguramiento.py
+========================================
+Gestión de la tabla 'accion_aseguramiento'.
+Tabla catálogo — sin dependencias externas.
+ 
+Columnas:
+    Accion_ID    INTEGER PRIMARY KEY AUTOINCREMENT
+    Nombre_Accion VARCHAR(20) NOT NULL
+"""
+ 
+import sqlite3
+from sqlite3 import Error
+ 
+DB_NAME = "odent.db"
+ 
+ 
+def _get_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON;")
+    return conn
+ 
+ 
+def create_accion(nombre: str) -> dict:
+    """Crea una nueva acción de aseguramiento."""
+    conn = _get_conn()
+    try:
+        cursor = conn.execute(
+            "INSERT INTO accion_aseguramiento (Nombre_Accion) VALUES (?)", (nombre,)
+        )
+        conn.commit()
+        return {"ok": True, "accion_id": cursor.lastrowid}
+    except Error as e:
+        return {"ok": False, "error": str(e)}
+    finally:
+        conn.close()
+ 
+ 
+def read_all_acciones() -> list[dict]:
+    """Retorna todas las acciones de aseguramiento."""
+    conn = _get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT Accion_ID, Nombre_Accion FROM accion_aseguramiento ORDER BY Accion_ID"
+        ).fetchall()
+        return [dict(r) for r in rows]
+    except Error as e:
+        print(f"[read_all_acciones] Error: {e}")
+        return []
+    finally:
+        conn.close()
+ 
+ 
+def read_accion_by_id(accion_id: int) -> dict | None:
+    """Busca una acción por su ID."""
+    conn = _get_conn()
+    try:
+        row = conn.execute(
+            "SELECT Accion_ID, Nombre_Accion FROM accion_aseguramiento WHERE Accion_ID = ?",
+            (accion_id,)
+        ).fetchone()
+        return dict(row) if row else None
+    except Error as e:
+        print(f"[read_accion_by_id] Error: {e}")
+        return None
+    finally:
+        conn.close()
+ 
+ 
+def update_accion(accion_id: int, nombre: str) -> dict:
+    """Actualiza el nombre de una acción."""
+    conn = _get_conn()
+    try:
+        conn.execute(
+            "UPDATE accion_aseguramiento SET Nombre_Accion = ? WHERE Accion_ID = ?",
+            (nombre, accion_id)
+        )
+        conn.commit()
+        return {"ok": True, "mensaje": f"Acción {accion_id} actualizada"}
+    except Error as e:
+        return {"ok": False, "error": str(e)}
+    finally:
+        conn.close()
+ 
+ 
+def delete_accion(accion_id: int) -> dict:
+    """Elimina una acción de aseguramiento."""
+    conn = _get_conn()
+    try:
+        conn.execute(
+            "DELETE FROM accion_aseguramiento WHERE Accion_ID = ?", (accion_id,)
+        )
+        conn.commit()
+        return {"ok": True, "mensaje": f"Acción {accion_id} eliminada"}
+    except Error as e:
+        return {"ok": False, "error": str(e)}
+    finally:
+        conn.close()
