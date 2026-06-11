@@ -1,4 +1,21 @@
+# Ignorar el archivo de configuración secreta
 .env
+
+# Ignorar la base de datos local (para que no se sobrescriba el trabajo de otros)
+*.db
+*.sqlite3
+
+# Ignorar el entorno virtual de Python (es muy pesado y cada uno instala el suyo)
+env/
+venv/
+ENV/
+
+# Ignorar carpetas temporales de caché que genera Python al ejecutarse
 __pycache__/
 *.pyc
-venv/
+*.pyo
+*.pyd
+
+# Ignorar configuraciones del editor (opcional)
+.vscode/
+.idea/

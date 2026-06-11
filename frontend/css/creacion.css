@@ -1,0 +1,142 @@
+*{
+    box-sizing:border-box;
+}
+
+body{
+    margin:0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg,#d9e9ff,#7ac4d4);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+}
+
+.container{
+    width:540px;
+    background:#ffffff;
+    border-radius:15px;
+    box-shadow:0 20px 40px rgba(0,0,0,0.25);
+    overflow:hidden;
+}
+
+.header{
+    background:linear-gradient(to right,#2c3e50,#4ca1af);
+    color:white;
+    text-align:center;
+    padding:20px;
+}
+
+.header h2{
+    margin:0;
+    font-weight:600;
+}
+
+.body{
+    padding:30px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.form-group{
+    margin-bottom:18px;
+    display:flex;
+    flex-direction:column;
+}
+
+label{
+    font-weight:600;
+    margin-bottom:6px;
+    font-size:14px;
+}
+
+input, select{
+    padding:10px;
+    border-radius:8px;
+    border:1px solid #ccc;
+    font-size:14px;
+    transition:0.3s;
+}
+
+input:focus, select:focus{
+    border-color:#4ca1af;
+    box-shadow:0 0 6px rgba(76,161,175,0.4);
+    outline:none;
+}
+
+.invalid{
+    border-color:#e74c3c;
+    background:#fdecea;
+}
+
+.error-msg{
+    font-size:12px;
+    color:#e74c3c;
+    margin-top:4px;
+}
+
+.password-hint{
+    font-size:12px;
+    color:#777;
+    margin-top:5px;
+}
+
+button{
+    width:100%;
+    padding:12px;
+    background:linear-gradient(to right,#4ca1af,#2c3e50);
+    border:none;
+    color:white;
+    font-weight:600;
+    border-radius:8px;
+    cursor:pointer;
+    transition:0.3s;
+}
+
+button:hover{
+    transform:scale(1.02);
+    opacity:0.9;
+}
+
+.form-step{ display:none; }
+.form-step.active{ display:block; }
+
+.success-msg{
+    text-align:center;
+    font-weight:600;
+    color:#2ecc71;
+    margin-top:15px;
+}
+
+.toggle-password{
+    margin-top:6px;
+    font-size:13px;
+    cursor:pointer;
+    color:#4ca1af;
+    font-weight:600;
+    user-select:none;
+}
+
+#acudienteSection{
+    display:none;
+    background:#f2f9ff;
+    padding:15px;
+    border-radius:10px;
+    margin-top:10px;
+}
+
+.btn-login-success {
+    background: linear-gradient(to right, #2ecc71, #27ae60);
+    margin-top: 15px;
+    display: none;
+}
+
+/* ESTILO ADICIONAL PARA SECCIÓN DE ESPECIALISTA */
+#especialistaExtra {
+    display: none;
+    background: #f0fdf4;
+    padding: 15px;
+    border-radius: 10px;
+    margin-top: 10px;
+    border: 1px solid #dcfce7;
+}

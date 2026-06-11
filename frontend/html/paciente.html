@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel del Paciente - Sistema de Salud</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/paciente.css">
+</head>
+<body class="flex min-h-screen">
+
+    <aside class="sidebar text-white hidden md:flex flex-col flex-shrink-0 shadow-2xl">
+        <div class="logo-container">
+            <div class="logo-icon shadow-sky-500/20 shadow-lg">
+                <i class="fas fa-tooth text-3xl text-white"></i>
+            </div>
+            <h2 class="logo-text-main">STYLO<span class="logo-text-dental">DENTAL</span></h2>
+            <p class="logo-subtext">Portal del Paciente</p>
+        </div>
+
+        <nav class="flex-grow p-6 space-y-3 mt-4">
+            <button id="btn-inicio" onclick="cambiarVista('inicio')" class="nav-btn active"><i class="fas fa-home w-5"></i> Inicio</button>
+            <button onclick="window.open('agendar.html', '_blank')" class="nav-btn"><i class="fas fa-calendar-plus w-5"></i> Agendar Cita</button>
+            <button id="btn-historial" onclick="cambiarVista('historial')" class="nav-btn"><i class="fas fa-history w-5"></i> Historial de Citas</button>
+        </nav>
+
+        <div class="clock-widget text-center">
+            <div id="reloj">00:00:00</div>
+            <div class="mt-1 text-[9px] text-slate-500 font-bold italic">Sincronizado con Stylo Dental</div>
+        </div>
+
+        <div class="p-6 border-t border-slate-800">
+            <button onclick="mostrarConfirmacionSimple('¿Desea cerrar sesión?', 'salir')" class="w-full flex items-center justify-center gap-3 p-3 text-red-400 hover:bg-red-900/20 rounded-lg font-bold transition-all"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</button>
+        </div>
+    </aside>
+
+    <main class="flex-grow p-10 overflow-y-auto">
+        <header class="flex justify-between items-center mb-10 border-b border-slate-200 pb-6">
+            <div>
+                <h1 id="titulo-principal" class="text-3xl font-black text-slate-800 tracking-tight">Panel de Control</h1>
+                <p class="text-slate-500 font-bold uppercase text-xs tracking-widest mt-1">Bienvenido de nuevo, <span id="nombre-usuario" class="text-sky-600">Paciente</span></p>
+            </div>
+            <div onclick="abrirModalPerfil()" class="w-14 h-14 bg-sky-100 rounded-2xl flex items-center justify-center text-sky-700 font-black border-2 border-sky-500 shadow-xl shadow-sky-100 uppercase" id="avatar-letras">JD</div>
+        </header>
+
+        <div id="vista-inicio">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+                <div class="card-stats p-6 border-l-4 border-sky-500 shadow-sm">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest">Resumen Actual</p>
+                            <h3 id="count-citas" class="text-3xl font-black text-slate-800">0</h3>
+                        </div>
+                        <div class="text-sky-500 text-3xl opacity-20"><i class="fas fa-calendar-check"></i></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
+                <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
+                    <h3 class="font-black text-slate-700 uppercase tracking-widest text-xs">Citas Vigentes y Recientes</h3>
+                    <button onclick="mostrarConfirmacionSimple('¿Ocultar todas las canceladas de esta vista?', 'limpiar')" class="text-[10px] text-slate-400 hover:text-red-500 font-black uppercase tracking-tighter transition-colors">Limpiar canceladas</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left min-w-[1100px]">
+                        <thead class="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
+                            <tr>
+                                <th class="p-5">Paciente</th>
+                                <th class="p-5">Documento</th>
+                                <th class="p-5">Especialidad</th>
+                                <th class="p-5">Fecha / Hora</th>
+                                <th class="p-5">Estado Actual</th>
+                                <th class="p-5 text-center">Gestión</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-citas-body" class="text-sm text-slate-600 divide-y divide-slate-100"></tbody>
+                    </table>
+                    <div id="no-citas-msg" class="p-20 text-center text-slate-400 font-bold italic uppercase text-xs hidden">No hay registros vigentes.</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="vista-historial" class="hidden">
+            <div class="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
+                <div class="p-6 border-b border-slate-100 bg-slate-900 text-white flex justify-between items-center">
+                    <h3 class="font-black uppercase tracking-widest text-xs">Historial Cronológico de Citas (Permanente)</h3>
+                    <span class="text-[9px] bg-sky-500 px-2 py-1 rounded">Los registros aquí no se eliminan</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left min-w-[1100px]">
+                        <thead class="bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-200">
+                            <tr>
+                                <th class="p-5">Fecha</th>
+                                <th class="p-5">Especialidad</th>
+                                <th class="p-5">Médico/Servicio</th>
+                                <th class="p-5">Estado Histórico</th>
+                                <th class="p-5 text-center">Detalles</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-historial-completo" class="text-sm text-slate-600 divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="modalPerfil" class="modal-overlay">
+        <div class="modal-content shadow-2xl">
+            <div class="bg-slate-900 p-8 text-center text-white relative">
+                <button onclick="cerrarModalPerfil()" class="absolute right-6 top-6 text-slate-500 hover:text-white transition-colors"><i class="fas fa-times text-xl"></i></button>
+                <div class="w-20 h-20 bg-sky-600 rounded-3xl mx-auto mb-4 flex items-center justify-center text-3xl font-black shadow-lg" id="perfil-avatar-grande">PA</div>
+                <h3 class="font-black text-xl uppercase tracking-widest">Información Personal</h3>
+                <p class="text-sky-400 text-[10px] font-bold uppercase mt-1">Stylo Dental - Registro Oficial</p>
+            </div>
+            <div class="p-8 grid grid-cols-2 gap-6">
+                <div><p class="data-label">Nombre(s)</p><p id="perfil-nombres" class="data-value uppercase">---</p></div>
+                <div><p class="data-label">Apellido(s)</p><p id="perfil-apellidos" class="data-value uppercase">---</p></div>
+                <div><p class="data-label">Tipo de Documento</p><p id="perfil-tipoDoc" class="data-value uppercase">---</p></div>
+                <div><p class="data-label">Número de Documento</p><p id="perfil-numDoc" class="data-value font-black">---</p></div>
+                <div><p class="data-label">Fecha de Nacimiento</p><p id="perfil-nacimiento" class="data-value">---</p></div>
+                <div><p class="data-label">Correo Electrónico</p><p id="perfil-correo" class="data-value italic text-sky-700">---</p></div>
+                
+                <div class="col-span-2 pt-6 border-t border-slate-100 flex gap-4">
+                    <button onclick="abrirConfiguracion()" class="flex-1 bg-sky-50 text-sky-600 py-4 rounded-xl font-black hover:bg-sky-100 transition-all uppercase text-[10px] tracking-[0.15em] border border-sky-100"><i class="fas fa-cog mr-2"></i> Configuración</button>
+                    <button onclick="cerrarModalPerfil()" class="flex-1 bg-slate-100 text-slate-600 py-4 rounded-xl font-black hover:bg-slate-200 transition-all uppercase text-[10px] tracking-[0.15em]">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalConfig" class="modal-overlay">
+        <div class="modal-content shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div class="bg-sky-600 p-8 text-center text-white sticky top-0 z-10">
+                <h3 class="font-black text-xl uppercase tracking-widest">Configuración de Cuenta</h3>
+                <p class="text-sky-100 text-[10px] font-bold uppercase mt-1">Seguridad y Datos Personales</p>
+            </div>
+            <div class="p-8 space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="data-label">Correo Electrónico</label>
+                        <input type="email" id="edit-correo" class="input-dental" placeholder="nuevo@correo.com">
+                    </div>
+                    <div>
+                        <label class="data-label">Teléfono / Celular</label>
+                        <input type="text" id="edit-telefono" class="input-dental" placeholder="300 000 0000">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="data-label">Fecha de Nacimiento</label>
+                        <input type="date" id="edit-nacimiento" class="input-dental">
+                    </div>
+                </div>
+
+                <hr class="my-6 border-slate-100">
+                <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Cambio de Seguridad</h4>
+
+                <div>
+                    <label class="data-label">Nueva Contraseña</label>
+                    <input type="password" id="nueva-pass" class="input-dental" placeholder="Mínimo 6 caracteres">
+                </div>
+                <div>
+                    <label class="data-label">Confirmar Contraseña</label>
+                    <input type="password" id="confirmar-pass" class="input-dental" placeholder="Repita la nueva contraseña">
+                </div>
+
+                <div class="flex gap-4 mt-8">
+                    <button onclick="guardarConfiguracionGeneral()" class="flex-1 bg-sky-600 text-white py-4 rounded-xl font-black hover:bg-sky-700 transition-all uppercase text-[10px] tracking-widest shadow-lg shadow-sky-100">Guardar Cambios</button>
+                    <button onclick="cerrarConfiguracion()" class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-xl font-bold hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">Cancelar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalCancelarCita" class="modal-overlay">
+        <div class="modal-content shadow-2xl">
+            <div class="bg-slate-900 p-6 text-center">
+                <h3 class="text-white font-black uppercase tracking-[0.2em] text-xs">Verificación de la Cita</h3>
+            </div>
+            <div class="p-8">
+                <div id="detalles-completos" class="grid grid-cols-2 gap-x-6 gap-y-4"></div>
+                <div class="flex gap-4 mt-10 pt-6 border-t border-slate-100">
+                    <button onclick="cerrarModalCancelar()" class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-xl font-bold hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">Regresar</button>
+                    <button onclick="solicitarConfirmacionFinal()" class="flex-1 bg-red-600 text-white py-4 rounded-xl font-black hover:bg-red-700 transition-all uppercase text-[10px] tracking-widest shadow-lg shadow-red-100">Cancelar cita</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalConfirmacionFinal" class="modal-overlay">
+        <div class="modal-content p-10 text-center border-t-8 border-red-600">
+            <div class="text-red-600 text-5xl mb-6"><i class="fas fa-exclamation-triangle"></i></div>
+            <h3 class="text-slate-800 font-black text-2xl mb-2 italic tracking-tighter">¿ESTÁ COMPLETAMENTE SEGURO?</h3>
+            <p class="text-slate-500 text-xs mb-8 font-bold uppercase tracking-widest">Esta acción marcará su cita como <span class="text-red-600">CANCELADA</span> definitivamente.</p>
+            <div class="flex flex-col gap-3">
+                <button onclick="confirmarAccionCancelado()" class="w-full bg-red-600 text-white py-4 rounded-2xl font-black hover:bg-red-700 transition-all uppercase text-sm tracking-[0.2em]">SÍ, CANCELAR MI CITA</button>
+                <button onclick="cerrarConfirmacionFinal()" class="w-full bg-slate-100 text-slate-500 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">No, deseo mantenerla</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalConfirmarSimple" class="modal-overlay">
+        <div class="modal-content p-10 text-center border-t-8 border-sky-600">
+            <div id="icon-simple" class="text-sky-500 text-5xl mb-6"><i class="fas fa-question-circle"></i></div>
+            <h3 id="confirm-text-simple" class="text-slate-800 font-black text-xl mb-8 uppercase tracking-tighter italic"></h3>
+            <div class="flex gap-4">
+                <button onclick="ejecutarAccionSimple()" class="flex-1 bg-sky-600 text-white py-4 rounded-2xl font-black hover:bg-sky-700 transition-all text-xs uppercase tracking-widest">Confirmar</button>
+                <button onclick="cerrarModalSimple()" class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all text-xs uppercase tracking-widest">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+<script src="../js/paciente.js"></script>
+
+</body>
+</html>

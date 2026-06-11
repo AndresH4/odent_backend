@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel del Especialista v2.5 - Stylo Dental Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/especialista.css">
+</head>
+<body class="flex">
+    <aside class="sidebar text-white hidden md:flex flex-col shadow-2xl">
+        <div class="p-12 border-b border-slate-800/60 flex flex-col items-center">
+            <div class="w-16 h-16 bg-sky-500 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-sky-500/20">
+                <i class="fas fa-tooth text-3xl"></i>
+            </div>
+            <h2 class="text-3xl font-black italic tracking-tighter text-sky-400">STYLO<span class="text-white">DENTAL</span></h2>
+            <p class="text-[10px] text-slate-500 font-extrabold uppercase tracking-[0.4em] mt-2">Specialist Portal</p>
+        </div>
+        
+        <nav class="flex-grow p-8 space-y-4">
+            <button onclick="cambiarSeccion('agenda')" id="btn-agenda" class="nav-btn active">
+                <i class="fas fa-calendar-alt w-6 text-xl"></i>
+                <span class="tracking-wide">Agenda Médica</span>
+            </button>
+            <button onclick="cambiarSeccion('pacientes')" id="btn-pacientes" class="nav-btn">
+                <i class="fas fa-user-injured w-6 text-xl"></i>
+                <span class="tracking-wide">Mis Pacientes</span>
+            </button>
+            </nav>
+
+        <div class="clock-widget mx-6 mb-8 text-center">
+            <div id="reloj">00:00:00</div>
+            <div id="status-laboral" class="mt-4 flex items-center justify-center bg-slate-900/50 py-3 px-4 rounded-2xl border border-slate-700/50">
+                <span id="status-dot" class="status-dot"></span>
+                <span id="status-text" class="text-[11px] font-black uppercase tracking-widest text-slate-400">Iniciando...</span>
+            </div>
+            <div class="mt-4 text-[9px] text-slate-600 font-black italic uppercase tracking-widest">Servidor: Central Estándar</div>
+        </div>
+
+        <div class="p-8 border-t border-slate-800/60">
+            <button onclick="cerrarSesion()" class="w-full flex items-center justify-center gap-4 p-4 bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white rounded-2xl font-black transition-all duration-300 group shadow-lg">
+                <i class="fas fa-power-off group-hover:rotate-180 transition-transform duration-500"></i>
+                <span>Finalizar Turno</span>
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-grow p-8 md:p-14 overflow-y-auto">
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-14 gap-8">
+            <div>
+                <h1 id="main-title" class="text-5xl font-black text-slate-800 tracking-tighter mb-3">Agenda Médica</h1>
+                <div class="flex items-center gap-3">
+                    <div class="h-1.5 w-12 bg-sky-600 rounded-full"></div>
+                    <p id="fecha-actual" class="text-slate-500 font-bold uppercase text-xs tracking-[0.3em]"></p>
+                </div>
+            </div>
+
+            <div class="relative">
+                <button id="profile-trigger" onclick="toggleProfileDropdown()" class="flex items-center gap-6 bg-white p-5 pr-12 rounded-[2rem] shadow-xl border border-slate-100 cursor-pointer hover:border-sky-500 transition-all active:scale-95 group z-50">
+                    <div id="doctor-avatar" class="w-16 h-16 bg-gradient-to-br from-sky-600 to-sky-800 rounded-2xl flex items-center justify-center text-white text-3xl font-black shadow-2xl shadow-sky-600/30 uppercase group-hover:rotate-6 transition-transform">D</div>
+                    <div class="text-left">
+                        <p class="text-[10px] font-black text-sky-600 uppercase tracking-widest mb-1">Doctor Registrado</p>
+                        <p id="doctor-nombre-display" class="text-lg font-black text-slate-800 leading-none">Cargando...</p>
+                    </div>
+                    <i class="fas fa-chevron-down text-sm text-slate-300 ml-4 group-hover:text-sky-600 transition-colors"></i>
+                </button>
+
+                <div id="profile-dropdown" class="absolute top-full right-0 mt-6 w-96 bg-white rounded-[2.5rem] shadow-[0_30px_70px_rgba(0,0,0,0.2)] border border-slate-50 p-10">
+                    <div class="text-center pb-8 border-b border-slate-100">
+                        <div id="avatar-grande" class="w-28 h-28 bg-sky-50 text-sky-600 rounded-3xl flex items-center justify-center text-5xl font-black uppercase mx-auto mb-5 border-4 border-white shadow-xl"></div>
+                        <h4 id="nombre-menu" class="font-black text-slate-800 text-2xl tracking-tight"></h4>
+                        <span id="esp-menu" class="inline-block mt-3 px-6 py-2 bg-sky-100 text-sky-700 rounded-full text-[11px] font-black uppercase tracking-[0.2em]"></span>
+                    </div>
+                    <div class="py-8 space-y-6">
+                        <div class="flex items-center gap-5">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100"><i class="fas fa-envelope text-lg"></i></div>
+                            <div>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Correo Profesional</p>
+                                <p id="email-menu" class="text-sm font-bold text-slate-700"></p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-5">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100"><i class="fas fa-phone-alt text-lg"></i></div>
+                            <div>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Línea de Contacto</p>
+                                <p id="tel-menu" class="text-sm font-bold text-slate-700"></p>
+                            </div>
+                        </div>
+                    </div>
+                    <button onclick="cambiarSeccion('config'); toggleProfileDropdown();" class="w-full bg-slate-900 text-white p-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] hover:bg-sky-600 transition-all shadow-xl flex items-center justify-center gap-4">
+                        <i class="fas fa-user-cog"></i> Configurar Cuenta
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div id="contenedor-stats" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-14">
+            <div class="card-stats p-10 relative overflow-hidden">
+                <div class="absolute -right-6 -top-6 w-32 h-32 bg-slate-50 rounded-full opacity-60"></div>
+                <p class="text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] mb-2 relative">Total Pacientes</p>
+                <h3 id="stat-total" class="text-5xl font-black text-slate-800 relative">0</h3>
+            </div>
+            <div class="card-stats p-10 border-l-[10px] border-amber-400">
+                <p class="text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] mb-2">Por Atender</p>
+                <h3 id="stat-pendientes" class="text-5xl font-black text-amber-600">0</h3>
+            </div>
+            <div class="card-stats p-10 border-l-[10px] border-emerald-500">
+                <p class="text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] mb-2">Atendidos</p>
+                <h3 id="stat-atendidos" class="text-5xl font-black text-emerald-600">0</h3>
+            </div>
+            <div class="card-stats p-10 bg-slate-900 border-none text-white">
+                <p class="text-sky-300 text-[11px] font-black uppercase tracking-[0.2em] mb-2">Siguiente Cita</p>
+                <h3 id="stat-proxima" class="text-3xl font-black mt-2">--:--</h3>
+            </div>
+        </div>
+
+        <section id="sec-tabla" class="animate-in">
+            <div class="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden">
+                <div class="p-10 border-b border-slate-50 flex flex-wrap justify-between items-center gap-8 bg-slate-50/40">
+                    <div class="flex items-center gap-5">
+                        <div class="w-12 h-12 bg-sky-600 text-white rounded-2xl flex items-center justify-center shadow-lg"><i class="fas fa-clipboard-list text-xl"></i></div>
+                        <h3 id="tabla-titulo" class="font-black text-slate-800 uppercase text-sm tracking-widest">Listado de Pacientes</h3>
+                    </div>
+                    <div class="relative w-full md:w-96">
+                         <i class="fas fa-search absolute left-6 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                         <input type="text" id="busqueda-paciente" onkeyup="filtrarTabla()" placeholder="Filtrar paciente..." class="text-xs pl-14 pr-8 py-5 w-full rounded-2xl border-2 border-slate-100 outline-none focus:border-sky-500 transition-all font-semibold">
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left min-w-[900px]">
+                        <thead class="bg-slate-50/80 text-slate-400 text-[11px] font-black uppercase tracking-[0.25em] border-b border-slate-100">
+                            <tr>
+                                <th class="p-8">Horario</th>
+                                <th class="p-8">Datos del Paciente</th>
+                                <th class="p-8">Procedimiento</th>
+                                <th class="p-8">Estado</th>
+                                <th class="p-8 text-right">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-especialista" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                    <div id="no-datos" class="hidden p-32 text-center">
+                        <i class="fas fa-user-slash text-4xl text-slate-300 mb-6 block"></i>
+                        <p class="text-slate-400 font-black uppercase text-sm tracking-[0.3em]">Sin registros disponibles</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="sec-config" class="hidden max-w-6xl mx-auto py-4">
+            <div class="bg-white p-14 rounded-[3.5rem] shadow-2xl border border-slate-100 relative overflow-hidden">
+                <div class="absolute top-0 right-0 p-10 opacity-5 text-9xl"><i class="fas fa-user-shield"></i></div>
+                <h2 class="text-3xl font-black text-slate-800 mb-12 uppercase flex items-center gap-5">
+                    <span class="w-14 h-14 bg-sky-600 text-white rounded-2xl flex items-center justify-center shadow-xl"><i class="fas fa-id-badge"></i></span>
+                    Gestión de Perfil Médico
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-12 relative z-10">
+                    <div class="space-y-3">
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Nombres y Apellidos</label>
+                        <input type="text" id="conf-nombre" class="input-consulta" placeholder="Nombre completo">
+                    </div>
+                    <div class="space-y-3">
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Especialidad</label>
+                        <select id="esp-1" class="input-consulta appearance-none cursor-pointer">
+                            <option value="Odontología General">Odontología General</option>
+                            <option value="Ortodoncia">Ortodoncia y Ortopedia</option>
+                            <option value="Endodoncia">Endodoncia Avanzada</option>
+                            <option value="Cirugía Maxilofacial">Cirugía Maxilofacial</option>
+                            <option value="Estética Dental">Estética Dental</option>
+                        </select>
+                    </div>
+                    <div class="space-y-3">
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">E-mail de Acceso</label>
+                        <input type="email" id="conf-email" class="input-consulta" placeholder="correo@ejemplo.com">
+                    </div>
+                    <div class="space-y-3">
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Teléfono Móvil</label>
+                        <input type="tel" id="conf-tel" class="input-consulta" placeholder="+57 300 000 0000">
+                    </div>
+                    <div class="md:col-span-2 space-y-3">
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Nueva Contraseña</label>
+                        <input type="password" id="conf-pass" class="input-consulta" placeholder="Mínimo 4 caracteres">
+                    </div>
+                </div>
+                <div class="mt-14 flex justify-end gap-8 pt-10 border-t border-slate-50">
+                    <button onclick="cambiarSeccion('agenda')" class="px-10 py-5 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-800 transition-colors">Cancelar</button>
+                    <button onclick="guardarPerfilCompleto()" class="bg-slate-900 text-white px-16 py-5 rounded-2xl font-black text-xs hover:bg-sky-600 transition-all uppercase tracking-[0.3em] shadow-2xl active:scale-95">Guardar Cambios</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="modalConsulta" class="modal-overlay">
+        <div class="modal-content">
+            <div class="bg-slate-900 p-12 flex justify-between items-center text-white">
+                <div class="flex items-center gap-8">
+                    <div class="w-20 h-20 bg-sky-600 rounded-3xl flex items-center justify-center text-4xl shadow-2xl"><i class="fas fa-file-medical"></i></div>
+                    <div>
+                        <h3 id="paciente-nombre-modal" class="font-black text-4xl uppercase tracking-tighter mb-2"></h3>
+                        <p id="paciente-doc-modal" class="text-sky-400 font-black text-sm uppercase tracking-widest"></p>
+                    </div>
+                </div>
+                <button onclick="cerrarConsulta()" class="text-slate-500 hover:text-white transition-all transform hover:rotate-90 duration-500"><i class="fas fa-times-circle text-5xl"></i></button>
+            </div>
+            <div class="p-12">
+                <div class="mb-12 bg-sky-50 p-10 rounded-[2.5rem] border border-sky-100 flex flex-wrap justify-between items-center gap-8">
+                    <div class="flex items-center gap-6">
+                        <div class="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-sky-600 shadow-xl border border-sky-50"><i class="fas fa-folder-open text-3xl"></i></div>
+                        <div>
+                            <p class="text-[12px] font-black text-sky-800 uppercase tracking-widest">Expediente Clínico Digital</p>
+                            <p class="text-xs text-slate-500 font-bold mt-1">Consulte antecedentes y evolución dental histórica.</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-5">
+                        <button onclick="irAHistoriaClinica()" class="bg-white text-sky-600 border-2 border-sky-200 px-10 py-5 rounded-2xl font-black text-[11px] hover:bg-sky-600 hover:text-white transition-all uppercase shadow-md active:scale-95">Ver Historia</button>
+                        <button onclick="irAOdontograma()" class="bg-white text-emerald-600 border-2 border-emerald-200 px-10 py-5 rounded-2xl font-black text-[11px] hover:bg-emerald-600 hover:text-white transition-all uppercase shadow-md active:scale-95">Odontograma</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+                    <div class="space-y-5">
+                        <label class="block text-[12px] font-black text-slate-500 uppercase tracking-widest ml-2"><i class="fas fa-pen-alt mr-2 text-sky-500"></i> Evolución de la Sesión</label>
+                        <textarea id="nota-clinica" class="input-consulta h-64 resize-none leading-relaxed" placeholder="Registrar hallazgos y avances..."></textarea>
+                    </div>
+                    <div class="space-y-5">
+                        <label class="block text-[12px] font-black text-slate-500 uppercase tracking-widest ml-2"><i class="fas fa-file-prescription mr-2 text-emerald-500"></i> Plan de Tratamiento / Receta</label>
+                        <textarea id="receta-clinica" class="input-consulta h-64 resize-none leading-relaxed" placeholder="Indicaciones y medicamentos..."></textarea>
+                    </div>
+                    <div class="md:col-span-2 space-y-5">
+                        <label class="block text-[12px] font-black text-slate-500 uppercase tracking-widest ml-2"><i class="fas fa-stethoscope mr-2 text-sky-500"></i> Diagnóstico (CIE-10)</label>
+                        <input type="text" id="diag-clinica" class="input-consulta" placeholder="Ej: K02.1 Caries dentina">
+                    </div>
+                </div>
+                <div class="mt-14 flex justify-end gap-8 border-t border-slate-100 pt-12">
+                    <button onclick="cerrarConsulta()" class="px-10 py-5 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-800 transition-colors">Descartar</button>
+                    <button onclick="finalizarAtencion()" class="bg-emerald-600 text-white px-20 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.3em] shadow-2xl hover:bg-emerald-700 transition-all active:scale-95">Finalizar Consulta</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalReporte" class="modal-overlay">
+        <div class="modal-content overflow-hidden">
+            <div class="bg-gradient-to-r from-sky-700 to-sky-900 p-14 flex justify-between items-center text-white border-b-8 border-sky-400">
+                <div>
+                    <h3 class="font-black text-5xl tracking-tighter uppercase mb-2">Resumen de Atención</h3>
+                    <p id="rep-fecha-atencion" class="text-sky-300 font-black text-[11px] uppercase tracking-[0.4em]"></p>
+                </div>
+                <button onclick="document.getElementById('modalReporte').style.display='none'" class="text-white/40 hover:text-white transition-all"><i class="fas fa-times-circle text-5xl"></i></button>
+            </div>
+            <div class="p-14">
+                <div class="bg-slate-50 p-12 rounded-[3rem] mb-12 border border-slate-100 shadow-inner text-center">
+                    <span class="report-label">Paciente Atendido</span>
+                    <div id="rep-paciente" class="text-4xl font-black text-slate-800 uppercase tracking-tight"></div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-14">
+                    <div class="space-y-8">
+                        <div>
+                            <span class="report-label text-sky-600">Diagnóstico</span>
+                            <div id="rep-diagnostico" class="report-value"></div>
+                        </div>
+                        <div>
+                            <span class="report-label text-sky-600">Evolución</span>
+                            <div id="rep-evolucion" class="report-value h-40 overflow-y-auto"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <span class="report-label text-emerald-600">Tratamiento Enviado</span>
+                        <div id="rep-prescripcion" class="report-value h-64 overflow-y-auto border-l-emerald-500"></div>
+                    </div>
+                </div>
+                <button onclick="document.getElementById('modalReporte').style.display='none'" class="mt-14 w-full bg-slate-900 text-white py-6 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-sky-600 transition-colors shadow-2xl">Cerrar Reporte</button>
+            </div>
+        </div>
+    </div>
+</body>
+<script src="../js/especialista.js"></script>
+</body>
+</html>

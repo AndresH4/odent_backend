@@ -1,0 +1,153 @@
+        /* CONFIGURACIÓN UNIFICADA STYLO DENTAL */
+        :root {
+            --primary-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            --accent-blue: #38bdf8;
+            --soft-blue: #e0f2fe;
+            --sky-dark: #0284c7;
+        }
+
+        body { 
+            background-color: #f1f5f9; 
+            font-family: 'Open Sans', sans-serif; 
+            color: #334155;
+            overflow: hidden;
+        }
+
+        /* SIDEBAR ESTILO ESPECIALISTA */
+        .sidebar { 
+            background: var(--primary-gradient); 
+            width: 280px; 
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            border-right: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .logo-container {
+            border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+            padding: 40px 30px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .logo-icon {
+            width: 64px;
+            height: 64px;
+            background-color: #0284c7;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+
+        .logo-text-main {
+            font-size: 1.875rem; 
+            font-weight: 900;    
+            font-style: italic;
+            letter-spacing: -0.05em; 
+            color: #38bdf8;      
+        }
+
+        .logo-text-dental { color: white; }
+
+        .logo-subtext {
+            font-size: 10px;
+            color: #64748b;      
+            font-weight: 800;    
+            text-transform: uppercase;
+            letter-spacing: 0.3em; 
+            margin-top: 8px;
+        }
+
+        /* NAVEGACIÓN */
+        .nav-btn { 
+            width: 100%; 
+            display: flex; 
+            align-items: center; 
+            gap: 14px; 
+            padding: 14px 18px; 
+            border-radius: 16px; 
+            transition: all 0.3s ease; 
+            font-weight: 600; 
+            color: #94a3b8; 
+            border: none; 
+            cursor: pointer;
+            background: transparent;
+            text-align: left;
+        }
+
+        .nav-btn:hover { 
+            background-color: rgba(56, 189, 248, 0.1); 
+            color: var(--accent-blue);
+            padding-left: 22px;
+        }
+
+        .nav-btn.active { 
+            background: var(--sky-dark); 
+            color: white; 
+            box-shadow: 0 10px 15px -3px rgba(2, 132, 199, 0.4);
+        }
+
+        /* RELOJ DINÁMICO */
+        .clock-widget { 
+            background: rgba(15, 23, 42, 0.4); 
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(51, 65, 85, 0.5); 
+            border-radius: 24px; 
+            padding: 24px; 
+            margin: 15px;
+        }
+
+        #reloj { 
+            font-family: 'JetBrains Mono', monospace; 
+            font-size: 1.6rem; 
+            background: linear-gradient(to right, #38bdf8, #818cf8); 
+            -webkit-background-clip: text; 
+            -webkit-text-fill-color: transparent; 
+            font-weight: 800;
+        }
+
+        /* TARJETAS DE ESTADÍSTICAS */
+        .card-stats { 
+            background: white; 
+            border-radius: 24px; 
+            border: 1px solid rgba(226, 232, 240, 0.8); 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .card-stats:hover { 
+            transform: translateY(-8px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            border-color: var(--accent-blue);
+        }
+
+        /* MODALES */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); justify-content: center; align-items: center; z-index: 100; backdrop-filter: blur(12px); padding: 20px; }
+        .modal-content { background: white; width: 100%; max-width: 650px; border-radius: 32px; overflow-y: auto; max-height: 90vh; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+
+        /* ENTRADAS DE FORMULARIO */
+        .input-style { 
+            width: 100%; 
+            background-color: #f8fafc; 
+            border: 2px solid #e2e8f0; 
+            padding: 12px 16px; 
+            border-radius: 12px; 
+            font-weight: 600; 
+            outline: none; 
+            transition: all 0.3s ease; 
+        }
+        .input-style:focus { border-color: #38bdf8; background-color: white; box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.1); }
+
+        /* POPOVER PERFIL */
+        .profile-dropdown { display: none; position: absolute; top: 90px; right: 40px; width: 290px; background: white; border-radius: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); border: 1px solid #f1f5f9; z-index: 50; padding: 24px; }
+        .profile-dropdown.active { display: block; animation: slideDown 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
+
+        .logout-btn { transition: all 0.3s ease; border: 1px solid rgba(248, 113, 113, 0.2); }
+        .logout-btn:hover { background-color: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.5); transform: scale(1.02); }
+
+        .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

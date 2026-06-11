@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Sistema Dental</title>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="../css/login.css">
+</head>
+<body>
+
+<div class="login-container">
+    <div class="header-login">
+        <h2>Iniciar Sesión</h2>
+        <p style="font-size: 12px; margin: 5px 0 0;">Usa tus credenciales de registro</p>
+    </div>
+
+    <div class="form-group">
+        <label>Correo Electrónico</label>
+        <input type="email" id="emailLogin" placeholder="ejemplo@correo.com">
+        <div id="errorEmail" class="error-text">El correo no está registrado</div>
+    </div>
+
+    <div class="form-group">
+        <label>Contraseña</label>
+        <input type="password" id="passLogin" placeholder="********">
+        <div id="errorPass" class="error-text">Contraseña incorrecta</div>
+    </div>
+
+    <button onclick="validarYEntrar()">Entrar al Sistema</button>
+    
+    <div class="footer-link">
+        ¿Aún no tienes cuenta? <a href="creacion.html">Regístrate aquí</a>
+    </div>
+</div>
+
+<!-- JS -->
+<script src="../js/login.js"></script>
+
+</body>
+</html>

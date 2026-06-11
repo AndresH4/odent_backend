@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Registro de Usuario</title>
+
+<link rel="stylesheet" href="../css/creacion.css">
+
+</head>
+<body>
+
+<div class="container">
+<div class="header">
+<h2>Registro de Usuario</h2>
+<p style="margin:5px 0 0;font-size:13px;">Complete la información solicitada</p>
+</div>
+
+<div class="body">
+
+<div class="form-step active" id="step1">
+
+<div class="form-group">
+<label>Nombres</label>
+<input type="text" id="nombres">
+<div class="error-msg" id="errorNombres"></div>
+</div>
+
+<div class="form-group">
+<label>Apellidos</label>
+<input type="text" id="apellidos">
+<div class="error-msg" id="errorApellidos"></div>
+</div>
+
+<div class="form-group">
+<label>Fecha de nacimiento</label>
+<input type="date" id="fechaNacimiento" onchange="verificarEdad()">
+<div class="error-msg" id="errorFecha"></div>
+</div>
+
+<div class="form-group">
+<label>Rol de usuario</label>
+<select id="rolUsuario" onchange="checkRolEspecialista()">
+<option value="">Seleccione un rol</option>
+<option value="Paciente">Paciente</option>
+<option value="Especialista">Especialista</option>
+<option value="Administrador">Administrador</option>
+</select>
+<div class="error-msg" id="errorRol"></div>
+</div>
+
+<div id="especialistaExtra">
+<div class="form-group">
+<label>Especialidad Médica</label>
+<select id="especialidadMedica">
+<option value="Medicina General">Medicina General</option>
+<option value="Odontología">Odontología</option>
+<option value="Cardiología">Cardiología</option>
+<option value="Pediatría">Pediatría</option>
+<option value="Psicología">Psicología</option>
+</select>
+</div>
+</div>
+
+<div class="form-group">
+<label>Tipo de documento</label>
+<select id="tipoDocumento">
+<option value="">Seleccione una opción</option>
+<option>Cedula de ciudadanía</option>
+<option>Tarjeta de identidad</option>
+<option>Cedula Profesional</option>
+<option>Cedula de extranjería</option>
+</select>
+<div class="error-msg" id="errorTipo"></div>
+</div>
+
+<div class="form-group">
+<label>Número de documento</label>
+<input type="text" id="documento" maxlength="10">
+<div class="error-msg" id="errorDocumento"></div>
+</div>
+
+<div class="form-group">
+<label>Teléfono</label>
+<input type="text" id="telefono" maxlength="10">
+<div class="error-msg" id="errorTelefono"></div>
+</div>
+
+<div class="form-group" id="correoUsuarioGroup">
+<label>Correo electrónico</label>
+<input type="email" id="email" oninput="replicarCorreoAcudiente()">
+<div class="error-msg" id="errorEmail"></div>
+</div>
+
+<div id="acudienteSection">
+
+<h4>Información del acudiente</h4>
+
+<div class="form-group">
+<label>Nombres del acudiente</label>
+<input type="text" id="nombresAcudiente">
+<div class="error-msg" id="errorNombresAcudiente"></div>
+</div>
+
+<div class="form-group">
+<label>Apellidos del acudiente</label>
+<input type="text" id="apellidosAcudiente">
+<div class="error-msg" id="errorApellidosAcudiente"></div>
+</div>
+
+<div class="form-group">
+<label>Teléfono del acudiente</label>
+<input type="text" id="telefonoAcudiente" maxlength="10">
+<div class="error-msg" id="errorTelefonoAcudiente"></div>
+</div>
+
+<div class="form-group">
+<label>Correo electrónico del acudiente</label>
+<input type="email" id="emailAcudiente">
+<div class="error-msg" id="errorEmailAcudiente"></div>
+</div>
+
+</div>
+
+<button onclick="validarPaso1()">Continuar</button>
+</div>
+
+<div class="form-step" id="step2">
+<p>Se ha enviado un código de verificación al correo registrado. Por favor, ingréselo a continuación:</p>
+
+<div class="form-group">
+<input type="text" id="codigo">
+<div class="error-msg" id="errorCodigo"></div>
+</div>
+
+<button onclick="verificarCodigo()">Verificar código</button>
+</div>
+
+<div class="form-step" id="step3">
+
+<div class="form-group" id="groupPassword">
+<label>Crear contraseña</label>
+<input type="password" id="password">
+<div class="toggle-password" onclick="togglePassword('password')">Mostrar contraseña</div>
+<div class="password-hint">
+La contraseña debe tener mínimo 8 caracteres, incluir una mayúscula, un número y un carácter especial.
+</div>
+<div class="error-msg" id="errorPassword"></div>
+</div>
+
+<div class="form-group" id="groupConfirm">
+<label>Confirmar contraseña</label>
+<input type="password" id="confirmPassword">
+<div class="toggle-password" onclick="togglePassword('confirmPassword')">Mostrar contraseña</div>
+<div class="error-msg" id="errorConfirm"></div>
+</div>
+
+<button id="btnFinalizar" onclick="crearUsuario()">Crear usuario</button>
+
+<div class="success-msg" id="mensajeFinal"></div>
+<button id="btnIrAlLogin" class="btn-login-success" onclick="abrirLogin()">Iniciar Sesión</button>
+
+</div>
+
+</div>
+</div>
+
+<script src="../js/creacion.js"></script>
+
+</body>
+</html>

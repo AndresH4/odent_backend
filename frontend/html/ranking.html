@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel Administrador - Ranking (Corregido)</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+<link rel="stylesheet" href="../css/ranking.css">
+</head>
+
+<body>
+
+<div id="toast"><i class="fas fa-check-circle"></i> ¡Cambios guardados!</div>
+
+<div class="container" id="rankingView">
+
+  <div class="header">
+    <div class="admin">
+      <div class="profile-container" onclick="document.getElementById('uploadImage').click()">
+        <img id="profileImage" src="https://via.placeholder.com/150" alt="Perfil">
+        <div class="camera-icon"><i class="fas fa-camera"></i></div>
+        <input type="file" id="uploadImage" accept="image/*" style="display:none;">
+      </div>
+      <div>
+        <strong>Administrador</strong><br>
+        <small>admin@clinica.com</small>
+      </div>
+    </div>
+    <button class="icon-btn" onclick="mostrarConfig()"><i class="fas fa-cog"></i></button>
+  </div>
+
+  <div class="main-content">
+    
+    <button class="volver-btn-top" onclick="window.history.back()">
+      <i class="fas fa-arrow-left"></i> Volver
+    </button>
+
+    <h2>Estado del Ranking</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Especialista</th>
+          <th>Promedio</th>
+          <th>Respuestas</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1. Gustavo Rojas</td>
+          <td>4.9 ⭐</td>
+          <td>105</td>
+        </tr>
+        <tr>
+          <td>2. Marcela Linares</td>
+          <td>4.7 ⭐</td>
+          <td>98</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="stats">
+      <div class="stat-card">
+        <h3>Encuestas enviadas</h3>
+        <p id="enviadas">120</p>
+      </div>
+      <div class="stat-card">
+        <h3>Encuestas respondidas</h3>
+        <p id="respondidas">80</p>
+      </div>
+      <div class="stat-card">
+        <h3>Tasa de respuesta</h3>
+        <p id="tasa">66%</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="container config-section" id="configView">
+
+  <button class="volver-btn-top" onclick="volverRanking()">
+    <i class="fas fa-arrow-left"></i> Volver
+  </button>
+
+  <h2>Configuración de Ranking</h2>
+
+  <div class="card">
+    <label>Tiempo:</label>
+    <div class="tiempo-input-container">
+      <span>Enviar encuesta</span>
+      <input type="number" value="2" min="1">
+      <span>horas después de la cita</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>Preguntas de la encuesta:</label>
+    <div id="listaPreguntas">
+      <div class="pregunta-item">
+        <span class="pregunta-texto">"Atención del odontólogo (1-5)"</span>
+        <div class="pregunta-acciones">
+          <i class="fa-solid fa-pencil" onclick="editarPregunta(this)"></i>
+          <i class="fa-solid fa-xmark" onclick="this.parentElement.parentElement.remove()"></i>
+        </div>
+      </div>
+      <div class="pregunta-item">
+        <span class="pregunta-texto">"Instalaciones (1-5)"</span>
+        <div class="pregunta-acciones">
+          <i class="fa-solid fa-pencil" onclick="editarPregunta(this)"></i>
+          <i class="fa-solid fa-xmark" onclick="this.parentElement.parentElement.remove()"></i>
+        </div>
+      </div>
+    </div>
+    <button class="btn-agregar" onclick="agregarPregunta()">
+      <i class="fa-solid fa-circle-plus"></i> Agregar
+    </button>
+  </div>
+
+  <div class="card">
+    <label><i class="fas fa-envelope" style="color:green;"></i> Mensaje de usuario</label>
+    <div class="message-container">
+      <textarea id="msgUsuario">Hola {Usuario}, por favor califique su cita. Muchas Gracias.</textarea>
+      <div class="pencil-box">
+        <i class="fa-solid fa-pencil" style="color:#666;font-size:11px;"></i>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-top:30px;">
+    <button class="toggle" onclick="toggleEstado()" id="estadoBtn">ON</button>
+    <button class="btn-primary" onclick="guardarCambios()">Guardar</button>
+  </div>
+
+</div>
+
+<script src="../js/ranking.js"></script>
+
+</body>
+</html>
