@@ -3,7 +3,15 @@ from flask import Flask, request, jsonify, render_template
 import usuario, rol, genero, tipo_documento, estado_usuario, \
        administrador, aseguramiento_datos, accion_aseguramiento
 
-app = Flask(__name__)
+import os
+
+# Buscamos la ruta de la carpeta actual (modulo_usuarios)
+ruta_actual = os.path.dirname(os.path.abspath(__file__))
+
+# Le decimos a Flask que suba un nivel ('..') para encontrar templates y static en la raíz
+app = Flask(__name__, 
+            template_folder=os.path.join(ruta_actual, '../templates'), 
+            static_folder=os.path.join(ruta_actual, '../static'))
 
 # =============================================================================
 # 1. MÓDULO USUARIOS
