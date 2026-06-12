@@ -93,17 +93,18 @@ def get_roles_creacion():
     conexion = None
     try:
         conexion = get_db_connection()
-        
-        # AJUSTE TÉCNICO COMPLEMENTARIO: Configura la conexión para que devuelva los nombres 
-        # de las columnas y no rompa el mapeador de diccionarios dict(fila)
         conexion.row_factory = sqlite3.Row 
-        
         cursor = conexion.cursor()
-        cursor.execute("SELECT Rol_ID, Nombre_Rol FROM rol")
+        
+        # CORRECCIÓN DE LA CONSULTA: Usamos las columnas reales de tu SQLite (ROL_ID, DESCRIPCION) 
+        # y renombramos DESCRIPCION como Nombre_Rol para mantener la compatibilidad con creacion.js
+        cursor.execute("SELECT ROL_ID, DESCRIPCION AS Nombre_Rol FROM rol")
+        
         filas = cursor.fetchall()
         lista_roles = [dict(fila) for fila in filas]
         return jsonify(lista_roles), 200
     except Exception as e:
+        print(f"\n❌ ERROR REAL EN /roles: {str(e)}\n")
         return jsonify({"error": str(e)}), 500
     finally:
         if conexion:
