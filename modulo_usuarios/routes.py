@@ -3,15 +3,28 @@ from flask import Flask, request, jsonify, render_template
 import usuario, rol, genero, tipo_documento, estado_usuario, \
        administrador, aseguramiento_datos, accion_aseguramiento
 
-import os
+app = Flask(__name__)
 
-# Buscamos la ruta de la carpeta actual (modulo_usuarios)
+# =============================================================================
+# COMIENZO DE LÍNEAS AÑADIDAS PARA REPARAR EL ERROR 404
+# =============================================================================
+import os
+# Detectamos la ubicación real de este archivo routes.py
 ruta_actual = os.path.dirname(os.path.abspath(__file__))
 
-# Le decimos a Flask que suba un nivel ('..') para encontrar templates y static en la raíz
-app = Flask(__name__, 
-            template_folder=os.path.join(ruta_actual, '../templates'), 
-            static_folder=os.path.join(ruta_actual, '../static'))
+# Le indicamos a Flask que busque subiendo un nivel (..) para encontrar las carpetas en la raíz
+app.template_folder = os.path.join(ruta_actual, '../templates')
+app.static_folder = os.path.join(ruta_actual, '../static')
+
+# Esto imprimirá en tu consola la ruta exacta para que verifiques si es real
+print("\n" + "="*60)
+print("🔍 DIAGNÓSTICO DE RUTA DE INTERFACES:")
+print(f"📁 Buscando tus HTML en: {os.path.abspath(app.template_folder)}")
+print(f"📁 Buscando tu JS/CSS en: {os.path.abspath(app.static_folder)}")
+print("="*60 + "\n")
+# =============================================================================
+# FIN DE LÍNEAS AÑADIDAS
+# =============================================================================
 
 # =============================================================================
 # 1. MÓDULO USUARIOS
