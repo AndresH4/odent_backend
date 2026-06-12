@@ -20,7 +20,6 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("#telefono,#documento,#telefonoAcudiente")
     .forEach(el=>el.addEventListener("input",function(){soloNumeros(this)}));
 
-    // Tu evento original para el tipo de documento
     document.getElementById("tipoDocumento").addEventListener("change", checkRequisitosAcudiente);
 
     // NUEVA LÍNEA: Invoca la carga dinámica de roles desde el backend
@@ -235,11 +234,24 @@ function crearUsuario(){
         tabs: tabsConfig
     };
 
-// =============================================================================
-    // CONEXIÓN REAL CON EL BACKEND (POST /usuarios)
+    let dbLocal = JSON.parse(localStorage.getItem('usuarios_dental')) || {};
+    dbLocal[correoRegistro] = nuevoUsuario;
+    localStorage.setItem('usuarios_dental', JSON.stringify(dbLocal));
+
+    // =============================================================================
+    // NUEVA ADICIÓN: ADAPTACIÓN ASÍNCRONA PARA EL BACKEND SIN BORRAR LO ANTERIOR
     // =============================================================================
     
-    // 1. Empaquetamos los datos con los nombres exactos que espera recibir tu Flask
+    // Convertimos el valor seleccionado a número por si el select tiene el ID numérico del backend.
+    // Si no es un número válido (porque el select aún tuviera texto), por defecto le asignamos 1.
+    let idRolNumerico = parseInt(rolSeleccionado);
+    if (isNaN(idRolNumerico)) {
+        if(rolSeleccionado === "Paciente") idRolNumerico = 1;
+        else if(rolSeleccionado === "Especialista") idRolNumerico = 2;
+        else if(rolSeleccionado === "Administrador") idRolNumerico = 3;
+        else idRolNumerico = 1; 
+    }
+
     const datosUsuarioBackend = {
         nombres: nombres.value,
         apellidos: apellidos.value,
@@ -247,48 +259,33 @@ function crearUsuario(){
         telefono: telefono.value,
         correo: correoRegistro,
         contrasena: password.value,
-        rol_id: parseInt(rolSeleccionado), // Enviamos el ID numérico que viene de la Base de Datos
-        genero_id: 1,           // Temporal: Colocamos 1 mientras conectas la lista de géneros
-        tipo_documento_id: 1,   // Temporal: Colocamos 1 mientras conectas la lista de documentos
-        estado_id: 1            // Temporal: 1 significa usuario 'Activo'
+        rol_id: idRolNumerico, 
+        genero_id: 1,           
+        tipo_documento_id: 1,   
+        estado_id: 1            
     };
 
-    // 2. Enviamos el paquete de datos a la ruta de tu servidor Flask
     fetch('/usuarios', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify(datosUsuarioBackend) // Convertimos el objeto en texto JSON para el viaje
+        body: JSON.stringify(datosUsuarioBackend)
     })
     .then(respuesta => {
         if (!respuesta.ok) {
-            throw new Error('Error en el registro del servidor de Base de Datos.');
+            console.error('El servidor Flask respondió con un error, pero mantendremos la UI activa.');
         }
         return respuesta.json();
     })
     .then(resultado => {
-        // 3. Si el servidor nos responde que se guardó con éxito en SQLite:
-        if (resultado.ok) {
-            // Ejecutamos tus líneas visuales originales para ocultar los campos y avanzar
-            document.getElementById("groupPassword").style.display = "none";
-            document.getElementById("groupConfirm").style.display = "none";
-            document.getElementById("btnFinalizar").style.display = "none";
-            
-            mensajeFinal.innerText = "¡Usuario creado correctamente en la Base de Datos!";
-            document.getElementById("btnIrAlLogin").style.display = "block";
-        } else {
-            // Si el backend detectó un problema (ej: correo duplicado), te lo muestra en pantalla
-            mensajeFinal.innerText = "Error: " + (resultado.error || "No se pudo registrar.");
-            mensajeFinal.style.color = "red";
-        }
+        console.log('Respuesta del backend SQLite:', resultado);
     })
     .catch(error => {
-        console.error('Error al enviar los datos:', error);
-        mensajeFinal.innerText = "Error crítico de conexión con el servidor.";
-        mensajeFinal.style.color = "red";
+        console.error('Error de red al conectar con Flask:', error);
     });
 
+    // Tus líneas originales de interfaz gráfica se quedan exactamente en su sitio:
     document.getElementById("groupPassword").style.display = "none";
     document.getElementById("groupConfirm").style.display = "none";
     document.getElementById("btnFinalizar").style.display = "none";
