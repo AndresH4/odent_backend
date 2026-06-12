@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 # Importación de todos tus módulos
 import usuario, rol, genero, tipo_documento, estado_usuario, \
        administrador, aseguramiento_datos, accion_aseguramiento
@@ -107,6 +107,15 @@ def get_reporte_fecha():
     inicio = request.args.get('desde')
     fin = request.args.get('hasta')
     return jsonify(aseguramiento_datos.reporte_auditoria_por_fecha(inicio, fin))
+
+
+# =============================================================================
+# VISTAS HTML DE LAS INTERFACES
+# =============================================================================
+
+@app.route('/vista/crear_usuario')
+def vista_creacion_usuario():
+    return render_template('creacion.html')
 
 # =============================================================================
 # RUN

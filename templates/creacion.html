@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Registro de Usuario</title>
 
-<link rel="stylesheet" href="../css/creacion.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/creacion.css') }}">
 
 </head>
 <body>
@@ -39,14 +39,11 @@
 </div>
 
 <div class="form-group">
-<label>Rol de usuario</label>
-<select id="rolUsuario" onchange="checkRolEspecialista()">
-<option value="">Seleccione un rol</option>
-<option value="Paciente">Paciente</option>
-<option value="Especialista">Especialista</option>
-<option value="Administrador">Administrador</option>
-</select>
-<div class="error-msg" id="errorRol"></div>
+    <label>Rol de usuario</label>
+    <select id="rolUsuario" onchange="checkRolEspecialista()" required>
+        <option value="">Cargando roles...</option>
+    </select>
+    <div class="error-msg" id="errorRol"></div>
 </div>
 
 <div id="especialistaExtra">

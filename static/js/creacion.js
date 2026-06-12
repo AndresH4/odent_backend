@@ -9,17 +9,47 @@ function soloNumeros(input){
     input.value=input.value.replace(/\D/g,'');
 }
 
+// UN SOLO BLOQUE DE INICIO PARA TODO
 document.addEventListener("DOMContentLoaded", () => {
 
+    // Tus validaciones originales de letras
     document.querySelectorAll("#nombres,#apellidos,#nombresAcudiente,#apellidosAcudiente")
     .forEach(el=>el.addEventListener("input",function(){soloLetras(this)}));
 
+    // Tus validaciones originales de números
     document.querySelectorAll("#telefono,#documento,#telefonoAcudiente")
     .forEach(el=>el.addEventListener("input",function(){soloNumeros(this)}));
 
+    // Tu evento original para el tipo de documento
     document.getElementById("tipoDocumento").addEventListener("change", checkRequisitosAcudiente);
 
+    // NUEVA LÍNEA: Invoca la carga dinámica de roles desde el backend
+    cargarRolesEnFormulario();
 });
+
+// NUEVA FUNCIÓN: Consulta los roles de la base de datos y los inyecta en tu select 'rolUsuario'
+async function cargarRolesEnFormulario() {
+    try {
+        const respuesta = await fetch('/roles'); 
+        if (!respuesta.ok) throw new Error('No se pudieron obtener los roles del servidor');
+
+        const listaDeRoles = await respuesta.json();
+        const selectRol = document.getElementById('rolUsuario');
+        
+        selectRol.innerHTML = '<option value="">Seleccione un rol</option>';
+        
+        listaDeRoles.forEach(rol => {
+            const opcion = document.createElement('option');
+            opcion.value = rol.Rol_ID;       // ID numérico para guardar como llave foránea
+            opcion.textContent = rol.Nombre_Rol; // Nombre legible ("Administrador", "Paciente", etc.)
+            selectRol.appendChild(opcion);
+        });
+    } catch (error) {
+        console.error('Error al conectar con el backend:', error);
+        const selectRol = document.getElementById('rolUsuario');
+        selectRol.innerHTML = '<option value="">Error al cargar roles</option>';
+    }
+}
 
 // FUNCIÓN PARA VERIFICAR LA EDAD AUTOMÁTICAMENTE
 function verificarEdad() {
@@ -205,9 +235,59 @@ function crearUsuario(){
         tabs: tabsConfig
     };
 
-    let dbLocal = JSON.parse(localStorage.getItem('usuarios_dental')) || {};
-    dbLocal[correoRegistro] = nuevoUsuario;
-    localStorage.setItem('usuarios_dental', JSON.stringify(dbLocal));
+// =============================================================================
+    // CONEXIÓN REAL CON EL BACKEND (POST /usuarios)
+    // =============================================================================
+    
+    // 1. Empaquetamos los datos con los nombres exactos que espera recibir tu Flask
+    const datosUsuarioBackend = {
+        nombres: nombres.value,
+        apellidos: apellidos.value,
+        documento: documento.value,
+        telefono: telefono.value,
+        correo: correoRegistro,
+        contrasena: password.value,
+        rol_id: parseInt(rolSeleccionado), // Enviamos el ID numérico que viene de la Base de Datos
+        genero_id: 1,           // Temporal: Colocamos 1 mientras conectas la lista de géneros
+        tipo_documento_id: 1,   // Temporal: Colocamos 1 mientras conectas la lista de documentos
+        estado_id: 1            // Temporal: 1 significa usuario 'Activo'
+    };
+
+    // 2. Enviamos el paquete de datos a la ruta de tu servidor Flask
+    fetch('/usuarios', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(datosUsuarioBackend) // Convertimos el objeto en texto JSON para el viaje
+    })
+    .then(respuesta => {
+        if (!respuesta.ok) {
+            throw new Error('Error en el registro del servidor de Base de Datos.');
+        }
+        return respuesta.json();
+    })
+    .then(resultado => {
+        // 3. Si el servidor nos responde que se guardó con éxito en SQLite:
+        if (resultado.ok) {
+            // Ejecutamos tus líneas visuales originales para ocultar los campos y avanzar
+            document.getElementById("groupPassword").style.display = "none";
+            document.getElementById("groupConfirm").style.display = "none";
+            document.getElementById("btnFinalizar").style.display = "none";
+            
+            mensajeFinal.innerText = "¡Usuario creado correctamente en la Base de Datos!";
+            document.getElementById("btnIrAlLogin").style.display = "block";
+        } else {
+            // Si el backend detectó un problema (ej: correo duplicado), te lo muestra en pantalla
+            mensajeFinal.innerText = "Error: " + (resultado.error || "No se pudo registrar.");
+            mensajeFinal.style.color = "red";
+        }
+    })
+    .catch(error => {
+        console.error('Error al enviar los datos:', error);
+        mensajeFinal.innerText = "Error crítico de conexión con el servidor.";
+        mensajeFinal.style.color = "red";
+    });
 
     document.getElementById("groupPassword").style.display = "none";
     document.getElementById("groupConfirm").style.display = "none";
