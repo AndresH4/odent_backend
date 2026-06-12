@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+import sqlite3  # Importación requerida para habilitar el formateador de filas
 
 # IMPORTANTE: Importamos la función de conexión desde nuestro archivo db.py
 from db import get_db_connection
@@ -20,6 +21,7 @@ def obtener_usuarios():
     try:
         # Llamamos al portero para que nos abra la conexión
         conexion = get_db_connection()
+        conexion.row_factory = sqlite3.Row  # Asegura el formateo de diccionarios en esta ruta tradicional
         cursor = conexion.cursor()
         
         # Hacemos la consulta SQL
@@ -70,6 +72,73 @@ def crear_cita():
     except Exception as e:
         # Si algo falla (ej. el Paciente_ID no existe y salta la llave foránea), devolvemos el error
         return jsonify({"error": str(e)}), 400
+    finally:
+        if conexion:
+            conexion.close()
+
+# =============================================================================
+# LÍNEAS AÑADIDAS: CONEXIÓN CON LA INTERFAZ DE CREACIÓN Y SUS CATÁLOGOS
+# =============================================================================
+from flask import render_template
+
+@app.route('/vista/crear_usuario')
+def vista_creacion_usuario():
+    """Ruta encargada de mostrar la interfaz gráfica de registro"""
+    return render_template('creacion.html')
+
+
+@app.route('/roles', methods=['GET'])
+def get_roles_creacion():
+    """Suministra la lista de roles directamente de la base de datos al select de la interfaz"""
+    conexion = None
+    try:
+        conexion = get_db_connection()
+        
+        # AJUSTE TÉCNICO COMPLEMENTARIO: Configura la conexión para que devuelva los nombres 
+        # de las columnas y no rompa el mapeador de diccionarios dict(fila)
+        conexion.row_factory = sqlite3.Row 
+        
+        cursor = conexion.cursor()
+        cursor.execute("SELECT Rol_ID, Nombre_Rol FROM rol")
+        filas = cursor.fetchall()
+        lista_roles = [dict(fila) for fila in filas]
+        return jsonify(lista_roles), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conexion:
+            conexion.close()
+
+
+@app.route('/usuarios', methods=['POST'])
+def add_usuario_creacion():
+    """Recibe los datos estructurados desde creacion.js y los inserta en la base de datos"""
+    datos = request.get_json()
+    conexion = None
+    try:
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        
+        cursor.execute(
+            """INSERT INTO usuarios (Nombres, Apellidos, Documento, Telefono, Correo, Contrasena, Rol_ID, Genero_ID, Tipo_Documento_ID, Estado_ID) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                datos.get('nombres'), 
+                datos.get('apellidos'), 
+                datos.get('documento'), 
+                datos.get('telefono'), 
+                datos.get('correo'), 
+                datos.get('contrasena'), 
+                datos.get('rol_id'), 
+                datos.get('genero_id', 1), 
+                datos.get('tipo_documento_id', 1), 
+                datos.get('estado_id', 1)
+            )
+        )
+        conexion.commit()
+        return jsonify({"ok": True, "status": "Usuario creado con éxito en SQLite"}), 201
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
     finally:
         if conexion:
             conexion.close()

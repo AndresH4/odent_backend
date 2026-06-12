@@ -39,7 +39,8 @@ async function cargarRolesEnFormulario() {
         
         listaDeRoles.forEach(rol => {
             const opcion = document.createElement('option');
-            opcion.value = rol.Rol_ID;       // ID numérico para guardar como llave foránea
+            // MODIFICACIÓN: Asignamos el Nombre_Rol para que coincida con tus validaciones de texto originales
+            opcion.value = rol.Nombre_Rol;       
             opcion.textContent = rol.Nombre_Rol; // Nombre legible ("Administrador", "Paciente", etc.)
             selectRol.appendChild(opcion);
         });
@@ -122,6 +123,7 @@ function validarPaso1(){
 
     if(apellidos.value.length<2){
         apellidos.classList.add("invalid");
+        errorSuplente = errorApellidos;
         errorApellidos.innerText="Ingrese sus apellidos.";
         valido=false;
     }
