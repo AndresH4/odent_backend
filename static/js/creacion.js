@@ -1,81 +1,87 @@
-let codigoGenerado="";
-let esMenor=false;
-
-function soloLetras(input){
-    input.value=input.value.replace(/[^a-zA-ZÁÉÍÓÚáéíóúñÑ\s]/g,'');
+let codigoGenerado = "";
+let esMenor = false;
+const acudienteSection = document.getElementById("acudienteSection");
+ 
+function soloLetras(input) {
+    input.value = input.value.replace(/[^a-zA-ZÁÉÍÓÚáéíóúñÑ\s]/g, '');
 }
-
-function soloNumeros(input){
-    input.value=input.value.replace(/\D/g,'');
+ 
+function soloNumeros(input) {
+    input.value = input.value.replace(/\D/g, '');
 }
-
-// UN SOLO BLOQUE DE INICIO PARA TODO
+ 
+// ── INICIO ──
 document.addEventListener("DOMContentLoaded", () => {
-
-    // Tus validaciones originales de letras
+ 
     document.querySelectorAll("#nombres,#apellidos,#nombresAcudiente,#apellidosAcudiente")
-    .forEach(el=>el.addEventListener("input",function(){soloLetras(this)}));
-
-    // Tus validaciones originales de números
+        .forEach(el => el.addEventListener("input", function () { soloLetras(this); }));
+ 
     document.querySelectorAll("#telefono,#documento,#telefonoAcudiente")
-    .forEach(el=>el.addEventListener("input",function(){soloNumeros(this)}));
-
+        .forEach(el => el.addEventListener("input", function () { soloNumeros(this); }));
+ 
     document.getElementById("tipoDocumento").addEventListener("change", checkRequisitosAcudiente);
-
-    // NUEVA LÍNEA: Invoca la carga dinámica de roles desde el backend
+ 
     cargarRolesEnFormulario();
 });
-
-// NUEVA FUNCIÓN: Consulta los roles de la base de datos y los inyecta en tu select 'rolUsuario'
+ 
+// ── ROLES DESDE BACKEND ──
 async function cargarRolesEnFormulario() {
-    try {
-        const respuesta = await fetch('/roles'); 
-        if (!respuesta.ok) throw new Error('No se pudieron obtener los roles del servidor');
-
-        const listaDeRoles = await respuesta.json();
-        const selectRol = document.getElementById('rolUsuario');
-        
+    const selectRol = document.getElementById("rolUsuario");
+ 
+    const rolesFallback = [
+        { Nombre_Rol: "Administrador" },
+        { Nombre_Rol: "Especialista" },
+        { Nombre_Rol: "Paciente" }
+    ];
+ 
+    const poblarSelect = (lista) => {
         selectRol.innerHTML = '<option value="">Seleccione un rol</option>';
-        
-        listaDeRoles.forEach(rol => {
-            const opcion = document.createElement('option');
-            // MODIFICACIÓN: Asignamos el Nombre_Rol para que coincida con tus validaciones de texto originales
-            opcion.value = rol.Nombre_Rol;       
-            opcion.textContent = rol.Nombre_Rol; // Nombre legible ("Administrador", "Paciente", etc.)
+        lista.forEach(rol => {
+            const opcion = document.createElement("option");
+            opcion.value = rol.Nombre_Rol;
+            opcion.textContent = rol.Nombre_Rol;
             selectRol.appendChild(opcion);
         });
+    };
+ 
+    try {
+        const respuesta = await fetch("/api/roles");
+        if (!respuesta.ok) throw new Error("Respuesta no OK");
+        const listaDeRoles = await respuesta.json();
+        if (!Array.isArray(listaDeRoles) || listaDeRoles.length === 0) throw new Error("Lista vacía");
+        poblarSelect(listaDeRoles);
     } catch (error) {
-        console.error('Error al conectar con el backend:', error);
-        const selectRol = document.getElementById('rolUsuario');
-        selectRol.innerHTML = '<option value="">Error al cargar roles</option>';
+        console.warn("Backend no disponible, usando roles de respaldo:", error);
+        poblarSelect(rolesFallback);
     }
 }
-
-// FUNCIÓN PARA VERIFICAR LA EDAD AUTOMÁTICAMENTE
+ 
+ 
+// ── VERIFICAR EDAD ──
 function verificarEdad() {
     const fecha = document.getElementById("fechaNacimiento").value;
     if (!fecha) return;
-
+ 
     const hoy = new Date();
     const cumple = new Date(fecha);
     let edad = hoy.getFullYear() - cumple.getFullYear();
     const m = hoy.getMonth() - cumple.getMonth();
-
+ 
     if (m < 0 || (m === 0 && hoy.getDate() < cumple.getDate())) {
         edad--;
     }
-
+ 
     esMenor = (edad < 18);
     checkRequisitosAcudiente();
 }
-
+ 
 function checkRequisitosAcudiente() {
     const tipoDoc = document.getElementById("tipoDocumento").value;
-    
+ 
     if (tipoDoc === "Tarjeta de identidad" || esMenor) {
         acudienteSection.style.display = "block";
         document.getElementById("correoUsuarioGroup").style.display = "none";
-        
+ 
         if (esMenor) {
             document.getElementById("tipoDocumento").value = "Tarjeta de identidad";
         }
@@ -85,148 +91,212 @@ function checkRequisitosAcudiente() {
         document.getElementById("correoUsuarioGroup").style.display = "flex";
     }
 }
-
+ 
+// ── ROL: ESPECIALISTA Y PACIENTE ──
 function checkRolEspecialista() {
     const rol = document.getElementById("rolUsuario").value;
     const extra = document.getElementById("especialistaExtra");
-    if(rol === "Especialista") {
+    const medicos = document.getElementById("contenedor_datos_medicos");
+ 
+    if (rol === "Especialista" || rol === "2") {
         extra.style.display = "block";
     } else {
         extra.style.display = "none";
     }
+ 
+    if (rol === "Paciente" || rol === "3") {
+        medicos.style.display = "block";
+    } else {
+        medicos.style.display = "none";
+        document.getElementById("eps").value = "";
+        document.getElementById("tipoAfiliacion").value = "";
+    }
 }
-
+ 
 function replicarCorreoAcudiente() {
     if (acudienteSection.style.display === "block") {
         document.getElementById("emailAcudiente").value = document.getElementById("email").value;
     }
 }
-
-function validarEmail(email){
+ 
+function validarEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
-
-function limpiarErrores(){
-    document.querySelectorAll(".error-msg").forEach(e=>e.innerText="");
-    document.querySelectorAll("input, select").forEach(i=>i.classList.remove("invalid"));
+ 
+function limpiarErrores() {
+    document.querySelectorAll(".error-msg").forEach(e => e.innerText = "");
+    document.querySelectorAll("input, select").forEach(i => i.classList.remove("invalid"));
 }
-
-function validarPaso1(){
+ 
+// ── INDICADOR DE PASOS ──
+function actualizarIndicador(pasoActual) {
+    const dots = document.querySelectorAll(".step-dot");
+    const lines = document.querySelectorAll(".step-line");
+ 
+    dots.forEach((dot, i) => {
+        dot.classList.remove("active", "done");
+        if (i + 1 < pasoActual) dot.classList.add("done");
+        else if (i + 1 === pasoActual) dot.classList.add("active");
+    });
+ 
+    lines.forEach((line, i) => {
+        line.classList.remove("done");
+        if (i + 1 < pasoActual) line.classList.add("done");
+    });
+}
+ 
+// ── VALIDAR PASO 1 ──
+function validarPaso1() {
     limpiarErrores();
-    let valido=true;
-
-    if(nombres.value.length<2){
+    let valido = true;
+ 
+    if (nombres.value.length < 2) {
         nombres.classList.add("invalid");
-        errorNombres.innerText="Ingrese sus nombres.";
-        valido=false;
+        errorNombres.innerText = "Ingrese sus nombres.";
+        valido = false;
     }
-
-    if(apellidos.value.length<2){
+ 
+    if (apellidos.value.length < 2) {
         apellidos.classList.add("invalid");
-        errorSuplente = errorApellidos;
-        errorApellidos.innerText="Ingrese sus apellidos.";
-        valido=false;
+        errorApellidos.innerText = "Ingrese sus apellidos.";
+        valido = false;
     }
-
-    if(!fechaNacimiento.value){
+ 
+    if (!fechaNacimiento.value) {
         fechaNacimiento.classList.add("invalid");
-        errorFecha.innerText="Seleccione su fecha de nacimiento.";
-        valido=false;
+        errorFecha.innerText = "Seleccione su fecha de nacimiento.";
+        valido = false;
     }
-
-    if(!rolUsuario.value){
+ 
+    if (!rolUsuario.value) {
         rolUsuario.classList.add("invalid");
-        errorRol.innerText="Seleccione un rol.";
-        valido=false;
+        errorRol.innerText = "Seleccione un rol.";
+        valido = false;
     }
-
-    if(documento.value.length<5){
+ 
+    // Validar Datos Médicos si es Paciente
+    if (rolUsuario.value === "Paciente" || rolUsuario.value === "3") {
+        if (!document.getElementById("eps").value) {
+            document.getElementById("eps").classList.add("invalid");
+            document.getElementById("errorEps").innerText = "Seleccione una EPS.";
+            valido = false;
+        }
+        if (!document.getElementById("tipoAfiliacion").value) {
+            document.getElementById("tipoAfiliacion").classList.add("invalid");
+            document.getElementById("errorAfiliacion").innerText = "Seleccione un tipo de EPS.";
+            valido = false;
+        }
+    }
+ 
+    if (documento.value.length < 5) {
         documento.classList.add("invalid");
-        errorDocumento.innerText="Documento no válido.";
-        valido=false;
+        errorDocumento.innerText = "Documento no válido.";
+        valido = false;
     }
-
-    if(telefono.value.length!==10){
+ 
+    if (telefono.value.length !== 10) {
         telefono.classList.add("invalid");
-        errorTelefono.innerText="El teléfono debe tener 10 dígitos.";
-        valido=false;
+        errorTelefono.innerText = "El teléfono debe tener 10 dígitos.";
+        valido = false;
     }
-
-    const emailAValidar = (document.getElementById("correoUsuarioGroup").style.display === "none") ? emailAcudiente.value : email.value;
-
-    if(!validarEmail(emailAValidar)){
-        if(document.getElementById("correoUsuarioGroup").style.display === "none"){
+ 
+    const emailAValidar = (document.getElementById("correoUsuarioGroup").style.display === "none")
+        ? emailAcudiente.value
+        : email.value;
+ 
+    if (!validarEmail(emailAValidar)) {
+        if (document.getElementById("correoUsuarioGroup").style.display === "none") {
             emailAcudiente.classList.add("invalid");
-            errorEmailAcudiente.innerText="Ingrese un correo electrónico válido.";
+            errorEmailAcudiente.innerText = "Ingrese un correo electrónico válido.";
         } else {
             email.classList.add("invalid");
-            errorEmail.innerText="Ingrese un correo electrónico válido.";
+            errorEmail.innerText = "Ingrese un correo electrónico válido.";
         }
-        valido=false;
+        valido = false;
     }
-
-    if(valido){
-        codigoGenerado=Math.floor(100000+Math.random()*900000);
-        alert("Código generado: "+codigoGenerado);
+ 
+    if (valido) {
+        codigoGenerado = Math.floor(100000 + Math.random() * 900000);
+ 
+        // Llenar la tarjeta de correo simulada
+        const correoMostrar = (document.getElementById("correoUsuarioGroup").style.display === "none")
+            ? document.getElementById("emailAcudiente").value
+            : document.getElementById("email").value;
+ 
+        const nombreMostrar = document.getElementById("nombres").value;
+ 
+        document.getElementById("codigoVisible").innerText = codigoGenerado;
+        document.getElementById("emailDestino").innerText = correoMostrar;
+        document.getElementById("nombreDestinatario").innerText = nombreMostrar;
+ 
         step1.classList.remove("active");
         step2.classList.add("active");
+        actualizarIndicador(2);
     }
 }
-
-function verificarCodigo(){
-    if(codigo.value==codigoGenerado){
+ 
+// ── VERIFICAR CÓDIGO ──
+function verificarCodigo() {
+    if (codigo.value == codigoGenerado) {
         step2.classList.remove("active");
         step3.classList.add("active");
-    }else{
-        errorCodigo.innerText="Código incorrecto.";
+        actualizarIndicador(3);
+    } else {
+        errorCodigo.innerText = "Código incorrecto.";
     }
 }
-
-function validarPassword(pass){
+ 
+function validarPassword(pass) {
     return /^(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(pass);
 }
-
-function crearUsuario(){
+ 
+// ── CREAR USUARIO ──
+function crearUsuario() {
     limpiarErrores();
-
-    if(!validarPassword(password.value)){
+ 
+    if (!validarPassword(password.value)) {
         password.classList.add("invalid");
-        errorPassword.innerText="La contraseña no cumple los requisitos.";
+        errorPassword.innerText = "La contraseña no cumple los requisitos.";
         return;
     }
-
-    if(password.value!==confirmPassword.value){
+ 
+    if (password.value !== confirmPassword.value) {
         confirmPassword.classList.add("invalid");
-        errorConfirm.innerText="Las contraseñas no coinciden.";
+        errorConfirm.innerText = "Las contraseñas no coinciden.";
         return;
     }
-
-    const correoRegistro = (document.getElementById("correoUsuarioGroup").style.display === "none" ? emailAcudiente.value : email.value).toLowerCase();
+ 
+    const correoRegistro = (document.getElementById("correoUsuarioGroup").style.display === "none"
+        ? emailAcudiente.value
+        : email.value).toLowerCase();
+ 
     const rolSeleccionado = document.getElementById("rolUsuario").value;
     const especialidadSeleccionada = document.getElementById("especialidadMedica").value;
-    
+    const epsSeleccionada = document.getElementById("eps").value;
+    const afiliacionSeleccionada = document.getElementById("tipoAfiliacion").value;
+ 
     let tabsConfig = ["Inicio"];
     let btnConfig = "Ver perfil";
-
-    if(rolSeleccionado === "Paciente") {
+ 
+    if (rolSeleccionado === "Paciente") {
         tabsConfig = ["Panel de citas", "Historial Personal"];
         btnConfig = "Agendar cita";
-    } else if(rolSeleccionado === "Especialista") {
+    } else if (rolSeleccionado === "Especialista") {
         tabsConfig = ["Agenda", "Pacientes", "Ranking"];
         btnConfig = "Ver mi agenda";
-    } else if(rolSeleccionado === "Administrador") {
+    } else if (rolSeleccionado === "Administrador") {
         tabsConfig = ["Usuarios", "Citas", "Sistema"];
         btnConfig = "Gestionar Sistema";
     }
-
+ 
     const nuevoUsuario = {
         nombre: nombres.value + " " + apellidos.value,
         pass: password.value,
         rol: rolSeleccionado,
         especialidad: especialidadSeleccionada,
         email: correoRegistro,
-        esMenor: esMenor, 
-        foto: "", 
+        esMenor: esMenor,
+        foto: "",
         data: [
             ["Documento", documento.value],
             ["Tipo", document.getElementById("tipoDocumento").value],
@@ -235,25 +305,19 @@ function crearUsuario(){
         btn: btnConfig,
         tabs: tabsConfig
     };
-
+ 
     let dbLocal = JSON.parse(localStorage.getItem('usuarios_dental')) || {};
     dbLocal[correoRegistro] = nuevoUsuario;
     localStorage.setItem('usuarios_dental', JSON.stringify(dbLocal));
-
-    // =============================================================================
-    // NUEVA ADICIÓN: ADAPTACIÓN ASÍNCRONA PARA EL BACKEND SIN BORRAR LO ANTERIOR
-    // =============================================================================
-    
-    // Convertimos el valor seleccionado a número por si el select tiene el ID numérico del backend.
-    // Si no es un número válido (porque el select aún tuviera texto), por defecto le asignamos 1.
+ 
     let idRolNumerico = parseInt(rolSeleccionado);
     if (isNaN(idRolNumerico)) {
-        if(rolSeleccionado === "Paciente") idRolNumerico = 1;
-        else if(rolSeleccionado === "Especialista") idRolNumerico = 2;
-        else if(rolSeleccionado === "Administrador") idRolNumerico = 3;
-        else idRolNumerico = 1; 
+        if (rolSeleccionado === "Paciente") idRolNumerico = 3;
+        else if (rolSeleccionado === "Especialista") idRolNumerico = 2;
+        else if (rolSeleccionado === "Administrador") idRolNumerico = 1;
+        else idRolNumerico = 3;
     }
-
+ 
     const datosUsuarioBackend = {
         nombres: nombres.value,
         apellidos: apellidos.value,
@@ -261,17 +325,18 @@ function crearUsuario(){
         telefono: telefono.value,
         correo: correoRegistro,
         contrasena: password.value,
-        rol_id: idRolNumerico, 
-        genero_id: 1,           
-        tipo_documento_id: 1,   
-        estado_id: 1            
+        rol_id: idRolNumerico,
+        genero_id: 1,
+        tipo_documento_id: 1,
+        estado_id: 1,
+        eps_id: epsSeleccionada || null,
+        tipo_afiliacion_id: afiliacionSeleccionada || null,
+        fecha_nacimiento: document.getElementById("fechaNacimiento").value
     };
-
-    fetch('/usuarios', {
+ 
+    fetch('/api/usuarios', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(datosUsuarioBackend)
     })
     .then(respuesta => {
@@ -286,21 +351,20 @@ function crearUsuario(){
     .catch(error => {
         console.error('Error de red al conectar con Flask:', error);
     });
-
-    // Tus líneas originales de interfaz gráfica se quedan exactamente en su sitio:
+ 
     document.getElementById("groupPassword").style.display = "none";
     document.getElementById("groupConfirm").style.display = "none";
     document.getElementById("btnFinalizar").style.display = "none";
-    
-    mensajeFinal.innerText="¡Usuario " + rolSeleccionado + " creado correctamente!";
-    document.getElementById("btnIrAlLogin").style.display = "block";
+ 
+    mensajeFinal.innerText = "¡Usuario " + rolSeleccionado + " creado correctamente!";
+    document.getElementById("btnIrAlLogin").style.display = "flex";
 }
-
+ 
 function abrirLogin() {
     window.location.href = "login.html";
 }
-
-function togglePassword(id){
-    const input=document.getElementById(id);
-    input.type=input.type==="password"?"text":"password";
+ 
+function togglePassword(id) {
+    const input = document.getElementById(id);
+    input.type = input.type === "password" ? "text" : "password";
 }

@@ -1,168 +1,278 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Registro de Usuario</title>
-
-<link rel="stylesheet" href="{{ url_for('static', filename='css/creacion.css') }}">
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro de Usuario</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/creacion.css') }}">
 </head>
 <body>
-
+ 
 <div class="container">
-<div class="header">
-<h2>Registro de Usuario</h2>
-<p style="margin:5px 0 0;font-size:13px;">Complete la información solicitada</p>
+    <div class="header">
+        <div class="header-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
+        </div>
+        <h2>Registro de Usuario</h2>
+        <p>Complete la información solicitada</p>
+    </div>
+ 
+    <div class="step-indicator">
+        <div class="step-dot active" id="dot1">
+            <span>1</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step-dot" id="dot2">
+            <span>2</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step-dot" id="dot3">
+            <span>3</span>
+        </div>
+    </div>
+ 
+    <div class="body">
+ 
+        <!-- PASO 1 -->
+        <div class="form-step active" id="step1">
+ 
+            <div class="section-title">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                Información Personal
+            </div>
+ 
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Nombres</label>
+                    <input type="text" id="nombres" placeholder="Ej. Juan Carlos">
+                    <div class="error-msg" id="errorNombres"></div>
+                </div>
+                <div class="form-group">
+                    <label>Apellidos</label>
+                    <input type="text" id="apellidos" placeholder="Ej. Pérez Gómez">
+                    <div class="error-msg" id="errorApellidos"></div>
+                </div>
+            </div>
+ 
+            <div class="form-group">
+                <label>Fecha de nacimiento</label>
+                <input type="date" id="fechaNacimiento" onchange="verificarEdad()">
+                <div class="error-msg" id="errorFecha"></div>
+            </div>
+ 
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Tipo de documento</label>
+                    <select id="tipoDocumento">
+                        <option value="">Seleccione una opción</option>
+                        <option>Cedula de ciudadanía</option>
+                        <option>Tarjeta de identidad</option>
+                        <option>Cedula Profesional</option>
+                        <option>Cedula de extranjería</option>
+                    </select>
+                    <div class="error-msg" id="errorTipo"></div>
+                </div>
+                <div class="form-group">
+                    <label>Número de documento</label>
+                    <input type="text" id="documento" maxlength="10" placeholder="Ej. 1234567890">
+                    <div class="error-msg" id="errorDocumento"></div>
+                </div>
+            </div>
+ 
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Teléfono</label>
+                    <input type="text" id="telefono" maxlength="10" placeholder="Ej. 3001234567">
+                    <div class="error-msg" id="errorTelefono"></div>
+                </div>
+                <div class="form-group">
+                    <label>Rol de usuario</label>
+                    <select id="rolUsuario" onchange="checkRolEspecialista()" required>
+                        <option value="">Cargando roles...</option>
+                    </select>
+                    <div class="error-msg" id="errorRol"></div>
+                </div>
+            </div>
+ 
+            <!-- Sección Especialista -->
+            <div id="especialistaExtra">
+                <div class="seccion-label">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                    Datos del Especialista
+                </div>
+                <div class="form-group">
+                    <label>Especialidad Médica</label>
+                    <select id="especialidadMedica">
+                        <option value="Medicina General">Medicina General</option>
+                        <option value="Odontología">Odontología</option>
+                        <option value="Cardiología">Cardiología</option>
+                        <option value="Pediatría">Pediatría</option>
+                        <option value="Psicología">Psicología</option>
+                    </select>
+                </div>
+            </div>
+ 
+            <!-- Sección Datos Médicos (Paciente) -->
+            <div id="contenedor_datos_medicos" class="seccion-medica">
+                <div class="seccion-label">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                    Datos de Aseguramiento
+                </div>
+ 
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>EPS</label>
+                        <select id="eps">
+                            <option value="">Seleccione una EPS...</option>
+                            <option value="1">Compensar</option>
+                            <option value="2">Salud Total</option>
+                            <option value="3">NuevaEPS</option>
+                            <option value="4">Famisanar</option>
+                            <option value="5">Sanitas</option>
+                            <option value="6">CapitalSalud</option>
+                            <option value="7">Sura</option>
+                        </select>
+                        <div class="error-msg" id="errorEps"></div>
+                    </div>
+ 
+                    <div class="form-group">
+                        <label>Tipo de EPS</label>
+                        <select id="tipoAfiliacion">
+                            <option value="">Seleccione el tipo...</option>
+                            <option value="1">Cotizante</option>
+                            <option value="2">Beneficiario</option>
+                        </select>
+                        <div class="error-msg" id="errorAfiliacion"></div>
+                    </div>
+                </div>
+            </div>
+ 
+            <!-- Correo -->
+            <div class="form-group" id="correoUsuarioGroup">
+                <label>Correo electrónico</label>
+                <input type="email" id="email" placeholder="correo@ejemplo.com" oninput="replicarCorreoAcudiente()">
+                <div class="error-msg" id="errorEmail"></div>
+            </div>
+ 
+            <!-- Sección Acudiente -->
+            <div id="acudienteSection">
+                <div class="seccion-label">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    Información del Acudiente
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Nombres del acudiente</label>
+                        <input type="text" id="nombresAcudiente">
+                        <div class="error-msg" id="errorNombresAcudiente"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Apellidos del acudiente</label>
+                        <input type="text" id="apellidosAcudiente">
+                        <div class="error-msg" id="errorApellidosAcudiente"></div>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Teléfono del acudiente</label>
+                        <input type="text" id="telefonoAcudiente" maxlength="10">
+                        <div class="error-msg" id="errorTelefonoAcudiente"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Correo del acudiente</label>
+                        <input type="email" id="emailAcudiente">
+                        <div class="error-msg" id="errorEmailAcudiente"></div>
+                    </div>
+                </div>
+            </div>
+ 
+            <button onclick="validarPaso1()">
+                Continuar
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+            </button>
+        </div>
+ 
+        <!-- PASO 2 -->
+        <div class="form-step" id="step2">
+ 
+            <!-- Tarjeta de correo simulado -->
+            <div class="email-card">
+                <div class="email-card-topbar">
+                    <div class="email-topbar-dots">
+                        <span></span><span></span><span></span>
+                    </div>
+                    <div class="email-topbar-label">Bandeja de entrada</div>
+                </div>
+                <div class="email-card-body">
+                    <div class="email-from-row">
+                        <div class="email-avatar">C</div>
+                        <div class="email-meta">
+                            <div class="email-from">Clínica <span>· no-reply@clinica.com</span></div>
+                            <div class="email-to">Para: <span id="emailDestino">tu correo</span></div>
+                        </div>
+                        <div class="email-time">Ahora</div>
+                    </div>
+                    <div class="email-subject">Código de verificación de tu cuenta</div>
+                    <div class="email-message">
+                        Hola, <strong id="nombreDestinatario">usuario</strong>. Usa el siguiente código para verificar tu cuenta. Este código expira en 10 minutos.
+                    </div>
+                    <div class="email-code-display" id="codigoVisible">------</div>
+                    <div class="email-footer-note">Si no solicitaste este código, ignora este mensaje.</div>
+                </div>
+            </div>
+ 
+            <div class="form-group" style="margin-top: 20px;">
+                <label style="text-align:center; color:#475569;">Ingresa el código que aparece arriba</label>
+                <input type="text" id="codigo" style="text-align: center; font-size: 22px; letter-spacing: 6px; font-weight: 700;" placeholder="_ _ _ _ _ _" maxlength="6">
+                <div class="error-msg" id="errorCodigo" style="text-align: center;"></div>
+            </div>
+            <button onclick="verificarCodigo()">
+                Verificar código
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            </button>
+        </div>
+ 
+        <!-- PASO 3 -->
+        <div class="form-step" id="step3">
+            <div class="form-group" id="groupPassword">
+                <label>Crear contraseña</label>
+                <div class="input-password-wrap">
+                    <input type="password" id="password">
+                    <div class="toggle-password" onclick="togglePassword('password')">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </div>
+                </div>
+                <div class="password-hint">Mínimo 8 caracteres, incluir una mayúscula, un número y un carácter especial.</div>
+                <div class="error-msg" id="errorPassword"></div>
+            </div>
+ 
+            <div class="form-group" id="groupConfirm">
+                <label>Confirmar contraseña</label>
+                <div class="input-password-wrap">
+                    <input type="password" id="confirmPassword">
+                    <div class="toggle-password" onclick="togglePassword('confirmPassword')">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </div>
+                </div>
+                <div class="error-msg" id="errorConfirm"></div>
+            </div>
+ 
+            <button id="btnFinalizar" onclick="crearUsuario()">
+                Crear usuario
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            </button>
+ 
+            <div class="success-msg" id="mensajeFinal"></div>
+            <button id="btnIrAlLogin" class="btn-login-success" onclick="abrirLogin()">
+                Ir a Iniciar Sesión
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg>
+            </button>
+        </div>
+ 
+    </div>
 </div>
-
-<div class="body">
-
-<div class="form-step active" id="step1">
-
-<div class="form-group">
-<label>Nombres</label>
-<input type="text" id="nombres">
-<div class="error-msg" id="errorNombres"></div>
-</div>
-
-<div class="form-group">
-<label>Apellidos</label>
-<input type="text" id="apellidos">
-<div class="error-msg" id="errorApellidos"></div>
-</div>
-
-<div class="form-group">
-<label>Fecha de nacimiento</label>
-<input type="date" id="fechaNacimiento" onchange="verificarEdad()">
-<div class="error-msg" id="errorFecha"></div>
-</div>
-
-<div class="form-group">
-    <label>Rol de usuario</label>
-    <select id="rolUsuario" onchange="checkRolEspecialista()" required>
-        <option value="">Cargando roles...</option>
-    </select>
-    <div class="error-msg" id="errorRol"></div>
-</div>
-
-<div id="especialistaExtra">
-<div class="form-group">
-<label>Especialidad Médica</label>
-<select id="especialidadMedica">
-<option value="Medicina General">Medicina General</option>
-<option value="Odontología">Odontología</option>
-<option value="Cardiología">Cardiología</option>
-<option value="Pediatría">Pediatría</option>
-<option value="Psicología">Psicología</option>
-</select>
-</div>
-</div>
-
-<div class="form-group">
-<label>Tipo de documento</label>
-<select id="tipoDocumento">
-<option value="">Seleccione una opción</option>
-<option>Cedula de ciudadanía</option>
-<option>Tarjeta de identidad</option>
-<option>Cedula Profesional</option>
-<option>Cedula de extranjería</option>
-</select>
-<div class="error-msg" id="errorTipo"></div>
-</div>
-
-<div class="form-group">
-<label>Número de documento</label>
-<input type="text" id="documento" maxlength="10">
-<div class="error-msg" id="errorDocumento"></div>
-</div>
-
-<div class="form-group">
-<label>Teléfono</label>
-<input type="text" id="telefono" maxlength="10">
-<div class="error-msg" id="errorTelefono"></div>
-</div>
-
-<div class="form-group" id="correoUsuarioGroup">
-<label>Correo electrónico</label>
-<input type="email" id="email" oninput="replicarCorreoAcudiente()">
-<div class="error-msg" id="errorEmail"></div>
-</div>
-
-<div id="acudienteSection">
-
-<h4>Información del acudiente</h4>
-
-<div class="form-group">
-<label>Nombres del acudiente</label>
-<input type="text" id="nombresAcudiente">
-<div class="error-msg" id="errorNombresAcudiente"></div>
-</div>
-
-<div class="form-group">
-<label>Apellidos del acudiente</label>
-<input type="text" id="apellidosAcudiente">
-<div class="error-msg" id="errorApellidosAcudiente"></div>
-</div>
-
-<div class="form-group">
-<label>Teléfono del acudiente</label>
-<input type="text" id="telefonoAcudiente" maxlength="10">
-<div class="error-msg" id="errorTelefonoAcudiente"></div>
-</div>
-
-<div class="form-group">
-<label>Correo electrónico del acudiente</label>
-<input type="email" id="emailAcudiente">
-<div class="error-msg" id="errorEmailAcudiente"></div>
-</div>
-
-</div>
-
-<button onclick="validarPaso1()">Continuar</button>
-</div>
-
-<div class="form-step" id="step2">
-<p>Se ha enviado un código de verificación al correo registrado. Por favor, ingréselo a continuación:</p>
-
-<div class="form-group">
-<input type="text" id="codigo">
-<div class="error-msg" id="errorCodigo"></div>
-</div>
-
-<button onclick="verificarCodigo()">Verificar código</button>
-</div>
-
-<div class="form-step" id="step3">
-
-<div class="form-group" id="groupPassword">
-<label>Crear contraseña</label>
-<input type="password" id="password">
-<div class="toggle-password" onclick="togglePassword('password')">Mostrar contraseña</div>
-<div class="password-hint">
-La contraseña debe tener mínimo 8 caracteres, incluir una mayúscula, un número y un carácter especial.
-</div>
-<div class="error-msg" id="errorPassword"></div>
-</div>
-
-<div class="form-group" id="groupConfirm">
-<label>Confirmar contraseña</label>
-<input type="password" id="confirmPassword">
-<div class="toggle-password" onclick="togglePassword('confirmPassword')">Mostrar contraseña</div>
-<div class="error-msg" id="errorConfirm"></div>
-</div>
-
-<button id="btnFinalizar" onclick="crearUsuario()">Crear usuario</button>
-
-<div class="success-msg" id="mensajeFinal"></div>
-<button id="btnIrAlLogin" class="btn-login-success" onclick="abrirLogin()">Iniciar Sesión</button>
-
-</div>
-
-</div>
-</div>
-
+ 
 <script src="{{ url_for('static', filename='js/creacion.js') }}"></script>
-
 </body>
-</html>

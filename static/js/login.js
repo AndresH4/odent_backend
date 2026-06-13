@@ -1,61 +1,108 @@
-const RUTAS = {
-    especialista: "especialista.html",
-    paciente: "paciente.html",
-    administrador: "administrador.html",
-    defecto: "sistema_dental.html"
-};
-
-function validarYEntrar() {
-    // Reset de errores
-    document.querySelectorAll('.error-text').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('input').forEach(el => el.classList.remove('input-error'));
-
-    const correo = document.getElementById('emailLogin').value.toLowerCase().trim();
-    const clave = document.getElementById('passLogin').value;
-
-    const usuariosDB = JSON.parse(localStorage.getItem('usuarios_dental')) || {};
-
-    if (!correo) {
-        mostrarError('emailLogin', 'errorEmail', 'Por favor, ingrese su correo');
-        return;
+/**
+ * static/js/login.js
+ * ===================
+ * Maneja el envío del formulario de login y redirige al panel
+ * correspondiente según el Rol_ID devuelto por el backend.
+ *
+ * Rol_ID → 1 = Administrador → administrador.html
+ * Rol_ID → 2 = Especialista   → especialista.html
+ * Rol_ID → 3 = Paciente       → paciente.html
+ *
+ * HTML ESPERADO en login.html:
+ * ──────────────────────────────────────────────────────────────
+ *   <form id="loginForm">
+ *     <input type="email"    id="correo"     required>
+ *     <input type="password" id="contrasena" required>
+ *     <button type="submit">Iniciar sesión</button>
+ *   </form>
+ *   <p id="loginError" style="display:none; color:red;"></p>
+ *
+ *   <script src="/static/js/login.js"></script>
+ * ──────────────────────────────────────────────────────────────
+ * Si tu login.html ya tiene otros IDs, solo ajusta los
+ * document.getElementById(...) de abajo para que coincidan.
+ */
+ 
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.getElementById('loginForm');
+  const errorBox = document.getElementById('loginError');
+ 
+  if (!form) {
+    console.error('No se encontró el formulario #loginForm en login.html');
+    return;
+  }
+ 
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    ocultarError();
+ 
+    const correo = document.getElementById('correo').value.trim();
+    const contrasena = document.getElementById('contrasena').value;
+ 
+    if (!correo || !contrasena) {
+      mostrarError('Por favor completa correo y contraseña.');
+      return;
     }
-
-    if (!usuariosDB[correo]) {
-        mostrarError('emailLogin', 'errorEmail', 'Este correo no existe en nuestro sistema');
+ 
+    try {
+      const respuesta = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ correo, contrasena })
+      });
+ 
+      const datos = await respuesta.json();
+ 
+      if (!respuesta.ok || !datos.ok) {
+        mostrarError(datos.error || 'Correo o contraseña incorrectos.');
         return;
+      }
+ 
+      // Guardamos los datos del usuario logueado para usarlos en los
+      // paneles siguientes (administrador.html, paciente.html, etc.)
+      sessionStorage.setItem('odent_usuario', JSON.stringify(datos.usuario));
+ 
+      redirigirSegunRol(datos.usuario.Rol_ID);
+ 
+    } catch (error) {
+      console.error('Error de conexión con el servidor:', error);
+      mostrarError('No se pudo conectar con el servidor. Intenta de nuevo.');
     }
-
-    if (!clave) {
-        mostrarError('passLogin', 'errorPass', 'Por favor, ingrese su contraseña');
-        return;
+  });
+ 
+  /**
+   * Redirige a la vista correspondiente según el Rol_ID del usuario.
+   * @param {number} rolId - 1=Administrador, 2=Especialista, 3=Paciente
+   */
+  function redirigirSegunRol(rolId) {
+    switch (rolId) {
+      case 1:
+        window.location.href = '/administrador.html';
+        break;
+      case 2:
+        window.location.href = '/especialista.html';
+        break;
+      case 3:
+        window.location.href = '/paciente.html';
+        break;
+      default:
+        mostrarError('Rol de usuario no reconocido.');
     }
-
-    if (usuariosDB[correo].pass !== clave) {
-        mostrarError('passLogin', 'errorPass', 'La contraseña es incorrecta');
-        return;
-    }
-
-    localStorage.setItem('usuario_logueado', correo);
-
-    const rolUsuario = usuariosDB[correo].rol;
-
-    if (rolUsuario === "Especialista") {
-        window.location.href = RUTAS.especialista;
-    } else if (rolUsuario === "Paciente") {
-        window.location.href = RUTAS.paciente;
-    } else if (rolUsuario === "Administrador") {
-        window.location.href = RUTAS.administrador;
+  }
+ 
+  function mostrarError(mensaje) {
+    if (errorBox) {
+      errorBox.textContent = mensaje;
+      errorBox.style.display = 'block';
     } else {
-        window.location.href = RUTAS.defecto;
+      alert(mensaje);
     }
-}
-
-function mostrarError(inputId, errorId, mensaje) {
-    const input = document.getElementById(inputId);
-    const errorDiv = document.getElementById(errorId);
-
-    input.classList.add('input-error');
-    errorDiv.innerText = mensaje;
-    errorDiv.style.display = 'block';
-    input.focus();
-}
+  }
+ 
+  function ocultarError() {
+    if (errorBox) {
+      errorBox.style.display = 'none';
+      errorBox.textContent = '';
+    }
+  }
+});

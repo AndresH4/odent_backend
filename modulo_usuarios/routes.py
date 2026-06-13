@@ -1,46 +1,26 @@
-from flask import Flask, request, jsonify, render_template
-# Importación de todos tus módulos
-import usuario, rol, genero, tipo_documento, estado_usuario, \
-       administrador, aseguramiento_datos, accion_aseguramiento
+from flask import Blueprint, request, jsonify, render_template
+# Mantenemos las importaciones relativas
+from . import usuario, rol, genero, tipo_documento, estado_usuario, \
+              administrador, aseguramiento_datos, accion_aseguramiento
 
-app = Flask(__name__)
-
-# =============================================================================
-# COMIENZO DE LÍNEAS AÑADIDAS PARA REPARAR EL ERROR 404
-# =============================================================================
-import os
-# Detectamos la ubicación real de este archivo routes.py
-ruta_actual = os.path.dirname(os.path.abspath(__file__))
-
-# Le indicamos a Flask que busque subiendo un nivel (..) para encontrar las carpetas en la raíz
-app.template_folder = os.path.join(ruta_actual, '../templates')
-app.static_folder = os.path.join(ruta_actual, '../static')
-
-# Esto imprimirá en tu consola la ruta exacta para que verifiques si es real
-print("\n" + "="*60)
-print("🔍 DIAGNÓSTICO DE RUTA DE INTERFACES:")
-print(f"📁 Buscando tus HTML en: {os.path.abspath(app.template_folder)}")
-print(f"📁 Buscando tu JS/CSS en: {os.path.abspath(app.static_folder)}")
-print("="*60 + "\n")
-# =============================================================================
-# FIN DE LÍNEAS AÑADIDAS
-# =============================================================================
+# DEFINIMOS EL BLUEPRINT AQUÍ
+usuarios_bp = Blueprint('usuarios_bp', __name__)
 
 # =============================================================================
-# 1. MÓDULO USUARIOS
+# 1. MÓDULO USUARIOS (Cambiamos @app.route por @usuarios_bp.route)
 # =============================================================================
 
-@app.route('/usuarios', methods=['GET'])
+@usuarios_bp.route('/usuarios', methods=['GET'])
 def get_usuarios():
     return jsonify(usuario.read_all_usuarios())
 
-@app.route('/usuarios', methods=['POST'])
+@usuarios_bp.route('/usuarios', methods=['POST'])
 def add_usuario():
     data = request.json
     res = usuario.create_usuario(**data)
     return jsonify(res), (201 if res.get('ok') else 400)
 
-@app.route('/usuarios/<int:id>', methods=['GET', 'PUT', 'DELETE'])
+@usuarios_bp.route('/usuarios/<int:id>', methods=['GET', 'PUT', 'DELETE'])
 def crud_usuario(id):
     if request.method == 'GET':
         data = usuario.read_usuario_by_id(id)
@@ -54,42 +34,35 @@ def crud_usuario(id):
         return jsonify(res), (200 if res.get('ok') else 400)
 
 # =============================================================================
-# 2. CATÁLOGOS (Roles, Géneros, Tipos Doc, Estados, Acciones)
+# 2. CATÁLOGOS
 # =============================================================================
 
-def handle_catalog(module, id=None):
-    """Helper para simplificar las rutas de los catálogos CRUD"""
-    if request.method == 'GET':
-        return jsonify(module.read_all()) if not id else jsonify(module.read_by_id(id))
-    # Aquí podrías extender para POST/PUT/DELETE si lo requieres en todos
-    return jsonify({"error": "Método no implementado"}), 405
-
-@app.route('/roles', methods=['GET'])
+@usuarios_bp.route('/roles', methods=['GET'])
 def get_roles(): return jsonify(rol.read_all_roles())
 
-@app.route('/roles/reporte', methods=['GET'])
+@usuarios_bp.route('/roles/reporte', methods=['GET'])
 def get_reporte_roles(): return jsonify(rol.reporte_usuarios_por_rol())
 
-@app.route('/generos', methods=['GET'])
+@usuarios_bp.route('/generos', methods=['GET'])
 def get_generos(): return jsonify(genero.read_all_generos())
 
-@app.route('/generos/reporte', methods=['GET'])
+@usuarios_bp.route('/generos/reporte', methods=['GET'])
 def get_reporte_generos(): return jsonify(genero.reporte_usuarios_por_genero())
 
-@app.route('/tipos_documento', methods=['GET'])
+@usuarios_bp.route('/tipos_documento', methods=['GET'])
 def get_tipos_doc(): return jsonify(tipo_documento.read_all_tipos_documento())
 
-@app.route('/estados_usuario', methods=['GET'])
+@usuarios_bp.route('/estados_usuario', methods=['GET'])
 def get_estados(): return jsonify(estado_usuario.read_all_estados())
 
-@app.route('/acciones_aseguramiento', methods=['GET'])
+@usuarios_bp.route('/acciones_aseguramiento', methods=['GET'])
 def get_acciones(): return jsonify(accion_aseguramiento.read_all_acciones())
 
 # =============================================================================
 # 3. MÓDULO ADMINISTRADORES
 # =============================================================================
 
-@app.route('/administradores', methods=['GET', 'POST'])
+@usuarios_bp.route('/administradores', methods=['GET', 'POST'])
 def crud_administradores():
     if request.method == 'GET':
         return jsonify(administrador.read_all_administradores())
@@ -97,15 +70,15 @@ def crud_administradores():
     res = administrador.create_administrador(data['usuario_id'])
     return jsonify(res), (201 if res.get('ok') else 400)
 
-@app.route('/administradores/activos', methods=['GET'])
+@usuarios_bp.route('/administradores/activos', methods=['GET'])
 def get_admins_activos():
     return jsonify(administrador.reporte_administradores_activos())
 
 # =============================================================================
-# 4. MÓDULO ASEGURAMIENTO (Auditoría)
+# 4. MÓDULO ASEGURAMIENTO
 # =============================================================================
 
-@app.route('/auditoria', methods=['GET', 'POST'])
+@usuarios_bp.route('/auditoria', methods=['GET', 'POST'])
 def crud_auditoria():
     if request.method == 'GET':
         return jsonify(aseguramiento_datos.read_all_aseguramientos())
@@ -115,33 +88,24 @@ def crud_auditoria():
     )
     return jsonify(res), (201 if res.get('ok') else 400)
 
-@app.route('/auditoria/usuario/<int:usuario_id>', methods=['GET'])
+@usuarios_bp.route('/auditoria/usuario/<int:usuario_id>', methods=['GET'])
 def get_auditoria_usuario(usuario_id):
     return jsonify(aseguramiento_datos.read_aseguramiento_by_usuario(usuario_id))
 
-@app.route('/auditoria/reporte/acciones', methods=['GET'])
+@usuarios_bp.route('/auditoria/reporte/acciones', methods=['GET'])
 def get_reporte_acciones():
     return jsonify(aseguramiento_datos.reporte_acciones_por_tipo())
 
-@app.route('/auditoria/reporte/fecha', methods=['GET'])
+@usuarios_bp.route('/auditoria/reporte/fecha', methods=['GET'])
 def get_reporte_fecha():
     inicio = request.args.get('desde')
     fin = request.args.get('hasta')
     return jsonify(aseguramiento_datos.reporte_auditoria_por_fecha(inicio, fin))
 
-
 # =============================================================================
-# VISTAS HTML DE LAS INTERFACES
+# VISTAS HTML
 # =============================================================================
 
-@app.route('/vista/crear_usuario')
+@usuarios_bp.route('/vista/crear_usuario')
 def vista_creacion_usuario():
     return render_template('creacion.html')
-
-# =============================================================================
-# RUN
-# =============================================================================
-
-if __name__ == '__main__':
-    # Ejecutar en puerto 5000
-    app.run(debug=True, port=5000)
