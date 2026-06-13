@@ -7,9 +7,10 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../css/especialista.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/especialista.css') }}">
 </head>
 <body class="flex">
+ 
     <aside class="sidebar text-white hidden md:flex flex-col shadow-2xl">
         <div class="p-12 border-b border-slate-800/60 flex flex-col items-center">
             <div class="w-16 h-16 bg-sky-500 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-sky-500/20">
@@ -18,8 +19,9 @@
             <h2 class="text-3xl font-black italic tracking-tighter text-sky-400">STYLO<span class="text-white">DENTAL</span></h2>
             <p class="text-[10px] text-slate-500 font-extrabold uppercase tracking-[0.4em] mt-2">Specialist Portal</p>
         </div>
-        
+ 
         <nav class="flex-grow p-8 space-y-4">
+            <!-- IDs añadidos a TODOS los botones para que cambiarSeccion los encuentre -->
             <button onclick="cambiarSeccion('agenda')" id="btn-agenda" class="nav-btn active">
                 <i class="fas fa-calendar-alt w-6 text-xl"></i>
                 <span class="tracking-wide">Agenda Médica</span>
@@ -28,8 +30,8 @@
                 <i class="fas fa-user-injured w-6 text-xl"></i>
                 <span class="tracking-wide">Mis Pacientes</span>
             </button>
-            </nav>
-
+        </nav>
+ 
         <div class="clock-widget mx-6 mb-8 text-center">
             <div id="reloj">00:00:00</div>
             <div id="status-laboral" class="mt-4 flex items-center justify-center bg-slate-900/50 py-3 px-4 rounded-2xl border border-slate-700/50">
@@ -38,7 +40,7 @@
             </div>
             <div class="mt-4 text-[9px] text-slate-600 font-black italic uppercase tracking-widest">Servidor: Central Estándar</div>
         </div>
-
+ 
         <div class="p-8 border-t border-slate-800/60">
             <button onclick="cerrarSesion()" class="w-full flex items-center justify-center gap-4 p-4 bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white rounded-2xl font-black transition-all duration-300 group shadow-lg">
                 <i class="fas fa-power-off group-hover:rotate-180 transition-transform duration-500"></i>
@@ -46,62 +48,64 @@
             </button>
         </div>
     </aside>
-
+ 
     <main class="flex-grow p-8 md:p-14 overflow-y-auto">
-<header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-14 gap-8">
-    <div>
-        <h1 id="main-title" class="text-5xl font-black text-slate-800 tracking-tighter mb-3">Agenda Médica</h1>
-        <div class="flex items-center gap-3">
-            <div class="h-1.5 w-12 bg-sky-600 rounded-full"></div>
-            <p id="fecha-actual" class="text-slate-500 font-bold uppercase text-xs tracking-[0.3em]"></p>
-        </div>
-    </div>
-
-    <div class="relative">
-        <button id="profile-trigger" onclick="toggleProfileDropdown()" class="flex items-center gap-6 bg-white p-5 pr-12 rounded-[2rem] shadow-xl border border-slate-100 cursor-pointer hover:border-sky-500 transition-all active:scale-95 group z-50">
-            <div id="doctor-avatar" class="w-16 h-16 bg-gradient-to-br from-sky-600 to-sky-800 rounded-2xl flex items-center justify-center text-white text-3xl font-black shadow-2xl shadow-sky-600/30 uppercase group-hover:rotate-6 transition-transform">D</div>
-            <div class="text-left">
-                <p class="text-[10px] font-black text-sky-600 uppercase tracking-widest mb-1">Doctor Registrado</p>
-                <p id="doctor-nombre-display" class="text-lg font-black text-slate-800 leading-none">Cargando...</p>
-            </div>
-            <i class="fas fa-chevron-down text-sm text-slate-300 ml-4 group-hover:text-sky-600 transition-colors"></i>
-        </button>
-
-        <div id="profile-dropdown" class="absolute top-full right-0 mt-6 w-96 bg-white rounded-[2.5rem] shadow-[0_30px_70px_rgba(0,0,0,0.2)] border border-slate-50 p-10 hidden">
-            <div class="text-center pb-8 border-b border-slate-100">
-                <div id="avatar-grande" class="w-28 h-28 bg-sky-50 text-sky-600 rounded-3xl flex items-center justify-center text-5xl font-black uppercase mx-auto mb-5 border-4 border-white shadow-xl"></div>
-                <h4 id="nombre-menu" class="font-black text-slate-800 text-2xl tracking-tight"></h4>
-                <span id="esp-menu" class="inline-block mt-3 px-6 py-2 bg-sky-100 text-sky-700 rounded-full text-[11px] font-black uppercase tracking-[0.2em]"></span>
-            </div>
-            
-            <div class="py-8 space-y-6">
-                <div class="flex items-center gap-5">
-                    <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100"><i class="fas fa-envelope text-lg"></i></div>
-                    <div>
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Correo Profesional</p>
-                        <p id="email-menu" class="text-sm font-bold text-slate-700"></p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-5">
-                    <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100"><i class="fas fa-phone-alt text-lg"></i></div>
-                    <div>
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Línea de Contacto</p>
-                        <p id="tel-menu" class="text-sm font-bold text-slate-700"></p>
-                    </div>
+ 
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-14 gap-8">
+            <div>
+                <h1 id="main-title" class="text-5xl font-black text-slate-800 tracking-tighter mb-3">Agenda Médica</h1>
+                <div class="flex items-center gap-3">
+                    <div class="h-1.5 w-12 bg-sky-600 rounded-full"></div>
+                    <p id="fecha-actual" class="text-slate-500 font-bold uppercase text-xs tracking-[0.3em]"></p>
                 </div>
             </div>
-
-            <button onclick="cambiarSeccion('config'); toggleProfileDropdown();" class="w-full bg-slate-900 text-white p-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] hover:bg-sky-600 transition-all shadow-xl flex items-center justify-center gap-4">
-                <i class="fas fa-user-cog"></i> Configurar Cuenta
-            </button>
-
-            <button onclick="cerrarSesion()" class="w-full mt-3 p-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] text-red-500 hover:bg-red-50 transition-all flex items-center justify-center gap-4 border border-red-100">
-                <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
-            </button>
-        </div>
-    </div>
-</header>
-
+ 
+            <div class="relative">
+                <button id="profile-trigger" onclick="toggleProfileDropdown()" class="flex items-center gap-6 bg-white p-5 pr-12 rounded-[2rem] shadow-xl border border-slate-100 cursor-pointer hover:border-sky-500 transition-all active:scale-95 group z-50">
+                    <div id="doctor-avatar" class="w-16 h-16 bg-gradient-to-br from-sky-600 to-sky-800 rounded-2xl flex items-center justify-center text-white text-3xl font-black shadow-2xl shadow-sky-600/30 uppercase group-hover:rotate-6 transition-transform">D</div>
+                    <div class="text-left">
+                        <p class="text-[10px] font-black text-sky-600 uppercase tracking-widest mb-1">Doctor Registrado</p>
+                        <p id="doctor-nombre-display" class="text-lg font-black text-slate-800 leading-none">Cargando...</p>
+                    </div>
+                    <i class="fas fa-chevron-down text-sm text-slate-300 ml-4 group-hover:text-sky-600 transition-colors"></i>
+                </button>
+ 
+                <!-- SIN clase 'hidden' de Tailwind — el CSS propio lo controla con visibility+opacity -->
+                <div id="profile-dropdown" class="absolute top-full right-0 mt-6 w-96 bg-white rounded-[2.5rem] shadow-[0_30px_70px_rgba(0,0,0,0.2)] border border-slate-50 p-10">
+                    <div class="text-center pb-8 border-b border-slate-100">
+                        <div id="avatar-grande" class="w-28 h-28 bg-sky-50 text-sky-600 rounded-3xl flex items-center justify-center text-5xl font-black uppercase mx-auto mb-5 border-4 border-white shadow-xl"></div>
+                        <h4 id="nombre-menu" class="font-black text-slate-800 text-2xl tracking-tight"></h4>
+                        <span id="esp-menu" class="inline-block mt-3 px-6 py-2 bg-sky-100 text-sky-700 rounded-full text-[11px] font-black uppercase tracking-[0.2em]"></span>
+                    </div>
+ 
+                    <div class="py-8 space-y-6">
+                        <div class="flex items-center gap-5">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100"><i class="fas fa-envelope text-lg"></i></div>
+                            <div>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Correo Profesional</p>
+                                <p id="email-menu" class="text-sm font-bold text-slate-700"></p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-5">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100"><i class="fas fa-phone-alt text-lg"></i></div>
+                            <div>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Línea de Contacto</p>
+                                <p id="tel-menu" class="text-sm font-bold text-slate-700"></p>
+                            </div>
+                        </div>
+                    </div>
+ 
+                    <button onclick="cambiarSeccion('config'); toggleProfileDropdown();" class="w-full bg-slate-900 text-white p-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] hover:bg-sky-600 transition-all shadow-xl flex items-center justify-center gap-4">
+                        <i class="fas fa-user-cog"></i> Configurar Cuenta
+                    </button>
+                    <button onclick="cerrarSesion()" class="w-full mt-3 p-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] text-red-500 hover:bg-red-50 transition-all flex items-center justify-center gap-4 border border-red-100">
+                        <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+                    </button>
+                </div>
+            </div>
+        </header>
+ 
+        <!-- CAMBIO CLAVE: reemplazamos class="hidden" de Tailwind por class="seccion-oculta" -->
         <div id="contenedor-stats" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-14">
             <div class="card-stats p-10 relative overflow-hidden">
                 <div class="absolute -right-6 -top-6 w-32 h-32 bg-slate-50 rounded-full opacity-60"></div>
@@ -121,7 +125,8 @@
                 <h3 id="stat-proxima" class="text-3xl font-black mt-2">--:--</h3>
             </div>
         </div>
-
+ 
+        <!-- CAMBIO CLAVE: sec-tabla sin clase Tailwind, sec-config con clase propia -->
         <section id="sec-tabla" class="animate-in">
             <div class="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden">
                 <div class="p-10 border-b border-slate-50 flex flex-wrap justify-between items-center gap-8 bg-slate-50/40">
@@ -130,8 +135,8 @@
                         <h3 id="tabla-titulo" class="font-black text-slate-800 uppercase text-sm tracking-widest">Listado de Pacientes</h3>
                     </div>
                     <div class="relative w-full md:w-96">
-                         <i class="fas fa-search absolute left-6 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                         <input type="text" id="busqueda-paciente" onkeyup="filtrarTabla()" placeholder="Filtrar paciente..." class="text-xs pl-14 pr-8 py-5 w-full rounded-2xl border-2 border-slate-100 outline-none focus:border-sky-500 transition-all font-semibold">
+                        <i class="fas fa-search absolute left-6 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" id="busqueda-paciente" onkeyup="filtrarTabla()" placeholder="Filtrar paciente..." class="text-xs pl-14 pr-8 py-5 w-full rounded-2xl border-2 border-slate-100 outline-none focus:border-sky-500 transition-all font-semibold">
                     </div>
                 </div>
                 <div class="overflow-x-auto">
@@ -147,15 +152,17 @@
                         </thead>
                         <tbody id="tabla-especialista" class="divide-y divide-slate-100"></tbody>
                     </table>
-                    <div id="no-datos" class="hidden p-32 text-center">
+                    <!-- CAMBIO: clase 'hidden' de Tailwind → 'seccion-oculta' de nuestro CSS -->
+                    <div id="no-datos" class="seccion-oculta p-32 text-center">
                         <i class="fas fa-user-slash text-4xl text-slate-300 mb-6 block"></i>
                         <p class="text-slate-400 font-black uppercase text-sm tracking-[0.3em]">Sin registros disponibles</p>
                     </div>
                 </div>
             </div>
         </section>
-
-        <section id="sec-config" class="hidden max-w-6xl mx-auto py-4">
+ 
+        <!-- CAMBIO: clase 'hidden' de Tailwind → 'seccion-oculta' de nuestro CSS -->
+        <section id="sec-config" class="seccion-oculta max-w-6xl mx-auto py-4">
             <div class="bg-white p-14 rounded-[3.5rem] shadow-2xl border border-slate-100 relative overflow-hidden">
                 <div class="absolute top-0 right-0 p-10 opacity-5 text-9xl"><i class="fas fa-user-shield"></i></div>
                 <h2 class="text-3xl font-black text-slate-800 mb-12 uppercase flex items-center gap-5">
@@ -197,7 +204,8 @@
             </div>
         </section>
     </main>
-
+ 
+    <!-- MODALES: usan .modal-overlay con display:none en CSS + style.display='flex' en JS → sin conflicto -->
     <div id="modalConsulta" class="modal-overlay">
         <div class="modal-content">
             <div class="bg-slate-900 p-12 flex justify-between items-center text-white">
@@ -224,7 +232,7 @@
                         <button onclick="irAOdontograma()" class="bg-white text-emerald-600 border-2 border-emerald-200 px-10 py-5 rounded-2xl font-black text-[11px] hover:bg-emerald-600 hover:text-white transition-all uppercase shadow-md active:scale-95">Odontograma</button>
                     </div>
                 </div>
-
+ 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
                     <div class="space-y-5">
                         <label class="block text-[12px] font-black text-slate-500 uppercase tracking-widest ml-2"><i class="fas fa-pen-alt mr-2 text-sky-500"></i> Evolución de la Sesión</label>
@@ -246,7 +254,7 @@
             </div>
         </div>
     </div>
-
+ 
     <div id="modalReporte" class="modal-overlay">
         <div class="modal-content overflow-hidden">
             <div class="bg-gradient-to-r from-sky-700 to-sky-900 p-14 flex justify-between items-center text-white border-b-8 border-sky-400">
@@ -281,7 +289,7 @@
             </div>
         </div>
     </div>
-</body>
-<script src="{{ url_for('static', filename='js/seguridad.js') }}"></script>
+ 
+    <script src="{{ url_for('static', filename='js/especialista.js') }}"></script>
 </body>
 </html>
