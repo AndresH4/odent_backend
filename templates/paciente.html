@@ -37,13 +37,24 @@
     </aside>
 
     <main class="flex-grow p-10 overflow-y-auto">
-        <header class="flex justify-between items-center mb-10 border-b border-slate-200 pb-6">
-            <div>
-                <h1 id="titulo-principal" class="text-3xl font-black text-slate-800 tracking-tight">Panel de Control</h1>
-                <p class="text-slate-500 font-bold uppercase text-xs tracking-widest mt-1">Bienvenido de nuevo, <span id="nombre-usuario" class="text-sky-600">Paciente</span></p>
-            </div>
-            <div onclick="abrirModalPerfil()" class="w-14 h-14 bg-sky-100 rounded-2xl flex items-center justify-center text-sky-700 font-black border-2 border-sky-500 shadow-xl shadow-sky-100 uppercase" id="avatar-letras">JD</div>
-        </header>
+    <header class="flex justify-between items-center mb-10 border-b border-slate-200 pb-6">
+    <div>
+        <h1 id="titulo-principal" class="text-3xl font-black text-slate-800 tracking-tight">Panel de Control</h1>
+        <p class="text-slate-500 font-bold uppercase text-xs tracking-widest mt-1">
+            Bienvenido de nuevo, <span id="nombre-usuario" class="text-sky-600">Paciente</span>
+        </p>
+    </div>
+    
+    <!-- Contenedor que agrupa el avatar y el botón -->
+    <div class="flex items-center gap-4">
+        <div onclick="abrirModalPerfil()" class="cursor-pointer w-14 h-14 bg-sky-100 rounded-2xl flex items-center justify-center text-sky-700 font-black border-2 border-sky-500 shadow-xl shadow-sky-100 uppercase" id="avatar-letras">JD</div>
+        
+        <!-- Botón de Cerrar Sesión -->
+        <button onclick="cerrarSesion()" class="text-slate-400 hover:text-red-600 font-bold text-xs uppercase tracking-widest transition-colors">
+            Salir
+        </button>
+    </div>
+    </header>
 
         <div id="vista-inicio">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
@@ -210,7 +221,7 @@
         </div>
     </div>
 
-<script src="../js/paciente.js"></script>
+<script src="{{ url_for('static', filename='js/seguridad.js') }}"></script>
 
 </body>
 </html>

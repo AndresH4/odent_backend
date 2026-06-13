@@ -105,11 +105,12 @@
                 <div class="form-group">
                     <label>Especialidad Médica</label>
                     <select id="especialidadMedica">
-                        <option value="Medicina General">Medicina General</option>
-                        <option value="Odontología">Odontología</option>
-                        <option value="Cardiología">Cardiología</option>
-                        <option value="Pediatría">Pediatría</option>
-                        <option value="Psicología">Psicología</option>
+                        <option value="1">Endodoncia</option>
+                        <option value="2">Odontopediatria</option>
+                        <option value="3">Odontologia General</option>
+                        <option value="4">Cirugia Oral</option>
+                        <option value="5">Ortodoncia</option>
+                        <option value="6">Control brackets</option>
                     </select>
                 </div>
             </div>
@@ -218,7 +219,7 @@
                     <div class="email-message">
                         Hola, <strong id="nombreDestinatario">usuario</strong>. Usa el siguiente código para verificar tu cuenta. Este código expira en 10 minutos.
                     </div>
-                    <div class="email-code-display" id="codigoVisible">------</div>
+                    <div class="email-code-display" id="codigoVisible">Revisa tu correo</div>
                     <div class="email-footer-note">Si no solicitaste este código, ignora este mensaje.</div>
                 </div>
             </div>
@@ -276,3 +277,4 @@
  
 <script src="{{ url_for('static', filename='js/creacion.js') }}"></script>
 </body>
+</html>

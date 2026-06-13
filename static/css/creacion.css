@@ -484,13 +484,13 @@ button:active { transform: translateY(0); }
     border: 2px dashed #7dd3fc;
     border-radius: 10px;
     text-align: center;
-    font-size: 30px;
-    font-weight: 800;
-    letter-spacing: 10px;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 2px;
     color: #0284c7;
-    padding: 14px 10px;
+    padding: 18px 10px;
     margin-bottom: 14px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Inter', sans-serif;
 }
  
 .email-footer-note {

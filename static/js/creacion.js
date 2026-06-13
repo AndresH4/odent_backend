@@ -1,4 +1,5 @@
 let codigoGenerado = "";
+let correoVerificacion = "";
 let esMenor = false;
 const acudienteSection = document.getElementById("acudienteSection");
  
@@ -216,34 +217,85 @@ function validarPaso1() {
     }
  
     if (valido) {
-        codigoGenerado = Math.floor(100000 + Math.random() * 900000);
- 
-        // Llenar la tarjeta de correo simulada
         const correoMostrar = (document.getElementById("correoUsuarioGroup").style.display === "none")
             ? document.getElementById("emailAcudiente").value
             : document.getElementById("email").value;
  
         const nombreMostrar = document.getElementById("nombres").value;
+        correoVerificacion = correoMostrar.trim().toLowerCase();
  
-        document.getElementById("codigoVisible").innerText = codigoGenerado;
-        document.getElementById("emailDestino").innerText = correoMostrar;
-        document.getElementById("nombreDestinatario").innerText = nombreMostrar;
+        // Mostrar estado de carga en el botón
+        const btnContinuar = document.querySelector("#step1 button");
+        btnContinuar.disabled = true;
+        btnContinuar.innerHTML = "Enviando código...";
  
-        step1.classList.remove("active");
-        step2.classList.add("active");
-        actualizarIndicador(2);
+        fetch("/api/enviar-codigo", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ correo: correoVerificacion, nombre: nombreMostrar })
+        })
+        .then(res => res.json())
+        .then(data => {
+            btnContinuar.disabled = false;
+            btnContinuar.innerHTML = "Continuar &#8594;";
+ 
+            if (data.ok) {
+                document.getElementById("emailDestino").innerText = correoMostrar;
+                document.getElementById("nombreDestinatario").innerText = nombreMostrar;
+                document.getElementById("codigoVisible").innerText = "Revisa tu correo";
+ 
+                step1.classList.remove("active");
+                step2.classList.add("active");
+                actualizarIndicador(2);
+            } else {
+                alert("Error al enviar el correo: " + (data.error || "Intenta de nuevo."));
+            }
+        })
+        .catch(() => {
+            btnContinuar.disabled = false;
+            btnContinuar.innerHTML = "Continuar &#8594;";
+            alert("No se pudo conectar con el servidor. Verifica tu conexión.");
+        });
     }
 }
  
 // ── VERIFICAR CÓDIGO ──
 function verificarCodigo() {
-    if (codigo.value == codigoGenerado) {
-        step2.classList.remove("active");
-        step3.classList.add("active");
-        actualizarIndicador(3);
-    } else {
-        errorCodigo.innerText = "Código incorrecto.";
+    const ingresado = document.getElementById("codigo").value.trim();
+ 
+    if (!ingresado) {
+        errorCodigo.innerText = "Ingresa el código.";
+        return;
     }
+ 
+    const btnVerificar = document.querySelector("#step2 button");
+    btnVerificar.disabled = true;
+    btnVerificar.innerHTML = "Verificando...";
+ 
+    fetch("/api/verificar-codigo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ correo: correoVerificacion, codigo: ingresado })
+    })
+    .then(res => res.json())
+    .then(data => {
+        btnVerificar.disabled = false;
+        btnVerificar.innerHTML = "Verificar código ✓";
+ 
+        if (data.ok) {
+            step2.classList.remove("active");
+            step3.classList.add("active");
+            actualizarIndicador(3);
+        } else {
+            errorCodigo.innerText = "Código incorrecto. Inténtalo de nuevo.";
+            document.getElementById("codigo").classList.add("invalid");
+        }
+    })
+    .catch(() => {
+        btnVerificar.disabled = false;
+        btnVerificar.innerHTML = "Verificar código ✓";
+        errorCodigo.innerText = "Error de conexión. Intenta de nuevo.";
+    });
 }
  
 function validarPassword(pass) {
@@ -361,7 +413,7 @@ function crearUsuario() {
 }
  
 function abrirLogin() {
-    window.location.href = "login.html";
+    window.location.href = "/login.html";
 }
  
 function togglePassword(id) {
