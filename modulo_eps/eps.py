@@ -1,210 +1,175 @@
-"""
-modulo_eps/eps.py
------------------
-Gestión de entidades EPS.
-Depende de la tabla `regimen_eps`.
-El READ incluye un JOIN para retornar la descripción del régimen en lugar
-de solo el ID foráneo.
+# =============================================================================
+# modulo_eps/eps.py
+# CRUD para la tabla eps
+# =============================================================================
  
-Columnas de `eps`: EPS_ID (PK), Nombre_EPS, Telefono_EPS, Regimen_ID (FK → regimen_eps)
-"""
- 
-import sqlite3
- 
-DB_PATH = "odent.db"
+from db import get_db_connection
  
  
-def _get_conn():
-    """Abre y configura la conexión a odent.db."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA foreign_keys = ON;")
-    conn.row_factory = sqlite3.Row
-    return conn
- 
- 
-# ─────────────────────────────────────────────
-# CREATE
-# ─────────────────────────────────────────────
-def crear_eps(nombre_eps: str, telefono_eps: str, regimen_id: int) -> dict:
+def crear_eps(nombre_eps, tipo_eps_id, nit=None, telefono=None, direccion=None):
     """
-    Inserta una nueva EPS en la tabla `eps`.
- 
-    Args:
-        nombre_eps:   Nombre de la EPS (ej. 'Compensar').
-        telefono_eps: Teléfono de contacto de la EPS.
-        regimen_id:   FK hacia `regimen_eps` (Contributivo / Subsidiado).
- 
-    Returns:
-        {'ok': True, 'id_generado': int} en éxito.
-        {'ok': False, 'error': str}       en fallo.
+    Inserta una nueva EPS en la tabla eps.
+    Retorna el ID del registro creado.
     """
-    sql = """
-        INSERT INTO eps (Nombre_EPS, Telefono_EPS, Regimen_ID)
-        VALUES (?, ?, ?);
-    """
-    conn = None
+    conexion = None
+    cursor = None
     try:
-        conn = _get_conn()
-        cursor = conn.cursor()
-        cursor.execute(sql, (nombre_eps, telefono_eps, regimen_id))
-        conn.commit()
-        return {"ok": True, "id_generado": cursor.lastrowid}
-    except sqlite3.Error as e:
-        print(f"[eps][crear] Error: {e}")
-        return {"ok": False, "error": str(e)}
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        cursor.execute(
+            """
+            INSERT INTO eps (Nombre_EPS, ID_Tipo_EPS, NIT, Telefono, Direccion)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (nombre_eps, tipo_eps_id, nit, telefono, direccion)
+        )
+        conexion.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise e
     finally:
-        if conn:
-            conn.close()
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()
  
  
-# ─────────────────────────────────────────────
-# READ ALL  (con JOIN a regimen_eps)
-# ─────────────────────────────────────────────
-def obtener_eps() -> list:
+def obtener_eps():
     """
-    Retorna todas las EPS registradas, enriquecidas con la descripción
-    de su régimen mediante un JOIN a `regimen_eps`.
- 
-    Returns:
-        Lista de dicts con:
-            {EPS_ID, Nombre_EPS, Telefono_EPS, Regimen_ID, Descripcion_Regimen}
-        Lista vacía [] si no hay registros o si ocurre un error.
+    Retorna todas las EPS registradas con el nombre de su tipo de EPS.
+    Se hace INNER JOIN con tipo_eps para enriquecer la respuesta.
     """
-    sql = """
-        SELECT
-            e.EPS_ID,
-            e.Nombre_EPS,
-            e.Telefono_EPS,
-            e.Regimen_ID,
-            r.Descripcion AS Descripcion_Regimen
-        FROM eps e
-        INNER JOIN regimen_eps r ON e.Regimen_ID = r.Regimen_ID
-        ORDER BY e.EPS_ID;
-    """
-    conn = None
+    conexion = None
+    cursor = None
     try:
-        conn = _get_conn()
-        cursor = conn.cursor()
-        cursor.execute(sql)
-        rows = cursor.fetchall()
-        return [dict(r) for r in rows]
-    except sqlite3.Error as e:
-        print(f"[eps][obtener_todos] Error: {e}")
-        return []
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        cursor.execute(
+            """
+            SELECT
+                e.ID_EPS,
+                e.Nombre_EPS,
+                e.NIT,
+                e.Telefono,
+                e.Direccion,
+                e.ID_Tipo_EPS,
+                t.Nombre_Tipo AS Nombre_Tipo_EPS
+            FROM eps e
+            INNER JOIN tipo_eps t ON e.ID_Tipo_EPS = t.ID_Tipo_EPS
+            ORDER BY e.Nombre_EPS ASC
+            """
+        )
+        columnas = [desc[0] for desc in cursor.description]
+        filas = cursor.fetchall()
+        return [dict(zip(columnas, fila)) for fila in filas]
+    except Exception as e:
+        raise e
     finally:
-        if conn:
-            conn.close()
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()
  
  
-# ─────────────────────────────────────────────
-# READ BY ID  (con JOIN a regimen_eps)
-# ─────────────────────────────────────────────
-def obtener_eps_por_id(eps_id: int) -> dict | None:
+def obtener_eps_por_id(eps_id):
     """
-    Busca una EPS por su clave primaria, incluyendo la descripción del régimen.
- 
-    Args:
-        eps_id: Identificador único de la EPS.
- 
-    Returns:
-        Dict con los datos del registro (incluye Descripcion_Regimen),
-        o None si no existe o si ocurre un error.
+    Retorna una EPS específica por su ID, incluyendo el nombre de su tipo.
+    Devuelve None si no existe.
     """
-    sql = """
-        SELECT
-            e.EPS_ID,
-            e.Nombre_EPS,
-            e.Telefono_EPS,
-            e.Regimen_ID,
-            r.Descripcion AS Descripcion_Regimen
-        FROM eps e
-        INNER JOIN regimen_eps r ON e.Regimen_ID = r.Regimen_ID
-        WHERE e.EPS_ID = ?;
-    """
-    conn = None
+    conexion = None
+    cursor = None
     try:
-        conn = _get_conn()
-        cursor = conn.cursor()
-        cursor.execute(sql, (eps_id,))
-        row = cursor.fetchone()
-        return dict(row) if row else None
-    except sqlite3.Error as e:
-        print(f"[eps][obtener_por_id] Error: {e}")
-        return None
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        cursor.execute(
+            """
+            SELECT
+                e.ID_EPS,
+                e.Nombre_EPS,
+                e.NIT,
+                e.Telefono,
+                e.Direccion,
+                e.ID_Tipo_EPS,
+                t.Nombre_Tipo AS Nombre_Tipo_EPS
+            FROM eps e
+            INNER JOIN tipo_eps t ON e.ID_Tipo_EPS = t.ID_Tipo_EPS
+            WHERE e.ID_EPS = ?
+            """,
+            (eps_id,)
+        )
+        columnas = [desc[0] for desc in cursor.description]
+        fila = cursor.fetchone()
+        if fila is None:
+            return None
+        return dict(zip(columnas, fila))
+    except Exception as e:
+        raise e
     finally:
-        if conn:
-            conn.close()
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()
  
  
-# ─────────────────────────────────────────────
-# UPDATE
-# ─────────────────────────────────────────────
-def actualizar_eps(eps_id: int, nombre_eps: str, telefono_eps: str, regimen_id: int) -> dict:
+def actualizar_eps(eps_id, nombre_eps, tipo_eps_id, nit=None, telefono=None, direccion=None):
     """
     Actualiza los datos de una EPS existente.
- 
-    Args:
-        eps_id:       ID del registro a modificar.
-        nombre_eps:   Nuevo nombre de la EPS.
-        telefono_eps: Nuevo teléfono de la EPS.
-        regimen_id:   Nuevo ID de régimen (FK → regimen_eps).
- 
-    Returns:
-        {'ok': True,  'mensaje': str} si se actualizó al menos 1 fila.
-        {'ok': False, 'error': str}   si no existe o falla la consulta.
+    Retorna True si se modificó al menos un registro, False si no se encontró.
     """
-    sql = """
-        UPDATE eps
-        SET Nombre_EPS   = ?,
-            Telefono_EPS = ?,
-            Regimen_ID   = ?
-        WHERE EPS_ID = ?;
-    """
-    conn = None
+    conexion = None
+    cursor = None
     try:
-        conn = _get_conn()
-        cursor = conn.cursor()
-        cursor.execute(sql, (nombre_eps, telefono_eps, regimen_id, eps_id))
-        conn.commit()
-        if cursor.rowcount == 0:
-            return {"ok": False, "error": f"No existe eps con ID {eps_id}."}
-        return {"ok": True, "mensaje": f"eps ID {eps_id} actualizada correctamente."}
-    except sqlite3.Error as e:
-        print(f"[eps][actualizar] Error: {e}")
-        return {"ok": False, "error": str(e)}
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        cursor.execute(
+            """
+            UPDATE eps
+            SET Nombre_EPS = ?,
+                ID_Tipo_EPS = ?,
+                NIT = ?,
+                Telefono = ?,
+                Direccion = ?
+            WHERE ID_EPS = ?
+            """,
+            (nombre_eps, tipo_eps_id, nit, telefono, direccion, eps_id)
+        )
+        conexion.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise e
     finally:
-        if conn:
-            conn.close()
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()
  
  
-# ─────────────────────────────────────────────
-# DELETE
-# ─────────────────────────────────────────────
-def eliminar_eps(eps_id: int) -> dict:
+def eliminar_eps(eps_id):
     """
-    Elimina una EPS por ID.
-    Fallará si existen afiliaciones que referencian esta EPS (FK activa).
- 
-    Args:
-        eps_id: ID del registro a eliminar.
- 
-    Returns:
-        {'ok': True,  'mensaje': str} si se eliminó correctamente.
-        {'ok': False, 'error': str}   si hay dependencias o no existe.
+    Elimina una EPS por su ID.
+    Retorna True si se eliminó, False si no existía.
     """
-    sql = "DELETE FROM eps WHERE EPS_ID = ?;"
-    conn = None
+    conexion = None
+    cursor = None
     try:
-        conn = _get_conn()
-        cursor = conn.cursor()
-        cursor.execute(sql, (eps_id,))
-        conn.commit()
-        if cursor.rowcount == 0:
-            return {"ok": False, "error": f"No existe eps con ID {eps_id}."}
-        return {"ok": True, "mensaje": f"eps ID {eps_id} eliminada correctamente."}
-    except sqlite3.Error as e:
-        print(f"[eps][eliminar] Error: {e}")
-        return {"ok": False, "error": str(e)}
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        cursor.execute(
+            "DELETE FROM eps WHERE ID_EPS = ?",
+            (eps_id,)
+        )
+        conexion.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise e
     finally:
-        if conn:
-            conn.close()
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()
