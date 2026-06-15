@@ -1,5 +1,66 @@
-        .input-error { border: 2px solid #ef4444 !important; background-color: #fef2f2 !important; }
-        .error-text { color: #ef4444; font-size: 10px; font-weight: bold; margin-top: 4px; display: none; }
-        select:invalid, select option[value=""] { color: #9ca3af; }
-        option { color: #374151; }
-        ::placeholder { color: #9ca3af; opacity: 1; }
+/* =============================================================================
+   aseguramiento.css
+   Estilos del módulo de aseguramiento de datos
+   ============================================================================= */
+ 
+/* ── Validación de campos ──────────────────────────────────────────────────── */
+.input-error {
+    border: 2px solid #ef4444 !important;
+    background-color: #fef2f2 !important;
+}
+ 
+.error-text {
+    color: #ef4444;
+    font-size: 10px;
+    font-weight: bold;
+    margin-top: 4px;
+    display: none;
+}
+ 
+/* ── Estilos de los select nativos ────────────────────────────────────────── */
+select:invalid,
+select option[value=""] {
+    color: #9ca3af;
+}
+ 
+option {
+    color: #374151;
+}
+ 
+/* ── Placeholder ────────────────────────────────────────────────────────────── */
+::placeholder {
+    color: #9ca3af;
+    opacity: 1;
+}
+ 
+/* ── Select personalizado (nueva flecha oculta la nativa en Chrome/Safari) ── */
+select.appearance-none {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+}
+ 
+/* ── Estado deshabilitado de los botones durante fetch ─────────────────────── */
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+ 
+/* ── Mensaje global de éxito / error ──────────────────────────────────────── */
+#mensaje-global {
+    /* La clase y visibilidad son controladas 100% desde JS.
+       Solo definimos la transición de aparición. */
+    animation: fadeIn 0.3s ease;
+}
+ 
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+ 
+/* ── Separador de sección EPS ────────────────────────────────────────────── */
+.eps-section-divider {
+    border-top: 1px dashed #bfdbfe;
+    margin: 0.5rem 0;
+}

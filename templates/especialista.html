@@ -192,9 +192,30 @@
                         <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Teléfono Móvil</label>
                         <input type="tel" id="conf-tel" class="input-consulta" placeholder="+57 300 000 0000">
                     </div>
-                    <div class="md:col-span-2 space-y-3">
-                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Nueva Contraseña</label>
-                        <input type="password" id="conf-pass" class="input-consulta" placeholder="Mínimo 4 caracteres">
+<div class="md:col-span-2 space-y-3">
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Seguridad: Cambiar Contraseña</label>
+
+                        <!-- PASO 1: Verificación de la contraseña actual -->
+                        <div id="pass-step1" class="flex flex-col md:flex-row gap-4 items-start">
+                            <div class="flex-grow w-full">
+                                <input type="password" id="pass-actual" class="input-consulta" placeholder="Contraseña actual">
+                                <p id="error-pass-actual" class="text-red-600 text-xs font-bold mt-2 ml-1" style="display:none;">Contraseña incorrecta</p>
+                            </div>
+                            <button type="button" onclick="validarPasswordActual()" class="bg-slate-900 text-white px-10 py-5 rounded-2xl font-black text-xs hover:bg-sky-600 transition-all uppercase tracking-[0.3em] shadow-xl active:scale-95 whitespace-nowrap">Siguiente</button>
+                        </div>
+
+                        <!-- PASO 2: Nueva contraseña (oculto hasta validar la actual) -->
+                        <div id="pass-step2" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style="display:none;">
+                            <div>
+                                <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-3">Nueva Contraseña</label>
+                                <input type="password" id="conf-pass-nueva" class="input-consulta" placeholder="Mínimo 4 caracteres">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-3">Confirmar Nueva Contraseña</label>
+                                <input type="password" id="conf-pass-confirmar" class="input-consulta" placeholder="Repite la nueva contraseña">
+                            </div>
+                            <p id="error-pass-nueva" class="md:col-span-2 text-red-600 text-xs font-bold mt-1 ml-1" style="display:none;">Las contraseñas no coinciden.</p>
+                        </div>
                     </div>
                 </div>
                 <div class="mt-14 flex justify-end gap-8 pt-10 border-t border-slate-50">

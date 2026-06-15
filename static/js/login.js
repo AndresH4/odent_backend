@@ -1,125 +1,103 @@
 /**
- * static/js/login.js
- * ===================
- * Maneja el envío del formulario de login y redirige al panel
- * correspondiente según el Rol_ID devuelto por el backend.
- *
- * Rol_ID → 1 = Administrador → administrador.html
- * Rol_ID → 2 = Especialista   → especialista.html
- * Rol_ID → 3 = Paciente       → paciente.html
- *
- * HTML ESPERADO en login.html:
- * ──────────────────────────────────────────────────────────────
- * <form id="loginForm">
- * <input type="email"    id="correo"     required>
- * <input type="password" id="contrasena" required>
- * <button type="submit">Iniciar sesión</button>
- * </form>
- * <p id="loginError" style="display:none; color:red;"></p>
- *
- * <script src="/static/js/login.js"></script>
- * ──────────────────────────────────────────────────────────────
- * Si tu login.html ya tiene otros IDs, solo ajusta los
- * document.getElementById(...) de abajo para que coincidan.
+ * login.js — Stylo Dental
+ * Autentica contra /api/auth/login y redirige según Rol_ID:
+ *   1 → administrador.html
+ *   2 → especialista.html
+ *   3 → paciente.html
  */
 
-document.addEventListener('DOMContentLoaded', () => {
-  
-  // --- INICIO DE CÓDIGO NUEVO: Verificar sesión activa ---
-  const usuarioGuardado = sessionStorage.getItem('odent_usuario');
-  if (usuarioGuardado) {
-    const usuario = JSON.parse(usuarioGuardado);
-    redirigirSegunRol(usuario.Rol_ID);
-    return;
-  }
-  // --- FIN DE CÓDIGO NUEVO ---
+'use strict';
 
-  const form = document.getElementById('loginForm');
-  const errorBox = document.getElementById('loginError');
+// ── Mostrar / ocultar contraseña ─────────────────────────────────────────────
+function togglePassword(id) {
+    const input = document.getElementById(id);
+    if (!input) return;
+    input.type = input.type === 'password' ? 'text' : 'password';
+}
 
-  if (!form) {
-    console.error('No se encontró el formulario #loginForm en login.html');
-    return;
-  }
+// ── Validación básica del formulario ─────────────────────────────────────────
+function validarFormulario(correo, contrasena) {
+    const regexCorreo = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!correo || !contrasena) return 'Correo y contraseña son obligatorios.';
+    if (!regexCorreo.test(correo))  return 'Ingresa un correo electrónico válido.';
+    if (contrasena.length < 6)      return 'La contraseña debe tener al menos 6 caracteres.';
+    return null;
+}
 
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
+// ── Mostrar error en el formulario ───────────────────────────────────────────
+function mostrarError(mensaje) {
+    const el = document.getElementById('loginError');
+    if (!el) return;
+    el.textContent = mensaje;
+    el.style.display = 'block';
+}
+
+function ocultarError() {
+    const el = document.getElementById('loginError');
+    if (el) el.style.display = 'none';
+}
+
+// ── Ruta por rol ─────────────────────────────────────────────────────────────
+function rutaPorRol(rolId) {
+    const rutas = { 1: '/administrador.html', 2: '/especialista.html', 3: '/paciente.html' };
+    return rutas[rolId] || '/login';
+}
+
+// ── Login principal ───────────────────────────────────────────────────────────
+async function iniciarSesion(e) {
+    e.preventDefault();
     ocultarError();
 
-    const correo = document.getElementById('correo').value.trim();
-    const contrasena = document.getElementById('contrasena').value;
+    const correo    = (document.getElementById('correo')?.value    || '').trim().toLowerCase();
+    const contrasena = (document.getElementById('contrasena')?.value || '').trim();
 
-    if (!correo || !contrasena) {
-      mostrarError('Por favor completa correo y contraseña.');
-      return;
-    }
+    // Validación en cliente
+    const errorLocal = validarFormulario(correo, contrasena);
+    if (errorLocal) { mostrarError(errorLocal); return; }
+
+    // Bloquear botón mientras espera
+    const btn = document.querySelector('#loginForm button[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Verificando...'; }
 
     try {
-      const respuesta = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ correo, contrasena })
-      });
+        const res  = await fetch('/api/auth/login', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ correo, contrasena })
+        });
+        const data = await res.json();
 
-      const datos = await respuesta.json();
+        if (!data.ok) {
+            mostrarError(data.error || 'Credenciales incorrectas.');
+            return;
+        }
 
-      if (!respuesta.ok || !datos.ok) {
-        mostrarError(datos.error || 'Correo o contraseña incorrectos.');
-        return;
-      }
+        // Guardar sesión en sessionStorage (se borra al cerrar pestaña)
+        sessionStorage.setItem('odent_usuario', JSON.stringify(data.usuario));
 
-      // Guardamos los datos del usuario logueado para usarlos en los
-      // paneles siguientes (administrador.html, paciente.html, etc.)
-      sessionStorage.setItem('odent_usuario', JSON.stringify(datos.usuario));
+        // Redirigir según rol
+        window.location.href = rutaPorRol(data.usuario.Rol_ID);
 
-      redirigirSegunRol(datos.usuario.Rol_ID);
-
-    } catch (error) {
-      console.error('Error de conexión con el servidor:', error);
-      mostrarError('No se pudo conectar con el servidor. Intenta de nuevo.');
+    } catch (err) {
+        mostrarError('No se pudo conectar con el servidor. Intenta de nuevo.');
+        console.error('[login.js] Error de red:', err);
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Entrar al Sistema'; }
     }
-  });
-
-  /**
-   * Redirige a la vista correspondiente según el Rol_ID del usuario.
-   * @param {number} rolId - 1=Administrador, 2=Especialista, 3=Paciente
-   */
-  function redirigirSegunRol(rolId) {
-    switch (rolId) {
-      case 1:
-        window.location.href = '/administrador.html';
-        break;
-      case 2:
-        window.location.href = '/especialista.html';
-        break;
-      case 3:
-        window.location.href = '/paciente.html';
-        break;
-      default:
-        mostrarError('Rol de usuario no reconocido.');
-    }
-  }
-
-  function mostrarError(mensaje) {
-    if (errorBox) {
-      errorBox.textContent = mensaje;
-      errorBox.style.display = 'block';
-    } else {
-      alert(mensaje);
-    }
-  }
-
-  function ocultarError() {
-    if (errorBox) {
-      errorBox.style.display = 'none';
-      errorBox.textContent = '';
-    }
-  }
-});
-
-// ── TOGGLE DE VISIBILIDAD DE CONTRASEÑA ──
-// (Añadido para que coincida con el ícono de "ojo" del diseño de Creación)
-function togglePassword(id) {
-  const input = document.getElementById(id);
-  input.type = input.type === "password" ? "text" : "password";
 }
+
+// ── Inicialización ────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+    // Si ya hay sesión activa, redirigir directo
+    const sesionActiva = sessionStorage.getItem('odent_usuario');
+    if (sesionActiva) {
+        try {
+            const u = JSON.parse(sesionActiva);
+            window.location.href = rutaPorRol(u.Rol_ID);
+            return;
+        } catch (_) { sessionStorage.clear(); }
+    }
+
+    const form = document.getElementById('loginForm');
+    if (form) form.addEventListener('submit', iniciarSesion);
+});
