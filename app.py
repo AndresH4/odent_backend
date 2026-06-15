@@ -1,3 +1,8 @@
+"""
+app.py — Stylo Dental
+Punto de entrada de Flask. Registra todos los blueprints y sirve las vistas HTML.
+"""
+
 from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 import random
@@ -5,27 +10,74 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-from db import get_db_connection
+# Blueprints del historial
+from modulo_historial import (
+    historial_bp, tratamiento_bp, tabla_diag_bp,
+    historial_diag_bp, puntuacion_bp
+)
+
+# Blueprints de usuarios
 from modulo_usuarios.routes import usuarios_bp
+
+# ── NUEVO: Blueprint de citas ─────────────────────────────────────────────────
+from modulo_citas.routes import citas_bp
+
+from db import get_db_connection
 
 app = Flask(__name__)
 CORS(app)
 
-# usuarios_bp expone /api/usuarios, /api/roles y la nueva /api/auth/login
-# (usada por login.js para autenticar)
+# =============================================================================
+# REGISTRO DE BLUEPRINTS
+# =============================================================================
+
 app.register_blueprint(usuarios_bp, url_prefix='/api')
+app.register_blueprint(historial_bp,   url_prefix='/api')
+app.register_blueprint(tratamiento_bp, url_prefix='/api')
+app.register_blueprint(tabla_diag_bp,  url_prefix='/api')
+app.register_blueprint(historial_diag_bp, url_prefix='/api')
+app.register_blueprint(puntuacion_bp,  url_prefix='/api')
+
+# ── Citas (agenda, especialistas, multas) ─────────────────────────────────────
+app.register_blueprint(citas_bp, url_prefix='/api')
+
 
 # =============================================================================
-# CONFIGURACIÓN SMTP — cambia estos valores por los de tu cuenta
+# ENDPOINT AUXILIAR — Obtener Paciente_ID por Usuario_ID
+# Consumido por paciente.js y agendar.js para encontrar el Paciente_ID
+# a partir del usuario en sesión.
 # =============================================================================
+
+@app.route('/api/paciente/por-usuario/<int:usuario_id>', methods=['GET'])
+def paciente_por_usuario(usuario_id):
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+        cur.execute(
+            "SELECT Paciente_ID FROM paciente WHERE Usuario_ID = ?", (usuario_id,)
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"error": "No existe paciente para ese usuario"}), 404
+        return jsonify({"Paciente_ID": row["Paciente_ID"]}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if con: con.close()
+
+
+# =============================================================================
+# CONFIGURACIÓN SMTP
+# =============================================================================
+
 SMTP_HOST     = "smtp.gmail.com"
 SMTP_PORT     = 587
-SMTP_USER     = "penaloza.lorenviviana@gmail.com"       # <-- tu correo Gmail
-SMTP_PASSWORD = "dexn ttlk grto siwp"     # <-- contraseña de aplicación Gmail
+SMTP_USER     = "penaloza.lorenviviana@gmail.com"
+SMTP_PASSWORD = "dexn ttlk grto siwp"
 SMTP_FROM     = "Clínica <penaloza.lorenviviana@gmail.com>"
 
-# Almacén temporal de códigos  { correo: codigo }
-codigos_temporales = {}
+codigos_temporales = {}   # { correo: codigo }
 
 
 # =============================================================================
@@ -78,7 +130,7 @@ def vista_aseguramiento():
 
 @app.route('/api/enviar-codigo', methods=['POST'])
 def enviar_codigo():
-    datos = request.get_json()
+    datos   = request.get_json()
     correo  = datos.get('correo', '').strip().lower()
     nombre  = datos.get('nombre', 'Usuario')
 
@@ -115,7 +167,7 @@ def enviar_codigo():
 
     try:
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = "Tu código de verificación"
+        msg['Subject'] = "Tu código de verificación - Stylo Dental"
         msg['From']    = SMTP_FROM
         msg['To']      = correo
         msg.attach(MIMEText(cuerpo_html, 'html'))
@@ -133,49 +185,22 @@ def enviar_codigo():
 
 
 # =============================================================================
-# API — VERIFICACIÓN DEL CÓDIGO INGRESADO POR EL USUARIO
+# API — VERIFICACIÓN DEL CÓDIGO
 # =============================================================================
 
 @app.route('/api/verificar-codigo', methods=['POST'])
 def verificar_codigo():
-    datos   = request.get_json()
-    correo  = datos.get('correo', '').strip().lower()
+    datos     = request.get_json()
+    correo    = datos.get('correo', '').strip().lower()
     ingresado = str(datos.get('codigo', '')).strip()
-
-    esperado = codigos_temporales.get(correo)
+    esperado  = codigos_temporales.get(correo)
 
     if not esperado:
         return jsonify({"ok": False, "error": "No hay código generado para este correo"}), 400
-
     if ingresado == esperado:
         del codigos_temporales[correo]
         return jsonify({"ok": True}), 200
-    else:
-        return jsonify({"ok": False, "error": "Código incorrecto"}), 400
-
-
-# =============================================================================
-# API — CITAS (agendar.html)
-# =============================================================================
-
-@app.route('/api/cita/crear', methods=['POST'])
-def crear_cita():
-    datos = request.get_json()
-    conexion = None
-    try:
-        conexion = get_db_connection()
-        cursor = conexion.cursor()
-        cursor.execute(
-            "INSERT INTO cita (Paciente_ID, Agenda_ID, Motivo_Consulta) VALUES (?, ?, ?)",
-            (datos.get('Paciente_ID'), datos.get('Agenda_ID'), datos.get('Motivo_Consulta'))
-        )
-        conexion.commit()
-        return jsonify({"status": "Cita registrada con éxito"}), 201
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-    finally:
-        if conexion:
-            conexion.close()
+    return jsonify({"ok": False, "error": "Código incorrecto"}), 400
 
 
 # =============================================================================

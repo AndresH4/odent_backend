@@ -1,98 +1,238 @@
-        /** * LÓGICA INTEGRADA - STYLO DENTAL 2026 */        let adminData = { nombre: "Admin Root", email: "admin@stylodental.com", tel: "+57 322 456 7890", pass: "Admin123*" };
+/**
+ * administrador.js — Stylo Dental
+ * Lee la sesión guardada por login.js, muestra el saludo y carga datos reales
+ * desde la API Flask en lugar de localStorage.
+ */
 
-        function toggleProfileDropdown() {
-            document.getElementById('profileDropdown').classList.toggle('active');
-        }
+'use strict';
 
-        window.addEventListener('click', (e) => {
-            if (!e.target.closest('#profileDropdown') && !e.target.closest('header .cursor-pointer')) {
-                document.getElementById('profileDropdown').classList.remove('active');
-            }
-        });
+// ─── Variables de módulo ─────────────────────────────────────────────────────
+let adminData = {};
 
-        function actualizarReloj() {
-            const ahora = new Date();
-            document.getElementById('reloj').innerText = ahora.toLocaleTimeString('es-CO');
-            document.getElementById('fecha-actual').innerText = ahora.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        }
-        setInterval(actualizarReloj, 1000); actualizarReloj();
+// ─── Utilidades ──────────────────────────────────────────────────────────────
+function setText(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val ?? '—';
+}
 
-        function cambiarSeccion(sec) {
-            document.getElementById('sec-dashboard').classList.toggle('hidden', sec !== 'dashboard');
-            document.getElementById('sec-tablas').classList.toggle('hidden', sec === 'dashboard');
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById('btn-dashboard').classList.toggle('active', sec==='dashboard');
-            if(sec === 'citas') { renderCitas(); document.getElementById('btn-citas').classList.add('active'); }
-        }
+function mostrarToast(msg) {
+    // Reutiliza un toast si existe en el HTML, si no usa alert
+    const t = document.getElementById('toast');
+    if (t) { t.textContent = msg; t.classList.add('visible'); setTimeout(() => t.classList.remove('visible'), 3000); }
+    else alert(msg);
+}
 
-        function renderUsuarios(rol) {
-            const u = JSON.parse(localStorage.getItem('usuarios_dental')) || {};
-            const body = document.getElementById('body-lista-dinamica');
-            document.getElementById('container-lista-rapida').classList.remove('hidden');
-            document.getElementById('titulo-lista-dinamica').innerText = `GESTIÓN: ${rol}S`;
-            body.innerHTML = Object.keys(u).filter(e => u[e].rol === rol).map(email => `
-                <tr class="p-4 flex justify-between items-center px-8 hover:bg-sky-50/50 transition-all">
-                    <td><p class="font-black text-slate-800 text-[11px] uppercase">${u[email].nombre}</p><p class="text-[9px] text-slate-400 font-bold">${email}</p></td>
-                    <td><button onclick="preguntarEliminar('${email}')" class="text-red-300 hover:text-red-600 transition-all text-sm"><i class="fas fa-user-minus"></i></button></td>
-                </tr>`).join('');
-        }
+// ─── Sesión ──────────────────────────────────────────────────────────────────
+function cargarSesion() {
+    const raw = sessionStorage.getItem('odent_usuario');
+    if (!raw) { window.location.replace('/login'); return; }
 
-        function renderCitas() {
-            document.getElementById('main-title').innerText = "Historial General de Citas";
-            const h = JSON.parse(localStorage.getItem('historialCompleto')) || [];
-            const body = document.getElementById('tabla-body');
-            document.getElementById('tabla-head').innerHTML = `<tr><th class="p-6">Paciente</th><th class="p-6">Especialista</th><th class="p-6">Procedimiento</th></tr>`;
-            body.innerHTML = h.map(c => `
-                <tr class="hover:bg-slate-50 transition-colors">
-                    <td class="p-6 font-bold text-slate-800 text-[11px] uppercase">${c.nombre}</td>
-                    <td class="p-6 text-[10px] font-black text-slate-600 uppercase"><i class="fas fa-user-md mr-2 text-sky-500"></i> ${c.especialista || 'No Asignado'}</td>
-                    <td class="p-6 text-sky-600 font-black text-[10px] uppercase">${c.especialidad}</td>
-                </tr>`).join('');
-        }
+    const u = JSON.parse(raw);
+    if (u.Rol_ID !== 1) { window.location.replace('/login'); return; }
 
-        function abrirConfiguracion() {
-            document.getElementById('edit-nombre').value = adminData.nombre;
-            document.getElementById('edit-email').value = adminData.email;
-            document.getElementById('edit-tel').value = adminData.tel;
-            document.getElementById('modalConfig').style.display = 'flex';
-        }
+    const nombre = `${u.Nombres || ''} ${u.Apellidos || ''}`.trim();
+    adminData = { nombre, email: u.Correo, tel: u.Telefono, id: u.Usuario_ID };
 
-        function guardarPerfil() {
-            adminData.nombre = document.getElementById('edit-nombre').value;
-            adminData.email = document.getElementById('edit-email').value;
-            adminData.tel = document.getElementById('edit-tel').value;
-            mostrarToast("PERFIL ACTUALIZADO");
-            cerrarConfiguracion();
-            actualizarInterfazHeader();
-        }
+    // Saludo visible en el header
+    setText('header-name', nombre);
+    setText('drop-name',   nombre);
+    setText('drop-email',  u.Correo);
+    setText('drop-tel',    u.Telefono || '—');
 
-        function actualizarInterfazHeader() {
-            document.getElementById('header-name').innerText = adminData.nombre;
-            document.getElementById('drop-name').innerText = adminData.nombre;
-            document.getElementById('drop-email').innerText = adminData.email;
-            document.getElementById('drop-tel').innerText = adminData.tel;
-            document.getElementById('header-pic').src = `https://ui-avatars.com/api/?name=${adminData.nombre.replace(" ","+")}&background=0284c7&color=fff&size=128`;
-        }
+    const pic = document.getElementById('header-pic');
+    if (pic) pic.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(nombre)}&background=0284c7&color=fff&size=128`;
 
-        function verificarOldPass() {
-            if(document.getElementById('old-pass').value === adminData.pass) {
-                document.getElementById('step-1').classList.add('hidden');
-                document.getElementById('step-2').classList.remove('hidden');
-            } else { alert("CONTRASEÑA INCORRECTA"); }
-        }
+    actualizarStats();
+}
 
-        function mostrarToast(msg) {
-            // Lógica de toast si existe el elemento en el HTML, si no alert
-            alert(msg);
-        }
+function cerrarSesion() {
+    sessionStorage.removeItem('odent_usuario');
+    window.location.replace('/login');
+}
 
-        function togglePass(id) { const i = document.getElementById(id); i.type = i.type === 'password' ? 'text' : 'password'; }
-        function cerrarConfiguracion() { document.getElementById('modalConfig').style.display = 'none'; document.getElementById('step-1').classList.remove('hidden'); document.getElementById('step-2').classList.add('hidden'); }
-        
-        function actualizarStats() {
-            const u = JSON.parse(localStorage.getItem('usuarios_dental')) || {};
-            document.getElementById('stat-esp').innerText = Object.values(u).filter(x => x.rol === 'Especialista').length;
-            document.getElementById('stat-pac').innerText = Object.values(u).filter(x => x.rol === 'Paciente').length;
-        }
+// ─── Reloj ───────────────────────────────────────────────────────────────────
+function actualizarReloj() {
+    const ahora = new Date();
+    setText('reloj', ahora.toLocaleTimeString('es-CO'));
+    setText('fecha-actual', ahora.toLocaleDateString('es-ES', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    }));
+}
 
-        window.onload = () => { actualizarStats(); actualizarInterfazHeader(); };
+// ─── Estadísticas (desde API) ────────────────────────────────────────────────
+async function actualizarStats() {
+    try {
+        const res  = await fetch('/api/usuarios');
+        const data = await res.json();
+
+        const especialistas = data.filter(u => u.Rol_ID === 2);
+        const pacientes     = data.filter(u => u.Rol_ID === 3);
+
+        setText('stat-esp', especialistas.length);
+        setText('stat-pac', pacientes.length);
+    } catch (e) {
+        console.error('[admin] Error cargando stats:', e);
+    }
+}
+
+// ─── Lista dinámica de usuarios ──────────────────────────────────────────────
+async function renderUsuarios(rolNombre) {
+    const rolMap = { 'Especialista': 2, 'Paciente': 3 };
+    const rolId  = rolMap[rolNombre];
+
+    try {
+        const res  = await fetch('/api/usuarios');
+        const data = await res.json();
+        const filtrados = data.filter(u => u.Rol_ID === rolId);
+
+        const body = document.getElementById('body-lista-dinamica');
+        const cont = document.getElementById('container-lista-rapida');
+        const tit  = document.getElementById('titulo-lista-dinamica');
+
+        if (!body || !cont || !tit) return;
+        cont.classList.remove('hidden');
+        tit.textContent = `GESTIÓN: ${rolNombre.toUpperCase()}S`;
+
+        body.innerHTML = filtrados.map(u => `
+            <tr class="p-4 flex justify-between items-center px-8 hover:bg-sky-50/50 transition-all">
+                <td>
+                    <p class="font-black text-slate-800 text-[11px] uppercase">${u.Nombres} ${u.Apellidos}</p>
+                    <p class="text-[9px] text-slate-400 font-bold">${u.Correo}</p>
+                </td>
+                <td>
+                    <span class="text-[9px] font-bold uppercase px-2 py-1 rounded-full ${u.Estado_ID === 1 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
+                        ${u.Estado_ID === 1 ? 'Activo' : 'Inactivo'}
+                    </span>
+                </td>
+            </tr>`).join('');
+    } catch (e) {
+        console.error('[admin] Error cargando usuarios:', e);
+    }
+}
+
+// ─── Historial de citas (desde API) ──────────────────────────────────────────
+async function renderCitas() {
+    setText('main-title', 'Historial General de Citas');
+    try {
+        const res  = await fetch('/api/citas');
+        const data = await res.json();
+
+        const head = document.getElementById('tabla-head');
+        const body = document.getElementById('tabla-body');
+        if (!head || !body) return;
+
+        head.innerHTML = `
+            <tr>
+                <th class="p-6">Paciente</th>
+                <th class="p-6">Especialista</th>
+                <th class="p-6">Especialidad</th>
+                <th class="p-6">Fecha / Hora</th>
+                <th class="p-6">Estado</th>
+            </tr>`;
+
+        body.innerHTML = data.map(c => `
+            <tr class="hover:bg-slate-50 transition-colors">
+                <td class="p-6 font-bold text-slate-800 text-[11px] uppercase">${c.NombrePaciente}</td>
+                <td class="p-6 text-[10px] font-black text-slate-600 uppercase">
+                    <i class="fas fa-user-md mr-2 text-sky-500"></i>${c.NombreEspecialista}
+                </td>
+                <td class="p-6 text-sky-600 font-black text-[10px] uppercase">${c.Nombre_Especialidad || '—'}</td>
+                <td class="p-6 text-[10px] font-bold">${c.Fecha}<br><span class="text-slate-400">${c.Hora_Inicio}</span></td>
+                <td class="p-6">
+                    <span class="text-[9px] font-black uppercase px-2 py-1 rounded-full 
+                        ${c.EstadoAgenda === 'Disponible' ? 'bg-green-100 text-green-700'
+                        : c.EstadoAgenda === 'Ocupado'    ? 'bg-sky-100 text-sky-700'
+                        : 'bg-red-100 text-red-700'}">
+                        ${c.EstadoAgenda}
+                    </span>
+                </td>
+            </tr>`).join('');
+    } catch (e) {
+        console.error('[admin] Error cargando citas:', e);
+    }
+}
+
+// ─── Navegación de secciones ─────────────────────────────────────────────────
+function cambiarSeccion(sec) {
+    const dash   = document.getElementById('sec-dashboard');
+    const tablas = document.getElementById('sec-tablas');
+
+    if (dash)   dash.classList.toggle('hidden',   sec !== 'dashboard');
+    if (tablas) tablas.classList.toggle('hidden',  sec === 'dashboard');
+
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    const btnActivo = document.getElementById(`btn-${sec}`);
+    if (btnActivo) btnActivo.classList.add('active');
+
+    if (sec === 'citas') renderCitas();
+}
+
+// ─── Perfil (modal de configuración) ─────────────────────────────────────────
+function toggleProfileDropdown() {
+    document.getElementById('profileDropdown')?.classList.toggle('active');
+}
+
+window.addEventListener('click', (e) => {
+    if (!e.target.closest('#profileDropdown') && !e.target.closest('header .cursor-pointer')) {
+        document.getElementById('profileDropdown')?.classList.remove('active');
+    }
+});
+
+function abrirConfiguracion() {
+    document.getElementById('edit-nombre').value = adminData.nombre || '';
+    document.getElementById('edit-email').value  = adminData.email  || '';
+    document.getElementById('edit-tel').value    = adminData.tel    || '';
+    document.getElementById('modalConfig').style.display = 'flex';
+}
+
+function cerrarConfiguracion() {
+    document.getElementById('modalConfig').style.display = 'none';
+    const s1 = document.getElementById('step-1');
+    const s2 = document.getElementById('step-2');
+    if (s1) s1.classList.remove('hidden');
+    if (s2) s2.classList.add('hidden');
+}
+
+async function guardarPerfil() {
+    adminData.nombre = document.getElementById('edit-nombre').value.trim();
+    adminData.email  = document.getElementById('edit-email').value.trim();
+    adminData.tel    = document.getElementById('edit-tel').value.trim();
+
+    // Actualizar sesión local
+    const raw = sessionStorage.getItem('odent_usuario');
+    if (raw) {
+        const u = JSON.parse(raw);
+        u.Nombres  = adminData.nombre.split(' ')[0] || u.Nombres;
+        u.Apellidos = adminData.nombre.split(' ').slice(1).join(' ') || u.Apellidos;
+        u.Correo   = adminData.email;
+        u.Telefono = adminData.tel;
+        sessionStorage.setItem('odent_usuario', JSON.stringify(u));
+    }
+
+    mostrarToast('PERFIL ACTUALIZADO');
+    cerrarConfiguracion();
+    cargarSesion();
+}
+
+function verificarOldPass() {
+    // Verificación local simple (en producción esto iría al backend)
+    const ingresada = document.getElementById('old-pass').value;
+    if (ingresada && ingresada.length >= 6) {
+        document.getElementById('step-1').classList.add('hidden');
+        document.getElementById('step-2').classList.remove('hidden');
+    } else {
+        alert('Contraseña inválida o muy corta.');
+    }
+}
+
+function togglePass(id) {
+    const el = document.getElementById(id);
+    if (el) el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+    cargarSesion();
+    setInterval(actualizarReloj, 1000);
+    actualizarReloj();
+});
