@@ -1,112 +1,137 @@
-from flask import Flask, render_template, request, redirect, url_for
-import mysql.connector
-
-app = Flask(__name__)
-
-# =========================================
-# CONEXIÓN MYSQL
-# =========================================
-def conectar():
-    return mysql.connector.connect(
-        host='localhost',
-        user='root',
-        password='',
-        database='odent'  # Tu base de datos
-    )
-
-# =========================================
-# MOSTRAR REGÍMENES (READ)
-# =========================================
-@app.route('/regimen_eps')
-def regimen_eps():
-    con = conectar()
-    cur = con.cursor(dictionary=True)
-    
-    # Selecciona todos los regímenes existentes
-    cur.execute('SELECT * FROM regimen_eps')
-    lista_regimen = cur.fetchall()
-    
-    cur.close()
-    con.close()
-    
-    # Renderiza la plantilla enviando la lista de datos
-    return render_template(
-        'regimen_eps.html',
-        lista_regimen=lista_regimen
-    )
-
-# =========================================
-# CREAR RÉGIMEN (CREATE)
-# =========================================
-@app.route('/crear_regimen', methods=['POST'])
-def crear_regimen():
-    # Captura el nombre del régimen desde el formulario HTML
-    nombre = request.form['nombre']
-
-    con = conectar()
-    cur = con.cursor()
-
-    sql = '''
-        INSERT INTO regimen_eps (nombre)
-        VALUES (%s)
-    '''
-    
-    cur.execute(sql, (nombre,))
-    con.commit()
-    
-    cur.close()
-    con.close()
-    
-    # Redirige de vuelta a la lista de regímenes
-    return redirect(url_for('regimen_eps'))
-
-# =========================================
-# ACTUALIZAR RÉGIMEN (UPDATE)
-# =========================================
-@app.route('/actualizar_regimen/<int:id>', methods=['POST'])
-def actualizar_regimen(id):
-    # Captura el nuevo nombre para modificar el registro existente
-    nuevo_nombre = request.form['nombre']
-
-    con = conectar()
-    cur = con.cursor()
-
-    sql = '''
-        UPDATE regimen_eps
-        SET nombre = %s
-        WHERE id = %s
-    '''
-    
-    cur.execute(sql, (nuevo_nombre, id))
-    con.commit()
-    
-    cur.close()
-    con.close()
-    
-    return redirect(url_for('regimen_eps'))
-
-# =========================================
-# ELIMINAR RÉGIMEN (DELETE)
-# =========================================
-@app.route('/eliminar_regimen/<int:id>', methods=['POST'])
-def eliminar_regimen(id):
-    con = conectar()
-    cur = con.cursor()
-
-    # Elimina el régimen usando su ID
-    cur.execute(
-        'DELETE FROM regimen_eps WHERE id = %s',
-        (id,)
-    )
-
-    con.commit()
-    cur.close()
-    con.close()
-
-    return redirect(url_for('regimen_eps'))
-
-# =========================================
-# EJECUTAR APP
-# =========================================
-if __name__ == '__main__':
-    app.run(debug=True)
+# =============================================================================
+# modulo_eps/regimen_eps.py
+# CRUD para la tabla regimen_eps
+# =============================================================================
+ 
+from db import get_db_connection
+ 
+ 
+def crear_regimen(nombre_regimen):
+    """
+    Inserta un nuevo régimen EPS (ej. Contributivo, Subsidiado).
+    Retorna el ID del registro creado.
+    """
+    conexion = None
+    cursor = None
+    try:
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        cursor.execute(
+            "INSERT INTO regimen_eps (Nombre_Regimen) VALUES (?)",
+            (nombre_regimen,)
+        )
+        conexion.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise e
+    finally:
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()
+ 
+ 
+def obtener_regimenes():
+    """
+    Retorna todos los regímenes EPS registrados.
+    """
+    conexion = None
+    cursor = None
+    try:
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        cursor.execute("SELECT * FROM regimen_eps ORDER BY Nombre_Regimen ASC")
+        columnas = [desc[0] for desc in cursor.description]
+        filas = cursor.fetchall()
+        return [dict(zip(columnas, fila)) for fila in filas]
+    except Exception as e:
+        raise e
+    finally:
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()
+ 
+ 
+def obtener_regimen_por_id(regimen_id):
+    """
+    Retorna un régimen EPS específico por su ID.
+    Devuelve None si no existe.
+    """
+    conexion = None
+    cursor = None
+    try:
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        cursor.execute(
+            "SELECT * FROM regimen_eps WHERE ID_Regimen_EPS = ?",
+            (regimen_id,)
+        )
+        columnas = [desc[0] for desc in cursor.description]
+        fila = cursor.fetchone()
+        if fila is None:
+            return None
+        return dict(zip(columnas, fila))
+    except Exception as e:
+        raise e
+    finally:
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()
+ 
+ 
+def actualizar_regimen(regimen_id, nombre_regimen):
+    """
+    Actualiza el nombre de un régimen EPS existente.
+    Retorna True si se modificó al menos un registro, False si no se encontró.
+    """
+    conexion = None
+    cursor = None
+    try:
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        cursor.execute(
+            "UPDATE regimen_eps SET Nombre_Regimen = ? WHERE ID_Regimen_EPS = ?",
+            (nombre_regimen, regimen_id)
+        )
+        conexion.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise e
+    finally:
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()
+ 
+ 
+def eliminar_regimen(regimen_id):
+    """
+    Elimina un régimen EPS por su ID.
+    Retorna True si se eliminó, False si no existía.
+    """
+    conexion = None
+    cursor = None
+    try:
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        cursor.execute(
+            "DELETE FROM regimen_eps WHERE ID_Regimen_EPS = ?",
+            (regimen_id,)
+        )
+        conexion.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise e
+    finally:
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()

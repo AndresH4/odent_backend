@@ -1,112 +1,138 @@
-from flask import Flask, render_template, request, redirect, url_for
-import mysql.connector
-
-app = Flask(__name__)
-
-# =========================================
-# CONEXIÓN MYSQL
-# =========================================
-def conectar():
-    return mysql.connector.connect(
-        host='localhost',
-        user='root',
-        password='',
-        database='odent'  # Tu base de datos
-    )
-
-# =========================================
-# MOSTRAR TIPOS DE EPS (READ)
-# =========================================
-@app.route('/tipoeps')
-def tipoeps():
-    con = conectar()
-    cur = con.cursor(dictionary=True)
-    
-    # Selecciona todos los tipos de EPS registrados
-    cur.execute('SELECT * FROM tipoeps')
-    lista_tipoeps = cur.fetchall()
-    
-    cur.close()
-    con.close()
-    
-    # Renderiza la plantilla enviando la lista de datos
-    return render_template(
-        'tipoeps.html',
-        lista_tipoeps=lista_tipoeps
-    )
-
-# =========================================
-# CREAR TIPO DE EPS (CREATE)
-# =========================================
-@app.route('/crear_tipoeps', methods=['POST'])
-def crear_tipoeps():
-    # Captura el nombre del tipo de EPS desde el formulario HTML
-    nombre = request.form['nombre']
-
-    con = conectar()
-    cur = con.cursor()
-
-    sql = '''
-        INSERT INTO tipoeps (nombre)
-        VALUES (%s)
-    '''
-    
-    cur.execute(sql, (nombre,))
-    con.commit()
-    
-    cur.close()
-    con.close()
-    
-    # Redirige de vuelta a la lista de tipos de EPS
-    return redirect(url_for('tipoeps'))
-
-# =========================================
-# ACTUALIZAR TIPO DE EPS (UPDATE)
-# =========================================
-@app.route('/actualizar_tipoeps/<int:id>', methods=['POST'])
-def actualizar_tipoeps(id):
-    # Captura el nuevo nombre para modificar el registro existente
-    nuevo_nombre = request.form['nombre']
-
-    con = conectar()
-    cur = con.cursor()
-
-    sql = '''
-        UPDATE tipoeps
-        SET nombre = %s
-        WHERE id = %s
-    '''
-    
-    cur.execute(sql, (nuevo_nombre, id))
-    con.commit()
-    
-    cur.close()
-    con.close()
-    
-    return redirect(url_for('tipoeps'))
-
-# =========================================
-# ELIMINAR TIPO DE EPS (DELETE)
-# =========================================
-@app.route('/eliminar_tipoeps/<int:id>', methods=['POST'])
-def eliminar_tipoeps(id):
-    con = conectar()
-    cur = con.cursor()
-
-    # Elimina el tipo de EPS usando su ID
-    cur.execute(
-        'DELETE FROM tipoeps WHERE id = %s',
-        (id,)
-    )
-
-    con.commit()
-    cur.close()
-    con.close()
-
-    return redirect(url_for('tipoeps'))
-
-# =========================================
-# EJECUTAR APP
-# =========================================
-if __name__ == '__main__':
-    app.run(debug=True)
+# =============================================================================
+# modulo_eps/tipo_eps.py
+# CRUD para la tabla tipo_eps
+# =============================================================================
+ 
+from db import get_db_connection
+ 
+ 
+def crear_tipo_eps(nombre_tipo):
+    """
+    Inserta un nuevo tipo de EPS en la tabla tipo_eps.
+    Retorna el ID del registro creado.
+    """
+    conexion = None
+    cursor = None
+    try:
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        cursor.execute(
+            "INSERT INTO tipo_eps (Nombre_Tipo) VALUES (?)",
+            (nombre_tipo,)
+        )
+        conexion.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise e
+    finally:
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()
+ 
+ 
+def obtener_tipos_eps():
+    """
+    Retorna todos los tipos de EPS registrados.
+    """
+    conexion = None
+    cursor = None
+    try:
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        cursor.execute("SELECT * FROM tipo_eps ORDER BY Nombre_Tipo ASC")
+        columnas = [desc[0] for desc in cursor.description]
+        filas = cursor.fetchall()
+        return [dict(zip(columnas, fila)) for fila in filas]
+    except Exception as e:
+        raise e
+    finally:
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()
+ 
+ 
+def obtener_tipo_eps_por_id(tipo_eps_id):
+    """
+    Retorna un tipo de EPS específico por su ID.
+    Devuelve None si no existe.
+    """
+    conexion = None
+    cursor = None
+    try:
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        cursor.execute(
+            "SELECT * FROM tipo_eps WHERE ID_Tipo_EPS = ?",
+            (tipo_eps_id,)
+        )
+        columnas = [desc[0] for desc in cursor.description]
+        fila = cursor.fetchone()
+        if fila is None:
+            return None
+        return dict(zip(columnas, fila))
+    except Exception as e:
+        raise e
+    finally:
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()
+ 
+ 
+def actualizar_tipo_eps(tipo_eps_id, nombre_tipo):
+    """
+    Actualiza el nombre de un tipo de EPS existente.
+    Retorna True si se modificó al menos un registro, False si no se encontró.
+    """
+    conexion = None
+    cursor = None
+    try:
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        cursor.execute(
+            "UPDATE tipo_eps SET Nombre_Tipo = ? WHERE ID_Tipo_EPS = ?",
+            (nombre_tipo, tipo_eps_id)
+        )
+        conexion.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise e
+    finally:
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()
+ 
+ 
+def eliminar_tipo_eps(tipo_eps_id):
+    """
+    Elimina un tipo de EPS por su ID.
+    Retorna True si se eliminó, False si no existía.
+    """
+    conexion = None
+    cursor = None
+    try:
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        cursor.execute(
+            "DELETE FROM tipo_eps WHERE ID_Tipo_EPS = ?",
+            (tipo_eps_id,)
+        )
+        conexion.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise e
+    finally:
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()
+ 

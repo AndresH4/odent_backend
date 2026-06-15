@@ -382,32 +382,84 @@ const filtrarTabla = () => {
 /* =====================================================================
    PERFIL — lógica sin cambios
    ===================================================================== */
+
+/**
+ * PASO 1 del cambio de contraseña: valida la contraseña actual
+ * contra la guardada en 'usuarios_dental'. Si es correcta,
+ * revela el PASO 2 (nueva contraseña / confirmar).
+ */
+const validarPasswordActual = () => {
+    const correoActual = localStorage.getItem('usuario_logueado');
+    const database      = JSON.parse(localStorage.getItem('usuarios_dental')) || {};
+    const userRef       = database[correoActual];
+
+    const inputActual = document.getElementById('pass-actual');
+    const errorActual = document.getElementById('error-pass-actual');
+    const step2       = document.getElementById('pass-step2');
+
+    const passGuardada = userRef ? userRef.password : undefined;
+
+    if (!userRef || inputActual.value !== passGuardada) {
+        errorActual.style.display = 'block';
+        return;
+    }
+
+    // Contraseña correcta: ocultar el error y mostrar el paso 2
+    errorActual.style.display = 'none';
+    inputActual.disabled = true;
+    step2.style.display = 'grid';
+};
  
 const guardarPerfilCompleto = () => {
     const correoActual = localStorage.getItem('usuario_logueado');
     const database     = JSON.parse(localStorage.getItem('usuarios_dental')) || {};
     const nuevoCorreo  = document.getElementById('conf-email').value.trim();
-    const nuevaPass    = document.getElementById('conf-pass').value;
- 
+
+    // --- VALIDACIÓN DEL CAMBIO DE CONTRASEÑA (PASO 2) ---
+    const step2       = document.getElementById('pass-step2');
+    const errorNueva  = document.getElementById('error-pass-nueva');
+    let nuevaPassFinal = null;
+
+    if (step2 && step2.style.display === 'grid') {
+        const passNueva     = document.getElementById('conf-pass-nueva').value;
+        const passConfirmar = document.getElementById('conf-pass-confirmar').value;
+
+        if (passNueva || passConfirmar) {
+            if (passNueva !== passConfirmar) {
+                errorNueva.innerText = 'Las contraseñas no coinciden.';
+                errorNueva.style.display = 'block';
+                return;
+            }
+            if (passNueva.length < 4) {
+                errorNueva.innerText = 'La nueva contraseña debe tener mínimo 4 caracteres.';
+                errorNueva.style.display = 'block';
+                return;
+            }
+            nuevaPassFinal = passNueva;
+        }
+        errorNueva.style.display = 'none';
+    }
+    // --- FIN VALIDACIÓN DE CONTRASEÑA ---
+
     if (database[correoActual]) {
         const nombreFull    = document.getElementById('conf-nombre').value.trim();
         const [nombre, ...apellidos] = nombreFull.split(' ');
- 
+
         const userRef        = database[correoActual];
         userRef.nombre       = nombre;
         userRef.apellidos    = apellidos.join(' ');
         userRef.especialidad = document.getElementById('esp-1').value;
         userRef.celular      = document.getElementById('conf-tel').value;
         userRef.correo       = nuevoCorreo;
- 
-        if (nuevaPass && nuevaPass.length >= 4) userRef.password = nuevaPass;
- 
+
+        if (nuevaPassFinal) userRef.password = nuevaPassFinal;
+
         if (nuevoCorreo !== correoActual) {
             database[nuevoCorreo] = userRef;
             delete database[correoActual];
             localStorage.setItem('usuario_logueado', nuevoCorreo);
         }
- 
+
         localStorage.setItem('usuarios_dental', JSON.stringify(database));
         alert('✨ Perfil actualizado correctamente.');
         cargarInfoSesion();
