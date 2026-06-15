@@ -173,3 +173,45 @@ def eliminar_eps(eps_id):
             cursor.close()
         if conexion:
             conexion.close()
+            
+def obtener_eps_por_tipo(tipo_eps_id):
+    """
+    Retorna todas las EPS cuyo ID_Tipo_EPS coincide con el parámetro.
+    Se usa para filtrar el selector de EPS en el formulario de aseguramiento
+    cuando el usuario elige un Tipo de EPS concreto.
+ 
+    Retorna una lista de dicts con las mismas columnas que obtener_eps().
+    Retorna lista vacía [] si no hay EPS para ese tipo (no lanza error).
+    """
+    conexion = None
+    cursor   = None
+    try:
+        conexion = get_db_connection()
+        cursor   = conexion.cursor()
+        cursor.execute(
+            """
+            SELECT
+                e.ID_EPS,
+                e.Nombre_EPS,
+                e.NIT,
+                e.Telefono,
+                e.Direccion,
+                e.ID_Tipo_EPS,
+                t.Nombre_Tipo AS Nombre_Tipo_EPS
+            FROM   eps      e
+            INNER JOIN tipo_eps t ON e.ID_Tipo_EPS = t.ID_Tipo_EPS
+            WHERE  e.ID_Tipo_EPS = ?
+            ORDER  BY e.Nombre_EPS ASC
+            """,
+            (tipo_eps_id,)
+        )
+        columnas = [desc[0] for desc in cursor.description]
+        filas    = cursor.fetchall()
+        return [dict(zip(columnas, fila)) for fila in filas]
+    except Exception as e:
+        raise e
+    finally:
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()

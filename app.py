@@ -7,14 +7,14 @@ from email.mime.multipart import MIMEMultipart
 
 from db import get_db_connection
 from modulo_usuarios.routes import usuarios_bp
-
+from modulo_eps.routes import eps_bp
 app = Flask(__name__)
 CORS(app)
 
 # usuarios_bp expone /api/usuarios, /api/roles y la nueva /api/auth/login
 # (usada por login.js para autenticar)
 app.register_blueprint(usuarios_bp, url_prefix='/api')
-
+app.register_blueprint(eps_bp, url_prefix='/api/eps')
 # =============================================================================
 # CONFIGURACIÓN SMTP — cambia estos valores por los de tu cuenta
 # =============================================================================
