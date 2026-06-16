@@ -1,12 +1,8 @@
-import sqlite3
+from db import get_db_connection
 from sqlite3 import Error
 
-DB_NAME = "odent.db"
-
-
-def _get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
+def _get_conn():
+    conn = get_db_connection()
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
