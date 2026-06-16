@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../css/administrador.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/administrador.css') }}">
 </head>
 <body class="flex min-h-screen">
 
@@ -154,6 +154,6 @@
         </div>
     </div>
 
-<script src="{{ url_for('static', filename='js/seguridad.js') }}"></script>
+<script src="{{ url_for('static', filename='js/administrador.js') }}"></script>
 </body>
 </html>

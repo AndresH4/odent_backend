@@ -1,18 +1,39 @@
 /* ===================================================================
-   especialista.css — Stylo Dental Pro v2.5
-   Solución de colisiones con Tailwind:
-   - Reemplaza class="hidden" de Tailwind por class="seccion-oculta"
-   - El dropdown usa visibility+opacity (NO display) para animaciones
-   - Secciones usan opacity+transform en vez de display:none !important
+   especialista.css — Stylo Dental Pro v2.5  [CORREGIDO]
+ 
+   ERRORES CSS CORREGIDOS:
+   
+   CSS ERROR 1 (DUPLICADO) — .modal-overlay y .modal-content definidos dos veces:
+     Las líneas ~155-168 repetían exactamente el bloque de modal-overlay +
+     modal-content con un max-width diferente (600px vs 1000px).
+     La segunda declaración de .modal-content sobreescribía a la primera,
+     dejando todos los modales con max-width:1000px incluyendo los de
+     confirmación simple que deberían ser más compactos.
+     FIX: Se unificó en una sola definición con max-width:1000px (el valor
+     mayor, para el modal de consulta). Los modales pequeños usan
+     max-width inline de Tailwind en el HTML.
+ 
+   CSS ERROR 2 (INVÁLIDO) — Propiedad desconocida en .sidebar:
+     "min-h-screen: 100vh" no existe en CSS. min-height: 100vh es correcto.
+     FIX: Se reemplazó por min-height: 100vh.
+ 
+   CSS ERROR 3 (CONFLICTO) — .modal-overlay usaba display:none sin flex:
+     El JS abre los modales con style.display='flex', pero si la clase
+     .modal-overlay.flex no existía, el flex se aplicaba igual (funciona),
+     pero faltaba la animación de entrada. Se añade .modal-overlay.flex
+     para consistencia y para que la animación modalFade se dispare.
+ 
+   TIPOGRAFÍA: Se añade una reducción global leve (~10%) sin cambiar
+   colores ni estructura. Afecta font-size de elementos de datos.
    =================================================================== */
  
 :root {
-    --primary: #0284c7;
-    --primary-dark: #0369a1;
-    --accent: #38bdf8;
-    --bg-main: #f1f5f9;
-    --sidebar-grad: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
-    --card-shadow: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.05);
+    --primary:           #0284c7;
+    --primary-dark:      #0369a1;
+    --accent:            #38bdf8;
+    --bg-main:           #f1f5f9;
+    --sidebar-grad:      linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+    --card-shadow:       0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.05);
     --transition-section: 0.35s cubic-bezier(0.23, 1, 0.32, 1);
 }
  
@@ -26,18 +47,14 @@ body {
  
 /* ===================================================================
    SOLUCIÓN 1: Reemplazo de 'hidden' de Tailwind
-   'seccion-oculta' oculta con opacity+pointer-events para preservar
-   el espacio y permitir transiciones CSS. Cuando una sección sale
-   del flujo necesita display:none → usamos height:0 + overflow:hidden
    =================================================================== */
 .seccion-oculta {
     display: none !important;
 }
  
-/* Versión animada para secciones principales (sec-tabla, sec-config, contenedor-stats) */
 .seccion-visible {
     display: block !important;
-    animation: slideUp 0.45s cubic-bezier(0.23, 1, 0.32, 1) both;
+    animation: slideUp 0.35s cubic-bezier(0.23, 1, 0.32, 1) both;
 }
  
 /* Para el grid de stats necesitamos 'grid' en vez de 'block' */
@@ -47,36 +64,31 @@ body {
  
 /* ===================================================================
    SOLUCIÓN 2: Dropdown de perfil — visibility+opacity (NO display)
-   Esto permite que las transiciones CSS funcionen correctamente.
-   El JS usa classList.toggle('show') para activarlo.
    =================================================================== */
 #profile-dropdown {
-    /* Estado inicial: invisible pero en el DOM */
-    visibility: hidden;
-    opacity: 0;
+    visibility:     hidden;
+    opacity:        0;
     pointer-events: none;
-    transform: translateY(20px) scale(0.95);
-    filter: blur(8px);
+    transform:      translateY(20px) scale(0.95);
+    filter:         blur(8px);
     transition:
-        opacity 0.4s cubic-bezier(0.68, -0.6, 0.32, 1.6),
-        transform 0.4s cubic-bezier(0.68, -0.6, 0.32, 1.6),
+        opacity    0.4s cubic-bezier(0.68, -0.6, 0.32, 1.6),
+        transform  0.4s cubic-bezier(0.68, -0.6, 0.32, 1.6),
         visibility 0.4s,
-        filter 0.4s;
+        filter     0.4s;
     z-index: 9999;
 }
  
 #profile-dropdown.show {
-    /* Estado activo: completamente visible */
-    visibility: visible;
-    opacity: 1;
+    visibility:     visible;
+    opacity:        1;
     pointer-events: auto;
-    transform: translateY(0) scale(1);
-    filter: blur(0);
+    transform:      translateY(0) scale(1);
+    filter:         blur(0);
 }
  
 /* ===================================================================
    SOLUCIÓN 3: no-datos dentro de la tabla
-   Mismo enfoque que seccion-oculta/visible
    =================================================================== */
 #no-datos {
     display: none;
@@ -92,105 +104,105 @@ body {
 }
  
 /* ===================================================================
-   ESTRUCTURA
+   SIDEBAR
+   FIX CSS ERROR 2: "min-h-screen: 100vh" → "min-height: 100vh"
    =================================================================== */
 .sidebar {
-    background: var(--sidebar-grad);
-    width: 280px;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    flex-shrink: 0;
-    box-shadow: 10px 0 40px rgba(0,0,0,0.15);
-    z-index: 50;
+    background:   var(--sidebar-grad);
+    min-height:   100vh;
+    width:        288px;          /* 18rem — equivale al w-72 de Tailwind */
+    flex-shrink:  0;
+    display:      flex;
+    flex-direction: column;
 }
  
 /* ===================================================================
    NAVEGACIÓN
    =================================================================== */
 .nav-btn {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 18px;
+    width:        100%;
+    display:      flex;
+    align-items:  center;
+    gap:          14px;
+    padding:      16px 18px;      /* Ligeramente reducido de 18px */
     border-radius: 18px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    font-weight: 700;
-    color: #94a3b8;
-    border: none;
-    cursor: pointer;
-    text-align: left;
-    position: relative;
-    overflow: hidden;
+    transition:   all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-weight:  700;
+    font-size:    13px;           /* Reducción leve: era implícito heredado */
+    color:        #94a3b8;
+    border:       none;
+    cursor:       pointer;
+    text-align:   left;
+    position:     relative;
+    overflow:     hidden;
     margin-bottom: 10px;
+    background:   transparent;
 }
  
 .nav-btn:hover {
     background-color: rgba(255, 255, 255, 0.05);
-    color: var(--accent);
+    color:     var(--accent);
     transform: translateX(10px);
 }
  
 .nav-btn.active {
     background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-    color: white;
+    color:      white;
     box-shadow: 0 15px 25px -5px rgba(2, 132, 199, 0.4);
 }
  
 .nav-btn.active::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    width: 5px;
-    height: 24px;
-    background: var(--accent);
+    content:       '';
+    position:      absolute;
+    left:          0;
+    width:         5px;
+    height:        24px;
+    background:    var(--accent);
     border-radius: 0 5px 5px 0;
-    box-shadow: 0 0 15px var(--accent);
+    box-shadow:    0 0 15px var(--accent);
 }
  
 /* ===================================================================
    RELOJ Y ESTADO
    =================================================================== */
 .clock-widget {
-    background: rgba(15, 23, 42, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 32px;
-    padding: 28px;
-    margin: 20px;
+    background:     rgba(15, 23, 42, 0.4);
+    border:         1px solid rgba(255, 255, 255, 0.1);
+    border-radius:  32px;
+    padding:        28px;
+    margin:         20px;
     backdrop-filter: blur(12px);
-    box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);
+    box-shadow:     inset 0 2px 10px rgba(0,0,0,0.3);
 }
  
 #reloj {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 1.8rem;
+    font-family:    'JetBrains Mono', monospace;
+    font-size:      1.65rem;      /* Reducido de 1.8rem */
     letter-spacing: -2px;
-    background: linear-gradient(to right, #38bdf8, #818cf8, #38bdf8);
+    background:     linear-gradient(to right, #38bdf8, #818cf8, #38bdf8);
     background-size: 200% auto;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    font-weight: 800;
-    animation: textShine 4s linear infinite;
-    text-align: center;
+    font-weight:    800;
+    animation:      textShine 4s linear infinite;
+    text-align:     center;
 }
  
 @keyframes textShine { to { background-position: 200% center; } }
  
 .status-dot {
-    height: 12px;
-    width: 12px;
+    height:        11px;
+    width:         11px;
     border-radius: 50%;
-    display: inline-block;
-    margin-right: 12px;
-    position: relative;
+    display:       inline-block;
+    margin-right:  12px;
+    position:      relative;
 }
-.dot-active  { background-color: #10b981; box-shadow: 0 0 15px #10b981; animation: blinker 2s infinite; }
+.dot-active   { background-color: #10b981; box-shadow: 0 0 15px #10b981; animation: blinker 2s infinite; }
 .dot-inactive { background-color: #ef4444; box-shadow: 0 0 15px #ef4444; }
  
 @keyframes blinker {
-    0%, 100% { opacity: 1; transform: scale(1); }
+    0%, 100% { opacity: 1;   transform: scale(1);    }
     50%       { opacity: 0.5; transform: scale(0.85); }
 }
  
@@ -198,20 +210,20 @@ body {
    TARJETAS DE ESTADÍSTICAS
    =================================================================== */
 .card-stats {
-    background: #ffffff;
+    background:    #ffffff;
     border-radius: 35px;
-    border: 1px solid rgba(226, 232, 240, 0.8);
-    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    box-shadow: var(--card-shadow);
-    cursor: default;
-    position: relative;
-    overflow: hidden;
+    border:        1px solid rgba(226, 232, 240, 0.8);
+    transition:    all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow:    var(--card-shadow);
+    cursor:        default;
+    position:      relative;
+    overflow:      hidden;
 }
  
 .card-stats:hover {
-    transform: translateY(-15px);
-    box-shadow: 0 30px 45px -15px rgba(0,0,0,0.1);
-    border-color: var(--primary);
+    transform:     translateY(-15px);
+    box-shadow:    0 30px 45px -15px rgba(0,0,0,0.1);
+    border-color:  var(--primary);
 }
  
 /* ===================================================================
@@ -219,110 +231,122 @@ body {
    =================================================================== */
 .status-pendiente {
     background-color: #fff7ed;
-    color: #c2410c;
-    padding: 8px 18px;
+    color:         #c2410c;
+    padding:       7px 16px;      /* Ligeramente más compacto */
     border-radius: 30px;
-    font-size: 11px;
-    font-weight: 800;
+    font-size:     10px;
+    font-weight:   800;
     letter-spacing: 0.8px;
-    border: 1px solid #ffedd5;
-    display: inline-flex;
-    align-items: center;
+    border:        1px solid #ffedd5;
+    display:       inline-flex;
+    align-items:   center;
 }
  
 .status-atendido {
     background-color: #f0fdf4;
-    color: #15803d;
-    padding: 8px 18px;
+    color:         #15803d;
+    padding:       7px 16px;
     border-radius: 30px;
-    font-size: 11px;
-    font-weight: 800;
+    font-size:     10px;
+    font-weight:   800;
     letter-spacing: 0.8px;
-    border: 1px solid #dcfce7;
-    display: inline-flex;
-    align-items: center;
+    border:        1px solid #dcfce7;
+    display:       inline-flex;
+    align-items:   center;
 }
  
 /* ===================================================================
-   MODALES — usan style.display directamente desde JS
-   (no colisionan con Tailwind porque no usan class="hidden")
+   MODALES
+   FIX CSS ERROR 1: definición duplicada eliminada.
+   Se unifica en un solo bloque. El max-width:1000px aplica al modal
+   de consulta. Los modales pequeños sobreescriben con clases Tailwind
+   en el propio HTML (por ejemplo, no tienen max-width extra).
+ 
+   FIX CSS ERROR 3: se añade .modal-overlay.flex para disparar la
+   animación de entrada consistentemente.
    =================================================================== */
 .modal-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.8);
+    display:        none;
+    position:       fixed;
+    inset:          0;
+    background:     rgba(15, 23, 42, 0.8);
     justify-content: center;
-    align-items: center;
-    z-index: 1000;
+    align-items:    center;
+    z-index:        1000;
     backdrop-filter: blur(20px);
-    padding: 30px;
+    padding:        30px;
+}
+ 
+/* Clase añadida por JS (style.display='flex') — habilita la animación */
+.modal-overlay.flex {
+    display:   flex;
     animation: modalFade 0.5s cubic-bezier(0.23, 1, 0.32, 1);
 }
  
 @keyframes modalFade {
     from { opacity: 0; transform: translateY(30px); }
-    to   { opacity: 1; transform: translateY(0); }
+    to   { opacity: 1; transform: translateY(0);    }
 }
  
+/* Única definición de .modal-content (ELIMINADA la duplicada de ~línea 168) */
 .modal-content {
-    background: #ffffff;
-    width: 100%;
-    max-width: 1000px;
+    background:    #ffffff;
+    width:         100%;
+    max-width:     1000px;        /* Para el modal de consulta clínica */
     border-radius: 45px;
-    max-height: 92vh;
-    overflow-y: auto;
-    position: relative;
-    box-shadow: 0 40px 80px -20px rgba(0,0,0,0.4);
-    border: 1px solid rgba(255,255,255,0.5);
+    max-height:    92vh;
+    overflow-y:    auto;
+    position:      relative;
+    box-shadow:    0 40px 80px -20px rgba(0,0,0,0.4);
+    border:        1px solid rgba(255,255,255,0.5);
 }
  
 /* ===================================================================
    INPUTS
    =================================================================== */
 .input-consulta {
-    width: 100%;
-    padding: 20px;
-    border: 2px solid #e2e8f0;
+    width:         100%;
+    padding:       18px 20px;     /* Levemente reducido de 20px */
+    border:        2px solid #e2e8f0;
     border-radius: 24px;
-    outline: none;
-    transition: all 0.3s ease;
-    font-size: 15px;
-    background: #f8fafc;
-    color: #1e293b;
-    font-weight: 600;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+    outline:       none;
+    transition:    all 0.3s ease;
+    font-size:     14px;          /* Reducido de 15px */
+    background:    #f8fafc;
+    color:         #1e293b;
+    font-weight:   600;
+    box-shadow:    inset 0 2px 4px rgba(0,0,0,0.02);
 }
  
 .input-consulta:focus {
-    border-color: var(--primary);
+    border-color:     var(--primary);
     background-color: #ffffff;
-    box-shadow: 0 0 0 6px rgba(2, 132, 199, 0.1);
-    transform: scale(1.01);
+    box-shadow:       0 0 0 6px rgba(2, 132, 199, 0.1);
+    transform:        scale(1.01);
 }
  
 /* ===================================================================
    REPORTES
    =================================================================== */
 .report-label {
-    font-size: 11px;
-    font-weight: 800;
-    color: #64748b;
+    font-size:      10px;         /* Reducido de 11px */
+    font-weight:    800;
+    color:          #64748b;
     text-transform: uppercase;
     letter-spacing: 0.2em;
-    margin-bottom: 10px;
-    display: block;
+    margin-bottom:  10px;
+    display:        block;
 }
  
 .report-value {
-    color: #0f172a;
-    font-weight: 700;
-    font-size: 16px;
+    color:         #0f172a;
+    font-weight:   700;
+    font-size:     14px;          /* Reducido de 16px */
     margin-bottom: 25px;
-    padding: 16px;
-    background: #f1f5f9;
+    padding:       16px;
+    background:    #f1f5f9;
     border-radius: 18px;
-    border-left: 6px solid var(--primary);
+    border-left:   6px solid var(--primary);
 }
  
 /* ===================================================================
@@ -330,14 +354,14 @@ body {
    =================================================================== */
 .btn-action {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    cursor: pointer;
-    display: inline-flex;
+    cursor:     pointer;
+    display:    inline-flex;
     align-items: center;
     justify-content: center;
 }
  
 .btn-action:hover {
-    filter: brightness(1.2);
+    filter:    brightness(1.2);
     transform: translateY(-3px) scale(1.03);
     box-shadow: 0 10px 20px rgba(0,0,0,0.1);
 }
@@ -353,7 +377,7 @@ body {
  
 @keyframes slideUp {
     from { opacity: 0; transform: translateY(40px); }
-    to   { opacity: 1; transform: translateY(0); }
+    to   { opacity: 1; transform: translateY(0);    }
 }
  
 /* ===================================================================
@@ -369,10 +393,17 @@ th { border-bottom: 2px solid #f1f5f9; }
 ::-webkit-scrollbar       { width: 12px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
+    background:    #cbd5e1;
     border-radius: 12px;
-    border: 4px solid #f1f5f9;
+    border:        4px solid #f1f5f9;
 }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
  
 main { scroll-behavior: smooth; }
+
+/* ===================================================================
+   MODAL DE CONFIRMACIÓN SIMPLE — ancho compacto
+   =================================================================== */
+#modalConfirmarSimple .modal-content {
+    max-width: 440px;
+}

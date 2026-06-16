@@ -1,3 +1,7 @@
+
+    /* REDISEÑO PREMIUM: PORTAL DEL PACIENTE 
+       Estética unificada con el panel de Especialista 
+    */
     :root {
         --primary-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
         --accent-blue: #38bdf8;
@@ -12,12 +16,12 @@
     }
 
     /* SIDEBAR: Profundidad y elegancia */
-    .sidebar { 
-        background: var(--primary-gradient); 
-        width: 280px; 
-        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        border-right: 1px solid rgba(255,255,255,0.05);
-    }
+    .sidebar {
+    /* Reemplaza o asegúrate de que tenga esto: */
+    background-color: #111827; /* El color oscuro exacto de tu diseño (ej: slate-900 o gray-900) */
+    min-h-screen: 100vh;
+    display: flex;
+    flex-direction: column;
 
     /* Estilos específicos para el nuevo Logo Dinámico */
     .logo-container {
@@ -237,4 +241,4 @@
         border-color: #38bdf8;
         background-color: white;
         box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.1);
-    }
+    }}

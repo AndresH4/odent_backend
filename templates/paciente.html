@@ -3,77 +3,479 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel del Paciente - Sistema de Salud</title>
+    <title>Panel del Paciente - Stylo Dental Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../css/paciente.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/paciente.css') }}">
+    <style>
+        /* ===================================================================
+           ESTILOS UNIFICADOS — PORTAL DEL PACIENTE
+           Sincronizado con especialista.css (Stylo Dental Pro v2.5)
+           Misma paleta, tipografía, bordes y transiciones.
+           REGLA: No se toca ningún ID del DOM que use paciente.js
+        =================================================================== */
+ 
+        :root {
+            --primary: #0284c7;
+            --primary-dark: #0369a1;
+            --accent: #38bdf8;
+            --bg-main: #f1f5f9;
+            --sidebar-grad: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+            --card-shadow: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.05);
+            --transition-section: 0.35s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+ 
+        body {
+            background-color: var(--bg-main);
+            font-family: 'Open Sans', sans-serif;
+            overflow-x: hidden;
+            min-height: 100vh;
+            color: #1e293b;
+        }
+ 
+        /* ---- SIDEBAR ---- */
+        .sidebar {
+            background: var(--sidebar-grad);
+            width: 280px;
+            min-height: 100vh;
+            height: 100vh;
+            position: sticky;
+            top: 0;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            border-right: 1px solid rgba(255,255,255,0.05);
+        }
+ 
+        /* ---- LOGO ---- */
+        .logo-container {
+            border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+            padding: 36px 28px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+ 
+        .logo-icon {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+            box-shadow: 0 0 30px rgba(2, 132, 199, 0.35);
+        }
+ 
+        .logo-text-main {
+            font-size: 1.875rem;
+            font-weight: 900;
+            font-style: italic;
+            letter-spacing: -0.05em;
+            color: #38bdf8;
+        }
+ 
+        .logo-text-dental { color: white; }
+ 
+        .logo-subtext {
+            font-size: 10px;
+            color: #475569;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.3em;
+            margin-top: 6px;
+        }
+ 
+        /* ---- NAV BUTTONS — idénticos al especialista ---- */
+        .nav-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 18px;
+            border-radius: 18px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 700;
+            color: #94a3b8;
+            border: none;
+            cursor: pointer;
+            text-align: left;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 10px;
+            background: transparent;
+        }
+ 
+        .nav-btn:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--accent);
+            transform: translateX(10px);
+        }
+ 
+        .nav-btn.active {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            box-shadow: 0 15px 25px -5px rgba(2, 132, 199, 0.4);
+        }
+ 
+        .nav-btn.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            width: 5px;
+            height: 24px;
+            background: var(--accent);
+            border-radius: 0 5px 5px 0;
+            box-shadow: 0 0 15px var(--accent);
+        }
+ 
+        /* ---- RELOJ — idéntico al especialista ---- */
+        .clock-widget {
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 32px;
+            padding: 28px;
+            margin: 20px;
+            backdrop-filter: blur(12px);
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+ 
+        #reloj {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.8rem;
+            letter-spacing: -2px;
+            background: linear-gradient(to right, #38bdf8, #818cf8, #38bdf8);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+            animation: textShine 4s linear infinite;
+            text-align: center;
+        }
+ 
+        @keyframes textShine { to { background-position: 200% center; } }
+ 
+        /* ---- TARJETAS ESTADÍSTICAS ---- */
+        .card-stats {
+            background: #ffffff;
+            border-radius: 35px;
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: var(--card-shadow);
+            cursor: default;
+            position: relative;
+            overflow: hidden;
+        }
+ 
+        .card-stats:hover {
+            transform: translateY(-15px);
+            box-shadow: 0 30px 45px -15px rgba(0,0,0,0.1);
+            border-color: var(--primary);
+        }
+ 
+        /* ---- STATUS BADGES ---- */
+        .status-agendada {
+            background-color: #f0fdf4;
+            color: #15803d;
+            padding: 8px 18px;
+            border-radius: 30px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            border: 1px solid #dcfce7;
+            display: inline-flex;
+            align-items: center;
+            text-transform: uppercase;
+        }
+ 
+        .status-cancelada {
+            background-color: #fff1f2;
+            color: #be123c;
+            padding: 8px 18px;
+            border-radius: 30px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            border: 1px solid #fecdd3;
+            display: inline-flex;
+            align-items: center;
+            text-transform: uppercase;
+        }
+ 
+        .status-multa {
+            background-color: #fff7ed;
+            color: #c2410c;
+            padding: 8px 18px;
+            border-radius: 30px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            border: 1px solid #ffedd5;
+            display: inline-flex;
+            align-items: center;
+            text-transform: uppercase;
+        }
+ 
+        /* ---- MODALES ---- */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.8);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(20px);
+            padding: 30px;
+        }
+ 
+        .modal-overlay.flex { display: flex; animation: modalFade 0.5s cubic-bezier(0.23, 1, 0.32, 1); }
+ 
+        @keyframes modalFade {
+            from { opacity: 0; transform: translateY(30px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+ 
+        .modal-content {
+            background: #ffffff;
+            width: 100%;
+            max-width: 600px;
+            border-radius: 45px;
+            max-height: 92vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 40px 80px -20px rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.5);
+        }
+ 
+        /* ---- INPUTS ---- */
+        .input-dental {
+            width: 100%;
+            padding: 16px 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 18px;
+            outline: none;
+            transition: all 0.3s ease;
+            font-size: 15px;
+            background: #f8fafc;
+            color: #1e293b;
+            font-weight: 600;
+        }
+ 
+        .input-dental:focus {
+            border-color: var(--primary);
+            background-color: #ffffff;
+            box-shadow: 0 0 0 6px rgba(2, 132, 199, 0.1);
+            transform: scale(1.01);
+        }
+ 
+        /* ---- LABELS / DATA ---- */
+        .data-label {
+            font-size: 11px;
+            font-weight: 800;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            margin-bottom: 6px;
+            display: block;
+        }
+ 
+        .data-value {
+            font-size: 15px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 16px;
+            padding: 14px 18px;
+            background: #f1f5f9;
+            border-radius: 16px;
+            border-left: 5px solid var(--primary);
+        }
+ 
+        /* ---- AVATAR ---- */
+        #avatar-letras {
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 10px 15px -3px rgba(56, 189, 248, 0.3);
+        }
+ 
+        #avatar-letras:hover {
+            transform: rotate(5deg) scale(1.1);
+            box-shadow: 0 20px 25px -5px rgba(56, 189, 248, 0.4);
+        }
+ 
+        /* ---- BOTONES DE ACCIÓN ---- */
+        .btn-action {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+ 
+        .btn-action:hover {
+            filter: brightness(1.2);
+            transform: translateY(-3px) scale(1.03);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+ 
+        .btn-action:active { transform: scale(0.95); }
+ 
+        /* ---- TABLAS ---- */
+        tr { transition: all 0.3s ease; }
+        tr:hover td { background-color: rgba(2, 132, 199, 0.02); }
+        th { border-bottom: 2px solid #f1f5f9; }
+ 
+        /* ---- ANIMACIONES ---- */
+        .animate-in {
+            animation: slideUp 0.6s cubic-bezier(0.23, 1, 0.32, 1) both;
+        }
+ 
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(40px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+ 
+        /* Ocultar/mostrar vistas (sin colisionar con Tailwind) */
+        .seccion-oculta { display: none !important; }
+        .seccion-visible {
+            display: block !important;
+            animation: slideUp 0.45s cubic-bezier(0.23, 1, 0.32, 1) both;
+        }
+ 
+        /* ---- SCROLLBAR ---- */
+        ::-webkit-scrollbar       { width: 12px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 12px;
+            border: 4px solid #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+ 
+        main { scroll-behavior: smooth; }
+    </style>
 </head>
 <body class="flex min-h-screen">
-
-    <aside class="sidebar text-white hidden md:flex flex-col flex-shrink-0 shadow-2xl">
+ 
+    <!-- ================================================================
+         SIDEBAR — h-screen sticky, fondo oscuro, misma estética del Especialista
+    ================================================================ -->
+    <aside class="sidebar hidden md:flex flex-col text-white shadow-2xl">
+ 
+        <!-- Logo -->
         <div class="logo-container">
-            <div class="logo-icon shadow-sky-500/20 shadow-lg">
+            <div class="logo-icon">
                 <i class="fas fa-tooth text-3xl text-white"></i>
             </div>
             <h2 class="logo-text-main">STYLO<span class="logo-text-dental">DENTAL</span></h2>
             <p class="logo-subtext">Portal del Paciente</p>
         </div>
-
-        <nav class="flex-grow p-6 space-y-3 mt-4">
-            <button id="btn-inicio" onclick="cambiarVista('inicio')" class="nav-btn active"><i class="fas fa-home w-5"></i> Inicio</button>
-            <button onclick="window.open('agendar.html', '_blank')" class="nav-btn"><i class="fas fa-calendar-plus w-5"></i> Agendar Cita</button>
-            <button id="btn-historial" onclick="cambiarVista('historial')" class="nav-btn"><i class="fas fa-history w-5"></i> Historial de Citas</button>
+ 
+        <!-- Navegación -->
+        <nav class="flex-grow p-6 space-y-2 mt-4">
+            <button
+                id="btn-inicio"
+                onclick="cambiarVista('inicio')"
+                class="nav-btn active">
+                <i class="fas fa-home w-5 text-center"></i>
+                Panel de Control
+            </button>
+ 
+            <button
+                onclick="window.open('agendar.html', '_blank')"
+                class="nav-btn">
+                <i class="fas fa-calendar-plus w-5 text-center"></i>
+                Agendar Cita
+            </button>
+ 
+            <button
+                id="btn-historial"
+                onclick="cambiarVista('historial')"
+                class="nav-btn">
+                <i class="fas fa-history w-5 text-center"></i>
+                Historial de Citas
+            </button>
         </nav>
-
-        <div class="clock-widget text-center">
+ 
+        <!-- Reloj -->
+        <div class="clock-widget">
             <div id="reloj">00:00:00</div>
-            <div class="mt-1 text-[9px] text-slate-500 font-bold italic">Sincronizado con Stylo Dental</div>
+            <div class="mt-2 text-[9px] text-slate-500 font-bold italic tracking-widest">Sincronizado con Stylo Dental</div>
         </div>
-
+ 
+        <!-- Cerrar sesión -->
         <div class="p-6 border-t border-slate-800">
-            <button onclick="mostrarConfirmacionSimple('¿Desea cerrar sesión?', 'salir')" class="w-full flex items-center justify-center gap-3 p-3 text-red-400 hover:bg-red-900/20 rounded-lg font-bold transition-all"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</button>
+            <button
+                onclick="mostrarConfirmacionSimple('¿Desea cerrar sesión?', 'salir')"
+                class="w-full flex items-center justify-center gap-3 p-4 text-red-400 hover:bg-red-900/20 rounded-2xl font-black transition-all text-sm uppercase tracking-widest">
+                <i class="fas fa-sign-out-alt"></i>
+                Cerrar Sesión
+            </button>
         </div>
     </aside>
-
+ 
+    <!-- ================================================================
+         CONTENIDO PRINCIPAL
+    ================================================================ -->
     <main class="flex-grow p-10 overflow-y-auto">
-    <header class="flex justify-between items-center mb-10 border-b border-slate-200 pb-6">
-    <div>
-        <h1 id="titulo-principal" class="text-3xl font-black text-slate-800 tracking-tight">Panel de Control</h1>
-        <p class="text-slate-500 font-bold uppercase text-xs tracking-widest mt-1">
-            Bienvenido de nuevo, <span id="nombre-usuario" class="text-sky-600">Paciente</span>
-        </p>
-    </div>
-    
-    <!-- Contenedor que agrupa el avatar y el botón -->
-    <div class="flex items-center gap-4">
-        <div onclick="abrirModalPerfil()" class="cursor-pointer w-14 h-14 bg-sky-100 rounded-2xl flex items-center justify-center text-sky-700 font-black border-2 border-sky-500 shadow-xl shadow-sky-100 uppercase" id="avatar-letras">JD</div>
-        
-        <!-- Botón de Cerrar Sesión -->
-        <button onclick="cerrarSesion()" class="text-slate-400 hover:text-red-600 font-bold text-xs uppercase tracking-widest transition-colors">
-            Salir
-        </button>
-    </div>
-    </header>
-
+ 
+        <!-- Cabecera -->
+        <header class="flex justify-between items-center mb-10 border-b border-slate-200 pb-6">
+            <div class="animate-in">
+                <h1 id="titulo-principal" class="text-3xl font-black text-slate-800 tracking-tight">Panel de Control</h1>
+                <p class="text-slate-500 font-bold uppercase text-xs tracking-widest mt-2">
+                    Bienvenido de nuevo,
+                    <span id="nombre-usuario" class="text-sky-600">Paciente</span>
+                </p>
+            </div>
+ 
+            <!-- Avatar interactivo -->
+            <div
+                id="avatar-letras"
+                onclick="abrirModalPerfil()"
+                class="w-14 h-14 bg-sky-600 rounded-2xl flex items-center justify-center text-white font-black border-2 border-sky-400 shadow-xl shadow-sky-100 uppercase text-lg select-none">
+                JD
+            </div>
+        </header>
+ 
+        <!-- ============================================================
+             VISTA: INICIO / PANEL DE CONTROL
+        ============================================================ -->
         <div id="vista-inicio">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-                <div class="card-stats p-6 border-l-4 border-sky-500 shadow-sm">
+ 
+            <!-- Tarjeta de resumen -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 animate-in">
+                <div class="card-stats p-8 border-l-4 border-sky-500">
                     <div class="flex justify-between items-center">
                         <div>
-                            <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest">Resumen Actual</p>
-                            <h3 id="count-citas" class="text-3xl font-black text-slate-800">0</h3>
+                            <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">Citas Activas</p>
+                            <h3 id="count-citas" class="text-4xl font-black text-slate-800">0</h3>
                         </div>
-                        <div class="text-sky-500 text-3xl opacity-20"><i class="fas fa-calendar-check"></i></div>
+                        <div class="text-sky-500 text-4xl opacity-15">
+                            <i class="fas fa-calendar-check"></i>
+                        </div>
                     </div>
                 </div>
             </div>
-
-            <div class="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
-                <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
-                    <h3 class="font-black text-slate-700 uppercase tracking-widest text-xs">Citas Vigentes y Recientes</h3>
-                    <button onclick="mostrarConfirmacionSimple('¿Ocultar todas las canceladas de esta vista?', 'limpiar')" class="text-[10px] text-slate-400 hover:text-red-500 font-black uppercase tracking-tighter transition-colors">Limpiar canceladas</button>
+ 
+            <!-- Tabla de citas vigentes -->
+            <div class="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden animate-in">
+                <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                    <div>
+                        <p class="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Gestión de Citas</p>
+                        <h3 class="font-black text-slate-700 text-sm">Citas Vigentes y Recientes</h3>
+                    </div>
+                    <button
+                        onclick="mostrarConfirmacionSimple('¿Ocultar todas las canceladas de esta vista?', 'limpiar')"
+                        class="text-[10px] text-slate-400 hover:text-red-500 font-black uppercase tracking-widest transition-colors border border-slate-200 hover:border-red-200 px-4 py-2 rounded-xl">
+                        <i class="fas fa-broom mr-1"></i> Limpiar canceladas
+                    </button>
                 </div>
+ 
                 <div class="overflow-x-auto">
                     <table class="w-full text-left min-w-[1100px]">
                         <thead class="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
@@ -88,24 +490,37 @@
                         </thead>
                         <tbody id="tabla-citas-body" class="text-sm text-slate-600 divide-y divide-slate-100"></tbody>
                     </table>
-                    <div id="no-citas-msg" class="p-20 text-center text-slate-400 font-bold italic uppercase text-xs hidden">No hay registros vigentes.</div>
+ 
+                    <div id="no-citas-msg" class="p-20 text-center text-slate-400 font-bold italic uppercase text-xs hidden">
+                        <i class="fas fa-calendar-xmark text-4xl mb-4 block opacity-30"></i>
+                        No hay registros vigentes.
+                    </div>
                 </div>
             </div>
         </div>
-
+ 
+        <!-- ============================================================
+             VISTA: HISTORIAL COMPLETO
+        ============================================================ -->
         <div id="vista-historial" class="hidden">
-            <div class="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
+            <div class="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden animate-in">
                 <div class="p-6 border-b border-slate-100 bg-slate-900 text-white flex justify-between items-center">
-                    <h3 class="font-black uppercase tracking-widest text-xs">Historial Cronológico de Citas (Permanente)</h3>
-                    <span class="text-[9px] bg-sky-500 px-2 py-1 rounded">Los registros aquí no se eliminan</span>
+                    <div>
+                        <p class="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">Registro Permanente</p>
+                        <h3 class="font-black uppercase tracking-widest text-sm">Historial Cronológico de Citas</h3>
+                    </div>
+                    <span class="text-[9px] bg-sky-500 px-3 py-1.5 rounded-full font-black uppercase tracking-widest">
+                        Sin eliminaciones
+                    </span>
                 </div>
+ 
                 <div class="overflow-x-auto">
                     <table class="w-full text-left min-w-[1100px]">
-                        <thead class="bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-200">
+                        <thead class="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
                             <tr>
                                 <th class="p-5">Fecha</th>
                                 <th class="p-5">Especialidad</th>
-                                <th class="p-5">Médico/Servicio</th>
+                                <th class="p-5">Médico / Servicio</th>
                                 <th class="p-5">Estado Histórico</th>
                                 <th class="p-5 text-center">Detalles</th>
                             </tr>
@@ -115,40 +530,89 @@
                 </div>
             </div>
         </div>
+ 
     </main>
-
+ 
+    <!-- ================================================================
+         MODAL: PERFIL DEL PACIENTE
+    ================================================================ -->
     <div id="modalPerfil" class="modal-overlay">
         <div class="modal-content shadow-2xl">
-            <div class="bg-slate-900 p-8 text-center text-white relative">
-                <button onclick="cerrarModalPerfil()" class="absolute right-6 top-6 text-slate-500 hover:text-white transition-colors"><i class="fas fa-times text-xl"></i></button>
-                <div class="w-20 h-20 bg-sky-600 rounded-3xl mx-auto mb-4 flex items-center justify-center text-3xl font-black shadow-lg" id="perfil-avatar-grande">PA</div>
+            <div class="bg-slate-900 p-8 text-center text-white relative rounded-t-[45px]">
+                <button
+                    onclick="cerrarModalPerfil()"
+                    class="absolute right-6 top-6 text-slate-500 hover:text-white transition-colors w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-800">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+                <div
+                    id="perfil-avatar-grande"
+                    class="w-20 h-20 bg-sky-600 rounded-3xl mx-auto mb-4 flex items-center justify-center text-3xl font-black shadow-lg shadow-sky-900/50">
+                    PA
+                </div>
                 <h3 class="font-black text-xl uppercase tracking-widest">Información Personal</h3>
-                <p class="text-sky-400 text-[10px] font-bold uppercase mt-1">Stylo Dental - Registro Oficial</p>
+                <p class="text-sky-400 text-[10px] font-bold uppercase mt-1 tracking-widest">Stylo Dental — Registro Oficial</p>
             </div>
+ 
             <div class="p-8 grid grid-cols-2 gap-6">
-                <div><p class="data-label">Nombre(s)</p><p id="perfil-nombres" class="data-value uppercase">---</p></div>
-                <div><p class="data-label">Apellido(s)</p><p id="perfil-apellidos" class="data-value uppercase">---</p></div>
-                <div><p class="data-label">Tipo de Documento</p><p id="perfil-tipoDoc" class="data-value uppercase">---</p></div>
-                <div><p class="data-label">Número de Documento</p><p id="perfil-numDoc" class="data-value font-black">---</p></div>
-                <div><p class="data-label">Fecha de Nacimiento</p><p id="perfil-nacimiento" class="data-value">---</p></div>
-                <div><p class="data-label">Correo Electrónico</p><p id="perfil-correo" class="data-value italic text-sky-700">---</p></div>
-                
-                <div class="col-span-2 pt-6 border-t border-slate-100 flex gap-4">
-                    <button onclick="abrirConfiguracion()" class="flex-1 bg-sky-50 text-sky-600 py-4 rounded-xl font-black hover:bg-sky-100 transition-all uppercase text-[10px] tracking-[0.15em] border border-sky-100"><i class="fas fa-cog mr-2"></i> Configuración</button>
-                    <button onclick="cerrarModalPerfil()" class="flex-1 bg-slate-100 text-slate-600 py-4 rounded-xl font-black hover:bg-slate-200 transition-all uppercase text-[10px] tracking-[0.15em]">Cerrar</button>
+                <div>
+                    <span class="data-label">Nombre(s)</span>
+                    <p id="perfil-nombres" class="data-value uppercase">---</p>
+                </div>
+                <div>
+                    <span class="data-label">Apellido(s)</span>
+                    <p id="perfil-apellidos" class="data-value uppercase">---</p>
+                </div>
+                <div>
+                    <span class="data-label">Tipo de Documento</span>
+                    <p id="perfil-tipoDoc" class="data-value uppercase">---</p>
+                </div>
+                <div>
+                    <span class="data-label">Número de Documento</span>
+                    <p id="perfil-numDoc" class="data-value font-black">---</p>
+                </div>
+                <div>
+                    <span class="data-label">Fecha de Nacimiento</span>
+                    <p id="perfil-nacimiento" class="data-value">---</p>
+                </div>
+                <div>
+                    <span class="data-label">Correo Electrónico</span>
+                    <p id="perfil-correo" class="data-value italic text-sky-700">---</p>
+                </div>
+ 
+                <!-- ACCIONES DEL PERFIL: Modificado para replicar comportamiento de Especialista -->
+                <div class="col-span-2 pt-6 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
+                    <button
+                        onclick="abrirConfiguracion()"
+                        class="flex-1 bg-sky-50 text-sky-700 py-4 rounded-2xl font-black hover:bg-sky-100 transition-all uppercase text-[10px] tracking-widest border border-sky-100">
+                        <i class="fas fa-user-edit mr-2"></i> Actualizar Datos
+                    </button>
+                    <button
+                        onclick="mostrarConfirmacionSimple('¿Desea cerrar sesión?', 'salir')"
+                        class="flex-1 bg-red-50 text-red-600 py-4 rounded-2xl font-black hover:bg-red-100 transition-all uppercase text-[10px] tracking-widest border border-red-100">
+                        <i class="fas fa-sign-out-alt mr-2"></i> Cerrar Sesión
+                    </button>
+                    <button
+                        onclick="cerrarModalPerfil()"
+                        class="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">
+                        Regresar
+                    </button>
                 </div>
             </div>
         </div>
     </div>
-
+ 
+    <!-- ================================================================
+         MODAL: CONFIGURACIÓN DE CUENTA
+    ================================================================ -->
     <div id="modalConfig" class="modal-overlay">
         <div class="modal-content shadow-2xl overflow-y-auto max-h-[90vh]">
-            <div class="bg-sky-600 p-8 text-center text-white sticky top-0 z-10">
+            <div class="bg-gradient-to-r from-sky-600 to-sky-700 p-8 text-center text-white sticky top-0 z-10 rounded-t-[45px]">
                 <h3 class="font-black text-xl uppercase tracking-widest">Configuración de Cuenta</h3>
-                <p class="text-sky-100 text-[10px] font-bold uppercase mt-1">Seguridad y Datos Personales</p>
+                <p class="text-sky-100 text-[10px] font-bold uppercase mt-1 tracking-widest">Seguridad y Datos Personales</p>
             </div>
-            <div class="p-8 space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+ 
+            <div class="p-8 space-y-5">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
                         <label class="data-label">Correo Electrónico</label>
                         <input type="email" id="edit-correo" class="input-dental" placeholder="nuevo@correo.com">
@@ -157,15 +621,15 @@
                         <label class="data-label">Teléfono / Celular</label>
                         <input type="text" id="edit-telefono" class="input-dental" placeholder="300 000 0000">
                     </div>
-                    <div class="col-span-2">
+                    <div class="md:col-span-2">
                         <label class="data-label">Fecha de Nacimiento</label>
                         <input type="date" id="edit-nacimiento" class="input-dental">
                     </div>
                 </div>
-
-                <hr class="my-6 border-slate-100">
-                <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Cambio de Seguridad</h4>
-
+ 
+                <hr class="border-slate-100 my-2">
+                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cambio de Contraseña</p>
+ 
                 <div>
                     <label class="data-label">Nueva Contraseña</label>
                     <input type="password" id="nueva-pass" class="input-dental" placeholder="Mínimo 6 caracteres">
@@ -174,54 +638,102 @@
                     <label class="data-label">Confirmar Contraseña</label>
                     <input type="password" id="confirmar-pass" class="input-dental" placeholder="Repita la nueva contraseña">
                 </div>
-
-                <div class="flex gap-4 mt-8">
-                    <button onclick="guardarConfiguracionGeneral()" class="flex-1 bg-sky-600 text-white py-4 rounded-xl font-black hover:bg-sky-700 transition-all uppercase text-[10px] tracking-widest shadow-lg shadow-sky-100">Guardar Cambios</button>
-                    <button onclick="cerrarConfiguracion()" class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-xl font-bold hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">Cancelar</button>
+ 
+                <div class="flex gap-4 pt-4">
+                    <button
+                        onclick="guardarConfiguracionGeneral()"
+                        class="flex-1 bg-sky-600 text-white py-4 rounded-2xl font-black hover:bg-sky-700 transition-all uppercase text-[10px] tracking-widest shadow-lg shadow-sky-100">
+                        <i class="fas fa-save mr-2"></i> Guardar Cambios
+                    </button>
+                    <button
+                        onclick="cerrarConfiguracion()"
+                        class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">
+                        Cancelar
+                    </button>
                 </div>
             </div>
         </div>
     </div>
-
+ 
+    <!-- ================================================================
+         MODAL: VERIFICACIÓN DE CITA (CANCELAR)
+    ================================================================ -->
     <div id="modalCancelarCita" class="modal-overlay">
         <div class="modal-content shadow-2xl">
-            <div class="bg-slate-900 p-6 text-center">
-                <h3 class="text-white font-black uppercase tracking-[0.2em] text-xs">Verificación de la Cita</h3>
+            <div class="bg-slate-900 p-6 text-center rounded-t-[45px]">
+                <p class="text-slate-500 text-[9px] font-black uppercase tracking-widest mb-1">Gestión</p>
+                <h3 class="text-white font-black uppercase tracking-widest text-sm">Verificación de la Cita</h3>
             </div>
             <div class="p-8">
                 <div id="detalles-completos" class="grid grid-cols-2 gap-x-6 gap-y-4"></div>
                 <div class="flex gap-4 mt-10 pt-6 border-t border-slate-100">
-                    <button onclick="cerrarModalCancelar()" class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-xl font-bold hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">Regresar</button>
-                    <button onclick="solicitarConfirmacionFinal()" class="flex-1 bg-red-600 text-white py-4 rounded-xl font-black hover:bg-red-700 transition-all uppercase text-[10px] tracking-widest shadow-lg shadow-red-100">Cancelar cita</button>
+                    <button
+                        onclick="cerrarModalCancelar()"
+                        class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">
+                        Regresar
+                    </button>
+                    <button
+                        onclick="solicitarConfirmacionFinal()"
+                        class="flex-1 bg-red-600 text-white py-4 rounded-2xl font-black hover:bg-red-700 transition-all uppercase text-[10px] tracking-widest shadow-lg shadow-red-100">
+                        <i class="fas fa-ban mr-2"></i> Cancelar cita
+                    </button>
                 </div>
             </div>
         </div>
     </div>
-
+ 
+    <!-- ================================================================
+         MODAL: CONFIRMACIÓN FINAL (CANCELAR CITA)
+    ================================================================ -->
     <div id="modalConfirmacionFinal" class="modal-overlay">
         <div class="modal-content p-10 text-center border-t-8 border-red-600">
-            <div class="text-red-600 text-5xl mb-6"><i class="fas fa-exclamation-triangle"></i></div>
-            <h3 class="text-slate-800 font-black text-2xl mb-2 italic tracking-tighter">¿ESTÁ COMPLETAMENTE SEGURO?</h3>
-            <p class="text-slate-500 text-xs mb-8 font-bold uppercase tracking-widest">Esta acción marcará su cita como <span class="text-red-600">CANCELADA</span> definitivamente.</p>
+            <div class="text-red-500 text-6xl mb-6">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <h3 class="text-slate-800 font-black text-2xl mb-3 italic tracking-tighter">¿ESTÁ COMPLETAMENTE SEGURO?</h3>
+            <p class="text-slate-500 text-xs mb-8 font-bold uppercase tracking-widest">
+                Esta acción marcará su cita como
+                <span class="text-red-600 font-black">CANCELADA</span> definitivamente.
+            </p>
             <div class="flex flex-col gap-3">
-                <button onclick="confirmarAccionCancelado()" class="w-full bg-red-600 text-white py-4 rounded-2xl font-black hover:bg-red-700 transition-all uppercase text-sm tracking-[0.2em]">SÍ, CANCELAR MI CITA</button>
-                <button onclick="cerrarConfirmacionFinal()" class="w-full bg-slate-100 text-slate-500 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">No, deseo mantenerla</button>
+                <button
+                    onclick="confirmarAccionCancelado()"
+                    class="w-full bg-red-600 text-white py-4 rounded-2xl font-black hover:bg-red-700 transition-all uppercase text-sm tracking-widest">
+                    Sí, cancelar mi cita
+                </button>
+                <button
+                    onclick="cerrarConfirmacionFinal()"
+                    class="w-full bg-slate-100 text-slate-500 py-3 rounded-2xl font-bold hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">
+                    No, deseo mantenerla
+                </button>
             </div>
         </div>
     </div>
-
+ 
+    <!-- ================================================================
+         MODAL: CONFIRMACIÓN SIMPLE (CERRAR SESIÓN / LIMPIAR)
+    ================================================================ -->
     <div id="modalConfirmarSimple" class="modal-overlay">
         <div class="modal-content p-10 text-center border-t-8 border-sky-600">
-            <div id="icon-simple" class="text-sky-500 text-5xl mb-6"><i class="fas fa-question-circle"></i></div>
+            <div id="icon-simple" class="text-sky-500 text-6xl mb-6">
+                <i class="fas fa-question-circle"></i>
+            </div>
             <h3 id="confirm-text-simple" class="text-slate-800 font-black text-xl mb-8 uppercase tracking-tighter italic"></h3>
             <div class="flex gap-4">
-                <button onclick="ejecutarAccionSimple()" class="flex-1 bg-sky-600 text-white py-4 rounded-2xl font-black hover:bg-sky-700 transition-all text-xs uppercase tracking-widest">Confirmar</button>
-                <button onclick="cerrarModalSimple()" class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all text-xs uppercase tracking-widest">Cerrar</button>
+                <button
+                    onclick="ejecutarAccionSimple()"
+                    class="flex-1 bg-sky-600 text-white py-4 rounded-2xl font-black hover:bg-sky-700 transition-all text-xs uppercase tracking-widest">
+                    Confirmar
+                </button>
+                <button
+                    onclick="cerrarModalSimple()"
+                    class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all text-xs uppercase tracking-widest">
+                    Cancelar
+                </button>
             </div>
         </div>
     </div>
-
-<script src="{{ url_for('static', filename='js/seguridad.js') }}"></script>
-
+ 
+    <script src="{{ url_for('static', filename='js/paciente.js') }}"></script>
 </body>
 </html>

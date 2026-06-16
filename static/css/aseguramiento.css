@@ -52,6 +52,24 @@ button:disabled {
     /* La clase y visibilidad son controladas 100% desde JS.
        Solo definimos la transición de aparición. */
     animation: fadeIn 0.3s ease;
+    text-align: center;
+    font-weight: 600;
+    font-size: 13px;
+    margin-top: 16px;
+    padding: 12px 16px;
+    border-radius: 10px;
+}
+ 
+#mensaje-global.exito {
+    color: #059669;
+    background: linear-gradient(135deg, #d1fae5, #ecfdf5);
+    border: 1px solid #a7f3d0;
+}
+ 
+#mensaje-global.error {
+    color: #dc2626;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
 }
  
 @keyframes fadeIn {
@@ -63,4 +81,13 @@ button:disabled {
 .eps-section-divider {
     border-top: 1px dashed #bfdbfe;
     margin: 0.5rem 0;
+}
+ 
+/* ── Botones de acción del módulo de aseguramiento ──────────────────────────
+   Hereda exactamente el mismo lenguaje visual de creacion.css (gradiente azul,
+   radius 10px, sombra) en lugar de definir un estilo Tailwind paralelo. Como
+   creacion.css ya estiliza el selector global `button`, aquí solo se ajusta
+   el espaciado para que dos botones convivan en .form-row sin romper el grid. */
+.btn-accion {
+    margin-top: 0;
 }
