@@ -1,175 +1,261 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Agendamiento de citas</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../css/agendar.css">
-</head>
-<body class="p-6">
+from flask import Blueprint, request, jsonify
+from db import get_db_connection
 
-    <div class="max-w-6xl mx-auto mb-6">
-        <button onclick="cerrarVentanaYVolver()" class="bg-[#2a3b4c] text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 shadow-md hover:bg-[#1e2a36] transition-all">
-            <i class="fas fa-times"></i> LIMPIAR Y VOLVER
-        </button>
-    </div>
+citas_bp = Blueprint('citas_bp', __name__)
 
-    <div class="max-w-6xl mx-auto card-container overflow-hidden">
-        <header class="bg-gradient-to-r from-[#1d4ed8] to-[#2563eb] p-6 text-center">
-            <h1 class="text-white text-2xl font-extrabold italic tracking-tight">Sistema de Agendamiento de citas</h1>
-        </header>
+# ─────────────────────────────────────────────
+# UTILIDADES
+# ─────────────────────────────────────────────
 
-        <main class="p-8 md:p-12">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
-                <section>
-                    <div class="flex items-center gap-3 mb-6">
-                        <span class="bg-[#0891b2] text-white w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shadow-md">1</span>
-                        <h2 class="text-[#334155] font-bold text-lg border-b-2 border-cyan-100 flex-grow pb-1 uppercase">Información del Paciente</h2>
-                    </div>
-                    <div class="section-bg space-y-5">
-                        <div>
-                            <label class="label-style">1. NOMBRES</label>
-                            <input type="text" id="nombre" placeholder="Ingrese sus nombres" class="input-field" required>
-                            <p id="err-nombre" class="error-msg">⚠ Este campo es obligatorio.</p>
-                        </div>
-                        <div>
-                            <label class="label-style">2. APELLIDOS</label>
-                            <input type="text" id="apellido" placeholder="Ingrese sus apellidos" class="input-field" required>
-                            <p id="err-apellido" class="error-msg">⚠ Este campo es obligatorio.</p>
-                        </div>
-                        <div>
-                            <label class="label-style">3. TIPO DE DOCUMENTO</label>
-                            <select id="tipo-doc" class="input-field" required>
-                                <option value="" disabled selected>Seleccione la opción de documento</option>
-                                <option>Cédula de ciudadanía</option>
-                                <option>Tarjeta de identidad</option>
-                                <option>Registro civil</option>
-                                <option>Cédula de extranjería</option>
-                            </select>
-                            <p id="err-tipo-doc" class="error-msg">⚠ Este campo es obligatorio.</p>
-                        </div>
-                        <div>
-                            <label class="label-style">4. NÚMERO DE DOCUMENTO</label>
-                            <input type="text" id="num-doc" maxlength="10" oninput="this.value=this.value.replace(/[^0-9]/g,'')" placeholder="Ingrese su número de documento" class="input-field" required>
-                            <p id="err-num-doc" class="error-msg">⚠ Este campo es obligatorio.</p>
-                        </div>
-                        <div>
-                            <label class="label-style">5. TELÉFONO</label>
-                            <input type="text" id="telefono" maxlength="10" oninput="this.value=this.value.replace(/[^0-9]/g,'')" placeholder="Ingrese su número de teléfono" class="input-field" required>
-                            <p id="err-telefono" class="error-msg">⚠ Este campo es obligatorio.</p>
-                        </div>
-                        <div>
-                            <label class="label-style">6. CORREO ELECTRÓNICO</label>
-                            <input type="email" id="correo" placeholder="ejemplo@correo.com" class="input-field" required>
-                            <p id="err-correo" class="error-msg">⚠ Este campo es obligatorio.</p>
-                        </div>
-                    </div>
-                </section>
+def _rows_to_list(cursor):
+    return [dict(row) for row in cursor.fetchall()]
 
-                <section>
-                    <div class="flex items-center gap-3 mb-6">
-                        <span class="bg-[#0891b2] text-white w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shadow-md">2</span>
-                        <h2 class="text-[#334155] font-bold text-lg border-b-2 border-cyan-100 flex-grow pb-1 uppercase">Información de la Cita</h2>
-                    </div>
-                    <div class="section-bg space-y-6">
-                        <div>
-                            <label class="label-style">ESPECIALIDAD REQUERIDA</label>
-                            <select id="servicio" class="input-field" required>
-                                <option value="" disabled selected>Seleccione la especialidad</option>
-                                <option>Odontología General</option>
-                                <option>Ortodoncia</option>
-                                <option>Endodoncia Especializada</option>
-                                <option>Periodoncia</option>
-                                <option>Cirugía Oral</option>
-                                <option>Rehabilitación Integral</option>
-                                <option>Odontopediatría</option>
-                                <option>Estética Dental</option>
-                            </select>
-                            <p id="err-servicio" class="error-msg">⚠ Este campo es obligatorio.</p>
-                        </div>
-                        <div>
-                            <label class="label-style">FECHA DE LA CITA</label>
-                            <div class="date-container">
-                                <input type="date" id="fecha" class="input-field" required>
-                                <span class="custom-date-placeholder">Seleccione la fecha de la cita</span>
-                            </div>
-                            <p id="err-fecha" class="error-msg">⚠ Este campo es obligatorio.</p>
-                        </div>
-                        <div>
-                            <label class="label-style">HORA DE LA CITA</label>
-                            <select id="hora" class="input-field" required>
-                                <option value="" disabled selected>Seleccione la hora disponible</option>
-                                <option>08:00 AM</option>
-                                <option>09:30 AM</option>
-                                <option>11:00 AM</option>
-                                <option>02:00 PM</option>
-                                <option>03:30 PM</option>
-                            </select>
-                            <p id="err-hora" class="error-msg">⚠ Este campo es obligatorio.</p>
-                        </div>
-                    </div>
-                </section>
-            </div>
+def _json_ok(data, code=200):
+    return jsonify(data), code
 
-            <div class="mt-16 flex justify-center">
-                <button onclick="validarYAgendar()" class="btn-confirmar">Confirmar Agendamiento</button>
-            </div>
-        </main>
-    </div>
+def _json_error(mensaje, code=400):
+    return jsonify({"ok": False, "error": mensaje}), code
 
-    <div id="modalVerificacion" class="modal-overlay">
-        <div class="modal-content">
-            <div id="headerVerificacion" class="bg-blue-600 p-4 text-center">
-                <h3 class="text-white font-bold uppercase tracking-widest text-sm">Verificación de Datos</h3>
-            </div>
-            <div class="p-6">
-                <div id="alertaMulta" class="hidden mb-4 p-4 bg-orange-100 border-l-4 border-orange-500 text-orange-700 rounded-r">
-                    <div class="flex items-center gap-2">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <p class="text-xs font-black uppercase">Multa Pendiente Detectada</p>
-                    </div>
-                    <p class="text-[11px] mt-1 font-semibold leading-tight">Usted tiene una multa por inasistencia previa. Al confirmar esta cita, acepta que debe cancelar la multa el día de su atención.</p>
-                </div>
-                <div id="resumen" class="space-y-3 mb-6 max-h-[400px] overflow-y-auto pr-2"></div>
-                <div class="flex gap-3">
-                    <button onclick="cerrarModal()" class="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all uppercase text-xs">Modificar</button>
-                    <button id="btnFinal" onclick="finalizarTodo()" class="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all uppercase text-xs shadow-lg shadow-blue-200">Confirmar Cita</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <div id="modalBloqueo" class="modal-overlay">
-        <div class="modal-content max-w-[450px]">
-            <div class="bg-red-600 p-4 text-center">
-                <h3 class="text-white font-bold uppercase tracking-widest text-sm">Bloqueo de Seguridad</h3>
-            </div>
-            <div class="p-8 text-center">
-                <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
-                    <i class="fas fa-shield-alt"></i>
-                </div>
-                <h3 class="text-slate-800 font-extrabold text-lg mb-2">Cita Activa Detectada</h3>
-                <p id="mensajeBloqueo" class="text-slate-500 text-sm mb-6 leading-relaxed"></p>
-                <button onclick="cerrarModalBloqueo()" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-all uppercase text-xs">Entendido</button>
-            </div>
-        </div>
-    </div>
+# ─────────────────────────────────────────────
+# ESPECIALISTAS
+# ─────────────────────────────────────────────
 
-    <div id="modalExito" class="modal-overlay">
-        <div class="modal-content max-w-[400px] p-8 text-center">
-            <div class="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">
-                <i class="fas fa-check-circle"></i>
-            </div>
-            <h3 class="text-slate-800 font-extrabold text-xl mb-2">¡Cita Agendada!</h3>
-            <p id="mensajeExito" class="text-slate-500 text-sm mb-6"></p>
-            <button onclick="cerrarExitoYLimpiar()" class="bg-slate-800 text-white px-6 py-2 rounded-lg font-bold uppercase text-xs">Aceptar</button>
-        </div>
-    </div>
+@citas_bp.route('/api/especialistas', methods=['GET'])
+def get_especialistas():
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
 
-<script src="../js/agendar.js"></script>
+        cur.execute("""
+            SELECT
+                e.Especialista_ID,
+                u.Nombres || ' ' || u.Apellidos AS NombreCompleto,
+                GROUP_CONCAT(esp.Nombre_Especialidad, ', ') AS Especialidades,
+                e.Tarjeta_Profesional
+            FROM especialistas e
+            JOIN usuarios u ON u.Usuario_ID = e.Usuario_ID
+            LEFT JOIN especialista_especialidad ee 
+                ON ee.Especialista_ID = e.Especialista_ID
+            LEFT JOIN especialidad esp 
+                ON esp.Especialidad_ID = ee.Especialidad_ID
+            GROUP BY e.Especialista_ID
+        """)
 
-</body>
-</html>
+        return _json_ok(_rows_to_list(cur))
+
+    except Exception as exc:
+        return _json_error(str(exc), 500)
+    finally:
+        if con:
+            con.close()
+
+
+# ─────────────────────────────────────────────
+# AGENDA
+# ─────────────────────────────────────────────
+
+@citas_bp.route('/api/agenda', methods=['GET'])
+def get_agenda():
+    esp_id = request.args.get('especialista_id')
+    fecha  = request.args.get('fecha')
+
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+
+        sql = """
+            SELECT
+                a.Agenda_ID,
+                a.Especialista_ID,
+                a.Fecha,
+                a.Hora_Inicio,
+                a.Hora_Fin,
+                ea.Nombre_Estado AS EstadoAgenda,
+                esp.Nombre_Especialidad,
+                u.Nombres || ' ' || u.Apellidos AS NombreEspecialista
+            FROM agenda a
+            JOIN estado_agenda ea 
+                ON ea.Estado_ID = a.Estado_ID
+            JOIN especialistas e 
+                ON e.Especialista_ID = a.Especialista_ID
+            JOIN usuarios u 
+                ON u.Usuario_ID = e.Usuario_ID
+            LEFT JOIN especialista_especialidad ee 
+                ON ee.Especialista_ID = e.Especialista_ID
+            LEFT JOIN especialidad esp 
+                ON esp.Especialidad_ID = ee.Especialidad_ID
+            WHERE ea.Nombre_Estado = 'Disponible'
+        """
+
+        params = []
+
+        if esp_id:
+            sql += " AND a.Especialista_ID = ?"
+            params.append(esp_id)
+
+        if fecha:
+            sql += " AND a.Fecha = ?"
+            params.append(fecha)
+
+        sql += " ORDER BY a.Fecha, a.Hora_Inicio"
+
+        cur.execute(sql, params)
+
+        return _json_ok(_rows_to_list(cur))
+
+    except Exception as exc:
+        return _json_error(str(exc), 500)
+    finally:
+        if con:
+            con.close()
+
+
+# ─────────────────────────────────────────────
+# CITAS (LISTAR)
+# ─────────────────────────────────────────────
+
+@citas_bp.route('/api/citas', methods=['GET'])
+def get_citas():
+    paciente_id = request.args.get('paciente_id')
+
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+
+        sql = """
+            SELECT 
+                c.Cita_ID,
+                c.Motivo_Consulta,
+                a.Fecha,
+                a.Hora_Inicio,
+                a.Hora_Fin
+            FROM cita c
+            JOIN agenda a ON a.Agenda_ID = c.Agenda_ID
+            WHERE 1=1
+        """
+
+        params = []
+
+        if paciente_id:
+            sql += " AND c.Paciente_ID = ?"
+            params.append(paciente_id)
+
+        cur.execute(sql, params)
+
+        return _json_ok(_rows_to_list(cur))
+
+    except Exception as exc:
+        return _json_error(str(exc), 500)
+    finally:
+        if con:
+            con.close()
+
+
+# ─────────────────────────────────────────────
+# CREAR CITA
+# ─────────────────────────────────────────────
+
+@citas_bp.route('/api/citas', methods=['POST'])
+def crear_cita():
+    datos = request.get_json(silent=True) or {}
+
+    paciente_id = datos.get('Paciente_ID')
+    agenda_id   = datos.get('Agenda_ID')
+    motivo      = (datos.get('Motivo_Consulta') or '').strip()
+
+    if not all([paciente_id, agenda_id, motivo]):
+        return _json_error("Faltan datos obligatorios")
+
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+
+        # validar agenda
+        cur.execute("""
+            SELECT Estado_ID
+            FROM agenda
+            WHERE Agenda_ID = ?
+        """, (agenda_id,))
+
+        agenda = cur.fetchone()
+
+        if not agenda:
+            return _json_error("Agenda no existe", 404)
+
+        # validar disponibilidad
+        cur.execute("""
+            SELECT Nombre_Estado 
+            FROM estado_agenda 
+            WHERE Estado_ID = ?
+        """, (agenda["Estado_ID"],))
+
+        estado = cur.fetchone()
+
+        if not estado or estado["Nombre_Estado"] != "Disponible":
+            return _json_error("Horario no disponible")
+
+        # insertar cita
+        cur.execute("""
+            INSERT INTO cita (Paciente_ID, Agenda_ID, Motivo_Consulta)
+            VALUES (?, ?, ?)
+        """, (paciente_id, agenda_id, motivo))
+
+        # marcar ocupada
+        cur.execute("""
+            UPDATE agenda
+            SET Estado_ID = (
+                SELECT Estado_ID 
+                FROM estado_agenda 
+                WHERE Nombre_Estado = 'Ocupado'
+            )
+            WHERE Agenda_ID = ?
+        """, (agenda_id,))
+
+        con.commit()
+
+        return _json_ok({"ok": True})
+
+    except Exception as exc:
+        if con:
+            con.rollback()
+        return _json_error(str(exc), 500)
+    finally:
+        if con:
+            con.close()
+
+
+# ─────────────────────────────────────────────
+# MULTA ACTIVA
+# ─────────────────────────────────────────────
+
+@citas_bp.route('/api/paciente/<int:paciente_id>/multa-activa', methods=['GET'])
+def multa_activa(paciente_id):
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+
+        cur.execute("""
+            SELECT m.Multa_ID
+            FROM multa m
+            JOIN cita c ON m.Cita_ID = c.Cita_ID
+            JOIN estado_multa em ON m.Estado_Multa_ID = em.Estado_Multa_ID
+            WHERE c.Paciente_ID = ?
+              AND em.Nombre_Estado = 'Pendiente'
+            LIMIT 1
+        """, (paciente_id,))
+
+        row = cur.fetchone()
+
+        return _json_ok({"tiene_multa": row is not None})
+
+    except Exception as exc:
+        return _json_error(str(exc), 500)
+    finally:
+        if con:
+            con.close()
