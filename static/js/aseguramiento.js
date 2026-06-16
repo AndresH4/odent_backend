@@ -24,9 +24,21 @@ function ocultarError(el, p) {
 }
  
 // ---------------------------------------------------------------------------
+// SESIÓN — lectura flexible del usuario logueado
+// El módulo de login puede guardar la clave del ID con distintos nombres
+// según quién lo haya implementado (ID_Usuario, id_usuario, usuario_id...).
+// Esta función prueba todas las variantes conocidas para no fallar en falso.
+// ---------------------------------------------------------------------------
+function obtenerUsuarioIdDeSesion() {
+    const sesion = JSON.parse(sessionStorage.getItem('usuario') || '{}');
+    return sesion.ID_Usuario || sesion.id_usuario || sesion.usuario_id || sesion.Usuario_ID || null;
+}
+ 
+// ---------------------------------------------------------------------------
 // CARGA DINÁMICA DE SELECTORES AL INICIAR LA PÁGINA
-// Llama a GET /api/tipo-eps  → rellena #tipo-eps-select
-// Llama a GET /api/eps       → guarda todas las EPS para filtrar luego
+// Llama a GET /api/tipo-eps    → rellena #tipo-eps-select
+// Llama a GET /api/eps         → guarda todas las EPS para filtrar luego
+// Llama a GET /api/regimen-eps → rellena #regimen-select
 // ---------------------------------------------------------------------------
 let todasLasEPS = [];   // caché global de EPS para el filtrado por tipo
  
@@ -40,6 +52,7 @@ async function cargarTiposEPS() {
         const select = document.getElementById('tipo-eps-select');
         select.innerHTML = '<option value="" disabled selected>Seleccione el tipo de EPS</option>';
  
+        // El backend (tipo_eps.py) devuelve Nombre_Tipo como nombre de columna.
         data.data.forEach(tipo => {
             const opt = document.createElement('option');
             opt.value       = tipo.ID_Tipo_EPS;
@@ -65,6 +78,29 @@ async function cargarTodasLasEPS() {
     } catch (err) {
         console.error('[cargarTodasLasEPS]', err);
         mostrarMensajeGlobal('error', '⚠️ No se pudieron cargar las EPS. Recargue la página.');
+    }
+}
+ 
+async function cargarRegimenes() {
+    try {
+        const res  = await fetch(`${BASE_URL}/regimen-eps`);
+        const data = await res.json();
+ 
+        if (!data.ok) throw new Error(data.error || 'Error al cargar regímenes');
+ 
+        const select = document.getElementById('regimen-select');
+        select.innerHTML = '<option value="" disabled selected>Seleccione el régimen</option>';
+ 
+        // El backend (regimen_eps.py) devuelve Nombre_Regimen como nombre de columna.
+        data.data.forEach(regimen => {
+            const opt = document.createElement('option');
+            opt.value       = regimen.ID_Regimen_EPS;
+            opt.textContent = regimen.Nombre_Regimen;
+            select.appendChild(opt);
+        });
+    } catch (err) {
+        console.error('[cargarRegimenes]', err);
+        mostrarMensajeGlobal('error', '⚠️ No se pudieron cargar los regímenes. Recargue la página.');
     }
 }
  
@@ -115,9 +151,9 @@ function validarFormulario() {
         email:    [document.getElementById('correo'),         document.getElementById('err-correo')],
         dir:      [document.getElementById('direccion'),      document.getElementById('err-direccion')],
         tipo:     [document.getElementById('tipo-doc'),       document.getElementById('err-tipo-doc')],
-        // Nuevos campos
         tipoEPS:  [document.getElementById('tipo-eps-select'), document.getElementById('err-tipo-eps')],
-        eps:      [document.getElementById('eps-select'),      document.getElementById('err-eps')]
+        eps:      [document.getElementById('eps-select'),      document.getElementById('err-eps')],
+        regimen:  [document.getElementById('regimen-select'),  document.getElementById('err-regimen')]
     };
  
     let todoValido = true;
@@ -184,7 +220,7 @@ function validarFormulario() {
         ocultarError(inputs.tipo[0], inputs.tipo[1]);
     }
  
-    // ── Tipo EPS (nuevo) ──────────────────────────────────────────────────────
+    // ── Tipo EPS ──────────────────────────────────────────────────────────────
     if (!inputs.tipoEPS[0].value) {
         mostrarError(inputs.tipoEPS[0], inputs.tipoEPS[1], '⚠️ Seleccione el tipo de EPS.');
         todoValido = false;
@@ -192,7 +228,7 @@ function validarFormulario() {
         ocultarError(inputs.tipoEPS[0], inputs.tipoEPS[1]);
     }
  
-    // ── EPS (nuevo) ───────────────────────────────────────────────────────────
+    // ── EPS ───────────────────────────────────────────────────────────────────
     if (!inputs.eps[0].value) {
         mostrarError(inputs.eps[0], inputs.eps[1], '⚠️ Seleccione la EPS.');
         todoValido = false;
@@ -200,9 +236,17 @@ function validarFormulario() {
         ocultarError(inputs.eps[0], inputs.eps[1]);
     }
  
+    // ── Régimen (nuevo: antes se enviaba fijo en 1, ahora se exige y se envía) ──
+    if (!inputs.regimen[0].value) {
+        mostrarError(inputs.regimen[0], inputs.regimen[1], '⚠️ Seleccione el régimen.');
+        todoValido = false;
+    } else {
+        ocultarError(inputs.regimen[0], inputs.regimen[1]);
+    }
+ 
     // ── Términos y condiciones ────────────────────────────────────────────────
     if (!document.getElementById('terminos').checked) {
-        alert('⚠️ Debe aceptar el tratamiento de datos.');
+        mostrarMensajeGlobal('error', '⚠️ Debe aceptar el tratamiento de datos.');
         todoValido = false;
     }
  
@@ -214,14 +258,16 @@ function validarFormulario() {
 // ---------------------------------------------------------------------------
 function leerFormulario() {
     return {
-        nombre:      document.getElementById('nombre').value.trim(),
-        tipoDoc:     document.getElementById('tipo-doc').value,
-        numDoc:      document.getElementById('num-doc').value.trim(),
-        telefono:    document.getElementById('telefono').value.trim(),
-        correo:      document.getElementById('correo').value.trim(),
-        direccion:   document.getElementById('direccion').value.trim(),
-        epsId:       Number(document.getElementById('eps-select').value),
-        tipoEpsId:   Number(document.getElementById('tipo-eps-select').value),
+        nombre:         document.getElementById('nombre').value.trim(),
+        tipoDoc:        document.getElementById('tipo-doc').value,
+        numDoc:         document.getElementById('num-doc').value.trim(),
+        telefono:       document.getElementById('telefono').value.trim(),
+        correo:         document.getElementById('correo').value.trim(),
+        direccion:      document.getElementById('direccion').value.trim(),
+        epsId:          Number(document.getElementById('eps-select').value),
+        tipoEpsId:      Number(document.getElementById('tipo-eps-select').value),
+        regimenId:      Number(document.getElementById('regimen-select').value),
+        numeroAfiliado: document.getElementById('numero-afiliado').value.trim(),
     };
 }
  
@@ -239,19 +285,13 @@ function setBotonesEstado(cargando) {
  
 // ---------------------------------------------------------------------------
 // MENSAJE GLOBAL DE ÉXITO / ERROR (reemplaza el alert final)
-// Se inyecta en el div#mensaje-global que añadimos al HTML
+// Se inyecta en el div#mensaje-global definido en aseguramiento.html
 // ---------------------------------------------------------------------------
 function mostrarMensajeGlobal(tipo, texto) {
     const el = document.getElementById('mensaje-global');
     if (!el) return;
  
-    el.className = [
-        'mt-6 px-5 py-4 rounded-2xl text-sm font-bold text-center shadow-md transition-all',
-        tipo === 'exito'
-            ? 'bg-green-50 border border-green-300 text-green-800'
-            : 'bg-red-50 border border-red-300 text-red-700'
-    ].join(' ');
- 
+    el.className = tipo === 'exito' ? 'exito' : 'error';
     el.textContent = texto;
     el.style.display = 'block';
  
@@ -265,15 +305,15 @@ function mostrarMensajeGlobal(tipo, texto) {
 //   1. POST /api/paciente   → crea el registro de paciente
 //   2. POST /api/afiliacion → crea la afiliación con la EPS
 // Notas:
-//   • El campo ID_Usuario se toma de sessionStorage (si el usuario está logueado).
-//     Si no hay sesión, se usa el número de documento como identificador temporal
-//     y deberás ajustar la lógica según tu modelo de usuarios.
+//   • ID_Usuario se obtiene de sessionStorage probando varias claves posibles
+//     (ver obtenerUsuarioIdDeSesion), porque distintos módulos de login pueden
+//     nombrar el campo de forma distinta.
 //   • Fecha_Afiliacion se genera automáticamente como la fecha de hoy.
+//   • ID_Regimen_EPS ahora viene del nuevo <select id="regimen-select">,
+//     ya no se envía fijo en 1.
 // ---------------------------------------------------------------------------
 async function asegurarDatos(form) {
-    // Recupera el usuario de sesión (guardado por login.js según tu arquitectura)
-    const sesion    = JSON.parse(sessionStorage.getItem('usuario') || '{}');
-    const usuarioId = sesion.ID_Usuario || null;
+    const usuarioId = obtenerUsuarioIdDeSesion();
  
     if (!usuarioId) {
         mostrarMensajeGlobal('error', '❌ No hay sesión activa. Por favor inicie sesión antes de asegurar datos.');
@@ -283,7 +323,7 @@ async function asegurarDatos(form) {
     // ── Paso 1: Crear paciente ────────────────────────────────────────────────
     const bodyPaciente = {
         ID_Usuario: usuarioId,
-        // Estos campos son opcionales según tu routes.py; los enviamos si los tienes en el form.
+        // Estos campos son opcionales según paciente.py; los enviamos si los tienes en el form.
         // Si en el futuro añades Fecha_Nacimiento, Genero, etc., agrégalos aquí.
     };
  
@@ -309,14 +349,15 @@ async function asegurarDatos(form) {
     }
  
     // ── Paso 2: Crear afiliación ──────────────────────────────────────────────
-    // ID_Regimen_EPS: si tu formulario no lo captura aún, ajusta este valor.
-    // Por defecto se envía 1 (primer régimen). Puedes añadir un select de régimen al HTML.
+    // Las claves coinciden EXACTAMENTE con lo que routes.py extrae del body:
+    // ID_Usuario, ID_EPS, ID_Regimen_EPS, Fecha_Afiliacion, Numero_Afiliado, Estado
     const bodyAfiliacion = {
-        ID_Usuario:      usuarioId,
-        ID_EPS:          form.epsId,
-        ID_Regimen_EPS:  1,                        // ajusta o añade campo al formulario
+        ID_Usuario:       usuarioId,
+        ID_EPS:           form.epsId,
+        ID_Regimen_EPS:   form.regimenId,
         Fecha_Afiliacion: new Date().toISOString().split('T')[0],  // "YYYY-MM-DD"
-        Estado:          'Activo'
+        Numero_Afiliado:  form.numeroAfiliado || null,
+        Estado:           'Activo'
     };
  
     try {
@@ -331,6 +372,12 @@ async function asegurarDatos(form) {
             mostrarMensajeGlobal('error', `❌ Paciente registrado (ID: ${pacienteId}) pero hubo un error en la afiliación: ${dataAfiliacion.error}`);
             return;
         }
+ 
+        // Guarda IDs en sesión para que actualizarDatos() los encuentre después
+        const sesion = JSON.parse(sessionStorage.getItem('usuario') || '{}');
+        sesion.id_paciente   = pacienteId;
+        sesion.id_afiliacion = dataAfiliacion.data.ID_Afiliacion;
+        sessionStorage.setItem('usuario', JSON.stringify(sesion));
  
         mostrarMensajeGlobal('exito', `✅ Datos asegurados correctamente. Paciente #${pacienteId} afiliado a la EPS seleccionada.`);
     } catch (err) {
@@ -347,12 +394,12 @@ async function asegurarDatos(form) {
 //   3. PUT /api/afiliacion/<id> → actualiza la afiliación (EPS) si aplica
 // ---------------------------------------------------------------------------
 async function actualizarDatos(form) {
-    const sesion      = JSON.parse(sessionStorage.getItem('usuario') || '{}');
-    const pacienteId  = sesion.id_paciente  || null;
-    const afiliacionId = null;   // Si almacenas el ID de afiliación en sesión, úsalo aquí.
+    const sesion       = JSON.parse(sessionStorage.getItem('usuario') || '{}');
+    const pacienteId   = sesion.id_paciente   || null;
+    const afiliacionId = sesion.id_afiliacion || null;
  
     if (!pacienteId) {
-        mostrarMensajeGlobal('error', '❌ No se encontró el ID del paciente en la sesión. ¿Ha iniciado sesión?');
+        mostrarMensajeGlobal('error', '❌ No se encontró el ID del paciente en la sesión. Use primero "Asegurar Datos".');
         return;
     }
  
@@ -384,10 +431,11 @@ async function actualizarDatos(form) {
     // ── Actualizar afiliación si tenemos el ID ────────────────────────────────
     if (afiliacionId) {
         const bodyAfiliacion = {
-            ID_EPS:          form.epsId,
-            ID_Regimen_EPS:  1,
+            ID_EPS:           form.epsId,
+            ID_Regimen_EPS:   form.regimenId,
             Fecha_Afiliacion: new Date().toISOString().split('T')[0],
-            Estado:          'Activo'
+            Numero_Afiliado:  form.numeroAfiliado || null,
+            Estado:           'Activo'
         };
  
         try {
@@ -442,10 +490,11 @@ async function validarYProcesar(accion) {
 // INICIALIZACIÓN AL CARGAR LA PÁGINA
 // ---------------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
-    // Carga paralela de tipos de EPS y EPS para mayor velocidad
+    // Carga paralela de tipos de EPS, EPS y regímenes para mayor velocidad
     await Promise.all([
         cargarTiposEPS(),
-        cargarTodasLasEPS()
+        cargarTodasLasEPS(),
+        cargarRegimenes()
     ]);
  
     // Listener de filtrado reactivo
