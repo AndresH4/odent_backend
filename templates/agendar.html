@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../css/agendar.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/agendar.css') }}">
 </head>
 <body class="p-6">
 
@@ -169,7 +169,7 @@
         </div>
     </div>
 
-<script src="../js/agendar.js"></script>
+<script src="{{ url_for('static', filename='js/agendar.js') }}"></script>
 
 </body>
 </html>
