@@ -135,4 +135,3 @@ def eliminar_tipo_eps(tipo_eps_id):
             cursor.close()
         if conexion:
             conexion.close()
- 
