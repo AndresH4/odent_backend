@@ -11,10 +11,11 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 # Blueprints del historial
-from modulo_historial import (
-    historial_bp, tratamiento_bp, tabla_diag_bp,
-    historial_diag_bp, puntuacion_bp
-)
+from modulo_historial.historial_clinico import historial_bp
+from modulo_historial.tratamiento import tratamiento_bp
+from modulo_historial.tabla_diagnostico import tabla_diag_bp
+from modulo_historial.historial_diagnostico import historial_diag_bp
+from modulo_historial.tabla_puntuacion_especialista import puntuacion_bp
 
 # Blueprints de usuarios
 from modulo_usuarios.routes import usuarios_bp
