@@ -152,6 +152,50 @@ function filtrarEPSporTipo() {
  
     document.getElementById('eps-select').value = '';
     document.getElementById('eps-otro-container').style.display = 'none';
+
+}
+
+// ---------------------------------------------------------------------------
+// AUTORIZACIÓN DE TRATAMIENTO DE DATOS (Habeas Data)
+// Como el administrador es el único que tiene acceso a esta pantalla, la
+// autorización se confirma con el simple hecho de marcar la casilla estilo
+// reCAPTCHA. toggleAutorizacion() se dispara al hacer clic en la caja y
+// alterna el checkbox real (oculto) junto con el estilo visual del recuadro.
+// actualizarEstadoAutorizacion() sincroniza el recuadro visual con el estado
+// del checkbox y oculta cualquier mensaje de error pendiente al marcarlo.
+// ---------------------------------------------------------------------------
+function toggleAutorizacion() {
+    const checkbox = document.getElementById('terminos');
+    checkbox.checked = !checkbox.checked;
+    actualizarEstadoAutorizacion();
+}
+
+function actualizarEstadoAutorizacion() {
+    const checkbox = document.getElementById('terminos');
+    const caja = document.getElementById('recaptcha-box');
+    const check = document.getElementById('recaptcha-check');
+    const errTerminos = document.getElementById('err-terminos');
+
+    if (caja) {
+        caja.classList.toggle('checked', checkbox.checked);
+        if (checkbox.checked) {
+            caja.style.background = '#0ea5e9';
+            caja.style.borderColor = '#0ea5e9';
+        } else {
+            caja.style.background = '#ffffff';
+            caja.style.borderColor = '#9ca3af';
+        }
+    }
+
+    if (check) {
+        check.style.opacity = checkbox.checked ? '1' : '0';
+        check.style.transform = checkbox.checked ? 'scale(1)' : 'scale(0.4)';
+    }
+
+    if (checkbox.checked && errTerminos) {
+        errTerminos.style.display = 'none';
+    }
+    
 }
  
 // ---------------------------------------------------------------------------
@@ -275,6 +319,15 @@ function validarFormulario() {
     if (!document.getElementById('terminos').checked) {
         mostrarMensajeGlobal('error', '⚠️ Debe aceptar el tratamiento de datos.');
         todoValido = false;
+
+        const errTerminos = document.getElementById('err-terminos');
+        if (errTerminos) {
+            errTerminos.innerText = '⚠️ Debe marcar la casilla para autorizar el tratamiento de los datos.';
+            errTerminos.style.display = 'block';
+        }
+    } else {
+        const errTerminos = document.getElementById('err-terminos');
+        if (errTerminos) errTerminos.style.display = 'none';
     }
  
     return todoValido;
@@ -528,6 +581,7 @@ async function validarYProcesar(accion) {
         return; // Bloquea la ejecución inmediatamente
     }
     // ---------------------------------------------
+
 
     const esValido = validarFormulario();
     if (!esValido) return;

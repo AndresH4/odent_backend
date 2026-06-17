@@ -125,15 +125,8 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label>EPS</label>
-                        <select id="eps">
-                            <option value="">Seleccione una EPS...</option>
-                            <option value="1">Compensar</option>
-                            <option value="2">Salud Total</option>
-                            <option value="3">NuevaEPS</option>
-                            <option value="4">Famisanar</option>
-                            <option value="5">Sanitas</option>
-                            <option value="6">CapitalSalud</option>
-                            <option value="7">Sura</option>
+                        <select id="eps" onchange="manejarSeleccionEPSCreacion()">
+                            <option value="">Cargando EPS...</option>
                         </select>
                         <div class="error-msg" id="errorEps"></div>
                     </div>
@@ -146,6 +139,22 @@
                             <option value="2">Beneficiario</option>
                         </select>
                         <div class="error-msg" id="errorAfiliacion"></div>
+                    </div>
+                </div>
+ 
+                <!-- Campo EPS personalizada (visible solo cuando se elige "Otro") -->
+                <div id="eps-otro-container-creacion" style="display:none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Nombre de la nueva EPS</label>
+                            <input type="text" id="eps-otro-nombre-creacion" placeholder="Ingrese el nombre de la EPS">
+                            <div class="error-msg" id="err-eps-otro-nombre-creacion"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>Teléfono de la nueva EPS</label>
+                            <input type="text" id="eps-otro-telefono-creacion" placeholder="Ej. 601 1234567">
+                            <div class="error-msg" id="err-eps-otro-telefono-creacion"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -198,7 +207,6 @@
         <!-- PASO 2 -->
         <div class="form-step" id="step2">
  
-            <!-- Tarjeta de correo simulado -->
             <div class="email-card">
                 <div class="email-card-topbar">
                     <div class="email-topbar-dots">
