@@ -368,6 +368,23 @@ button:active { transform: translateY(0); }
     border-bottom-color: rgba(139, 92, 246, 0.2);
 }
  
+/* ─── EPS PERSONALIZADA (CREACIÓN) ─── */
+#eps-otro-container-creacion {
+    animation: fadeIn 0.25s ease;
+    margin-top: 4px;
+}
+ 
+#eps-otro-container-creacion input {
+    border-color: #bae6fd;
+    background: #f0f9ff;
+}
+ 
+#eps-otro-container-creacion input:focus {
+    border-color: #0ea5e9;
+    background-color: #ffffff;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+}
+ 
 /* ─── EMAIL CARD SIMULADA ─── */
 .email-card {
     border: 1.5px solid #e2e8f0;

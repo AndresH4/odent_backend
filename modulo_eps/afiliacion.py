@@ -239,4 +239,3 @@ def reporte_afiliados_por_eps():
             cursor.close()
         if conexion:
             conexion.close()
- 
