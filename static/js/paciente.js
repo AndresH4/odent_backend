@@ -326,4 +326,3 @@
             localStorage.setItem('historialCompleto', JSON.stringify(historial));
             cargarCitas();
         }
-    
