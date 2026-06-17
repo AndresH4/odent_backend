@@ -157,6 +157,36 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Campos clínicos opcionales del paciente -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Grupo sanguíneo <span style="font-weight:400;color:#94a3b8;">(opcional)</span></label>
+                        <select id="grupoSanguineo">
+                            <option value="">Seleccione...</option>
+                            <option value="A+">A+</option>
+                            <option value="A-">A-</option>
+                            <option value="B+">B+</option>
+                            <option value="B-">B-</option>
+                            <option value="AB+">AB+</option>
+                            <option value="AB-">AB-</option>
+                            <option value="O+">O+</option>
+                            <option value="O-">O-</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Alergias <span style="font-weight:400;color:#94a3b8;">(opcional)</span></label>
+                        <input type="text" id="alergias" placeholder="Ej. Penicilina, látex...">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Antecedentes médicos <span style="font-weight:400;color:#94a3b8;">(opcional)</span></label>
+                    <input type="text" id="antecedentes" placeholder="Ej. Hipertensión, diabetes...">
+                </div>
+                <div class="form-group">
+                    <label>Observaciones <span style="font-weight:400;color:#94a3b8;">(opcional)</span></label>
+                    <input type="text" id="observaciones" placeholder="Observaciones adicionales">
+                </div>
             </div>
  
             <!-- Correo -->
@@ -198,6 +228,9 @@
                 </div>
             </div>
  
+            <!-- Mensaje de error global paso 1 -->
+            <div class="error-msg" id="mensajeError" style="display:none; margin-top:10px; text-align:center;"></div>
+
             <button onclick="validarPaso1()">
                 Continuar
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>

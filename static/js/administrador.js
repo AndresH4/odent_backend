@@ -59,6 +59,42 @@ function actualizarReloj() {
     }));
 }
 
+// ─── Módulo EPS: Reporte de afiliados por EPS ────────────────────────────────
+/**
+ * Consume GET /api/reporte/afiliados-por-eps del modulo_eps.
+ * Calcula el total de afiliados y lo muestra en stat-total.
+ */
+async function cargarReporteAfiliados() {
+    try {
+        const res  = await fetch('/api/reporte/afiliados-por-eps');
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error);
+        const totalAfiliados = data.data.reduce(
+            (acc, eps) => acc + (eps.Total_Afiliados || 0), 0
+        );
+        setText('stat-total', totalAfiliados);
+    } catch (e) {
+        console.error('[admin/modulo_eps] Error cargando reporte afiliados:', e);
+    }
+}
+
+// ─── Módulo EPS: Lista enriquecida de pacientes con EPS ──────────────────────
+/**
+ * Consume GET /api/paciente del modulo_eps.
+ * Retorna el array con datos clínicos, EPS y estado de afiliación de cada paciente.
+ */
+async function cargarPacientesEPS() {
+    try {
+        const res  = await fetch('/api/paciente');
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error);
+        return data.data;
+    } catch (e) {
+        console.error('[admin/modulo_eps] Error cargando pacientes EPS:', e);
+        return [];
+    }
+}
+
 // ─── Estadísticas (desde API) ────────────────────────────────────────────────
 async function actualizarStats() {
     try {
@@ -73,6 +109,9 @@ async function actualizarStats() {
     } catch (e) {
         console.error('[admin] Error cargando stats:', e);
     }
+
+    // Módulo EPS: poblar stat-total con el total real de afiliados
+    await cargarReporteAfiliados();
 }
 
 // ─── Lista dinámica de usuarios ──────────────────────────────────────────────
@@ -85,6 +124,12 @@ async function renderUsuarios(rolNombre) {
         const data = await res.json();
         const filtrados = data.filter(u => u.Rol_ID === rolId);
 
+        // Módulo EPS: enriquecer pacientes con su EPS y estado de afiliación
+        let pacientesEPS = [];
+        if (rolNombre === 'Paciente') {
+            pacientesEPS = await cargarPacientesEPS();
+        }
+
         const body = document.getElementById('body-lista-dinamica');
         const cont = document.getElementById('container-lista-rapida');
         const tit  = document.getElementById('titulo-lista-dinamica');
@@ -93,21 +138,52 @@ async function renderUsuarios(rolNombre) {
         cont.classList.remove('hidden');
         tit.textContent = `GESTIÓN: ${rolNombre.toUpperCase()}S`;
 
-        body.innerHTML = filtrados.map(u => `
+        body.innerHTML = filtrados.map(u => {
+            // Buscar el registro de paciente EPS que corresponde a este usuario
+            const datosEPS   = pacientesEPS.find(
+                p => String(p.ID_Usuario) === String(u.ID_Usuario || u.Usuario_ID)
+            );
+            const epsNombre  = datosEPS ? (datosEPS.Nombre_EPS        || '—') : '—';
+            const estadoAfil = datosEPS ? (datosEPS.Estado_Afiliacion || '—') : '—';
+
+            return `
             <tr class="p-4 flex justify-between items-center px-8 hover:bg-sky-50/50 transition-all">
                 <td>
                     <p class="font-black text-slate-800 text-[11px] uppercase">${u.Nombres} ${u.Apellidos}</p>
                     <p class="text-[9px] text-slate-400 font-bold">${u.Correo}</p>
+                    ${rolNombre === 'Paciente'
+                        ? `<p class="text-[9px] text-sky-500 font-bold mt-1">
+                               <i class="fas fa-shield-alt mr-1"></i>${epsNombre}
+                           </p>`
+                        : ''}
                 </td>
                 <td>
                     <span class="text-[9px] font-bold uppercase px-2 py-1 rounded-full ${u.Estado_ID === 1 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
                         ${u.Estado_ID === 1 ? 'Activo' : 'Inactivo'}
                     </span>
+                    ${rolNombre === 'Paciente' && estadoAfil !== '—'
+                        ? `<br><span class="text-[8px] font-bold uppercase px-2 py-1 rounded-full bg-sky-100 text-sky-700 mt-1 inline-block">${estadoAfil}</span>`
+                        : ''}
                 </td>
-            </tr>`).join('');
+            </tr>`;
+        }).join('');
     } catch (e) {
         console.error('[admin] Error cargando usuarios:', e);
     }
+}
+
+// ─── Ocultar lista rápida (llamada desde el HTML) ─────────────────────────────
+function ocultarListaRapida() {
+    const cont = document.getElementById('container-lista-rapida');
+    if (cont) cont.classList.add('hidden');
+}
+
+// ─── Filtrar tabla de citas (llamada desde el HTML) ───────────────────────────
+function filtrarTablaCitas() {
+    const filtro = (document.getElementById('busqueda-citas')?.value || '').toLowerCase();
+    document.querySelectorAll('#tabla-body tr').forEach(fila => {
+        fila.style.display = fila.textContent.toLowerCase().includes(filtro) ? '' : 'none';
+    });
 }
 
 // ─── Historial de citas (desde API) ──────────────────────────────────────────
@@ -228,6 +304,16 @@ function verificarOldPass() {
 function togglePass(id) {
     const el = document.getElementById(id);
     if (el) el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+// ─── Modal confirmación simple ────────────────────────────────────────────────
+function cerrarModalSimple() {
+    const m = document.getElementById('modalConfirmarSimple');
+    if (m) m.style.display = 'none';
+}
+
+function ejecutarAccionSimple() {
+    cerrarModalSimple();
 }
 
 // ─── Init ────────────────────────────────────────────────────────────────────

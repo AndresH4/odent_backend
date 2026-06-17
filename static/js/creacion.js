@@ -8,7 +8,10 @@
  *  4. Construir el payload COMPLETO (incluyendo EPS, tarjeta profesional,
  *     especialidad, tipo de afiliación, género, tipo de documento) y
  *     enviarlo al backend transaccional POST /api/usuarios.
- *  5. Notificar al usuario sobre éxito o cualquier fallo ocurrido.
+ *  5. Tras crear el usuario, si el rol es Paciente:
+ *     - Registrar en POST /api/paciente (datos clínicos).
+ *     - Registrar en POST /api/afiliacion (EPS + régimen).
+ *  6. Notificar al usuario sobre éxito o cualquier fallo ocurrido.
  */
  
 "use strict";
@@ -424,6 +427,94 @@ function verificarCodigo() {
         document.getElementById("errorCodigo").innerText = "Error de conexión. Intenta de nuevo.";
     });
 }
+
+// ── REGISTRO DE PACIENTE (POST /api/paciente) ──────────────────────────────────
+/**
+ * Llama al endpoint /api/paciente para registrar los datos clínicos del paciente.
+ * @param {number} usuarioId - ID del usuario recién creado.
+ * @returns {Promise<{ok: boolean, pacienteId: number|null, error: string|null}>}
+ */
+async function registrarPacienteEnBackend(usuarioId) {
+    const fechaNacimiento = document.getElementById("fechaNacimiento").value || null;
+
+    const grupoSanguineoEl = document.getElementById("grupoSanguineo");
+    const grupoSanguineo   = grupoSanguineoEl ? (grupoSanguineoEl.value || null) : null;
+
+    const alergiasEl = document.getElementById("alergias");
+    const alergias   = alergiasEl ? (alergiasEl.value.trim() || null) : null;
+
+    const antecedentesEl = document.getElementById("antecedentes");
+    const antecedentes   = antecedentesEl ? (antecedentesEl.value.trim() || null) : null;
+
+    const observacionesEl = document.getElementById("observaciones");
+    const observaciones   = observacionesEl ? (observacionesEl.value.trim() || null) : null;
+
+    const payload = {
+        ID_Usuario:       usuarioId,
+        Fecha_Nacimiento: fechaNacimiento,
+        Genero:           null,
+        Grupo_Sanguineo:  grupoSanguineo,
+        Alergias:         alergias,
+        Antecedentes:     antecedentes,
+        Observaciones:    observaciones
+    };
+
+    try {
+        const res  = await fetch('/api/paciente', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!data.ok) {
+            console.error('[registrarPacienteEnBackend] Error:', data.error);
+            return { ok: false, pacienteId: null, error: data.error || 'Error al registrar paciente.' };
+        }
+        return { ok: true, pacienteId: data.data.ID_Paciente, error: null };
+    } catch (err) {
+        console.error('[registrarPacienteEnBackend] Red:', err);
+        return { ok: false, pacienteId: null, error: err.message };
+    }
+}
+
+// ── REGISTRO DE AFILIACIÓN (POST /api/afiliacion) ─────────────────────────────
+/**
+ * Llama al endpoint /api/afiliacion para vincular al usuario con su EPS.
+ * Usa tipoAfiliacion (1=Cotizante / 2=Beneficiario) como ID_Regimen_EPS.
+ * @param {number} usuarioId - ID del usuario recién creado.
+ * @param {number} epsId     - ID de la EPS seleccionada (ya resuelta, incluyendo "Otro").
+ * @param {number} regimenId - ID del régimen / tipo de afiliación.
+ * @returns {Promise<{ok: boolean, afiliacionId: number|null, error: string|null}>}
+ */
+async function registrarAfiliacionEnBackend(usuarioId, epsId, regimenId) {
+    const hoy = new Date().toISOString().split('T')[0];
+
+    const payload = {
+        ID_Usuario:      usuarioId,
+        ID_EPS:          epsId,
+        ID_Regimen_EPS:  regimenId,
+        Fecha_Afiliacion: hoy,
+        Numero_Afiliado: null,
+        Estado:          'Activo'
+    };
+
+    try {
+        const res  = await fetch('/api/afiliacion', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!data.ok) {
+            console.error('[registrarAfiliacionEnBackend] Error:', data.error);
+            return { ok: false, afiliacionId: null, error: data.error || 'Error al registrar afiliación.' };
+        }
+        return { ok: true, afiliacionId: data.data.ID_Afiliacion, error: null };
+    } catch (err) {
+        console.error('[registrarAfiliacionEnBackend] Red:', err);
+        return { ok: false, afiliacionId: null, error: err.message };
+    }
+}
  
 // ── PASO 3: CREAR USUARIO (payload completo + manejo de errores) ───────────────
 async function crearUsuario() {
@@ -562,9 +653,51 @@ async function crearUsuario() {
             return;    // Detenemos aquí; el formulario sigue visible para corregir
         }
  
-        // ── Éxito: mostrar confirmación y botón de login ───────────────────
-        console.log("Usuario creado con ID:", resultado.usuario_id);
+        // ── Usuario creado: registrar Paciente + Afiliación si corresponde ────
+        const usuarioId = resultado.usuario_id;
+        console.log("Usuario creado con ID:", usuarioId);
+
+        const esPaciente = (rolIdNumerico === 3 || rolTexto === "Paciente");
+
+        if (esPaciente && usuarioId) {
+
+            // 1. Registrar en tabla paciente
+            mostrarProgreso("Registrando datos del paciente...");
+            const resPaciente = await registrarPacienteEnBackend(usuarioId);
+            if (!resPaciente.ok) {
+                // El usuario se creó; advertir sin bloquear el flujo
+                console.warn("Paciente no registrado:", resPaciente.error);
+                mostrarError(
+                    "Usuario creado, pero no se pudieron guardar los datos clínicos: " +
+                    resPaciente.error
+                );
+            } else {
+                console.log("Paciente registrado con ID:", resPaciente.pacienteId);
+            }
+
+            // 2. Registrar en tabla afiliacion (solo si hay EPS y régimen válidos)
+            if (epsId && tipoAfiliacionId) {
+                mostrarProgreso("Registrando afiliación a EPS...");
+                const resAfiliacion = await registrarAfiliacionEnBackend(
+                    usuarioId,
+                    epsId,
+                    tipoAfiliacionId
+                );
+                if (!resAfiliacion.ok) {
+                    console.warn("Afiliación no registrada:", resAfiliacion.error);
+                    mostrarError(
+                        "Usuario creado, pero no se pudo registrar la afiliación a la EPS: " +
+                        resAfiliacion.error
+                    );
+                } else {
+                    console.log("Afiliación registrada con ID:", resAfiliacion.afiliacionId);
+                }
+            } else {
+                console.warn("No se registró afiliación: falta EPS ID o régimen ID.", { epsId, tipoAfiliacionId });
+            }
+        }
  
+        // ── Éxito: mostrar confirmación y botón de login ───────────────────
         document.getElementById("groupPassword").style.display  = "none";
         document.getElementById("groupConfirm").style.display   = "none";
         if (btnFinalizar) btnFinalizar.style.display            = "none";
