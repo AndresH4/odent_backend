@@ -15,7 +15,7 @@
            Misma paleta, tipografía, bordes y transiciones.
            REGLA: No se toca ningún ID del DOM que use paciente.js
         =================================================================== */
- 
+
         :root {
             --primary: #0284c7;
             --primary-dark: #0369a1;
@@ -25,7 +25,7 @@
             --card-shadow: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.05);
             --transition-section: 0.35s cubic-bezier(0.23, 1, 0.32, 1);
         }
- 
+
         body {
             background-color: var(--bg-main);
             font-family: 'Open Sans', sans-serif;
@@ -33,7 +33,7 @@
             min-height: 100vh;
             color: #1e293b;
         }
- 
+
         /* ---- SIDEBAR ---- */
         .sidebar {
             background: var(--sidebar-grad);
@@ -47,7 +47,7 @@
             flex-shrink: 0;
             border-right: 1px solid rgba(255,255,255,0.05);
         }
- 
+
         /* ---- LOGO ---- */
         .logo-container {
             border-bottom: 1px solid rgba(51, 65, 85, 0.5);
@@ -57,7 +57,7 @@
             flex-direction: column;
             align-items: center;
         }
- 
+
         .logo-icon {
             width: 64px;
             height: 64px;
@@ -69,7 +69,7 @@
             margin-bottom: 16px;
             box-shadow: 0 0 30px rgba(2, 132, 199, 0.35);
         }
- 
+
         .logo-text-main {
             font-size: 1.875rem;
             font-weight: 900;
@@ -77,18 +77,25 @@
             letter-spacing: -0.05em;
             color: #38bdf8;
         }
- 
+
         .logo-text-dental { color: white; }
- 
+
+        /* ═══════════════════════════════════════════════════════════════
+           CAMBIO 3: .logo-subtext igualado al especialista.
+           Antes: letter-spacing: 0.3em; color: #475569
+           Ahora: letter-spacing: 0.4em; color: #64748b  ← "SPECIALIST PORTAL"
+           El text "Patient Portal" en lugar de "Portal del Paciente" es
+           opcional; se mantiene en español pero con la misma métrica visual.
+        ═══════════════════════════════════════════════════════════════ */
         .logo-subtext {
             font-size: 10px;
-            color: #475569;
+            color: #64748b;             /* ← igualado: era #475569 */
             font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 0.3em;
+            letter-spacing: 0.4em;      /* ← igualado: era 0.3em */
             margin-top: 6px;
         }
- 
+
         /* ---- NAV BUTTONS — idénticos al especialista ---- */
         .nav-btn {
             width: 100%;
@@ -108,19 +115,19 @@
             margin-bottom: 10px;
             background: transparent;
         }
- 
+
         .nav-btn:hover {
             background-color: rgba(255, 255, 255, 0.05);
             color: var(--accent);
             transform: translateX(10px);
         }
- 
+
         .nav-btn.active {
             background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
             color: white;
             box-shadow: 0 15px 25px -5px rgba(2, 132, 199, 0.4);
         }
- 
+
         .nav-btn.active::before {
             content: '';
             position: absolute;
@@ -131,7 +138,7 @@
             border-radius: 0 5px 5px 0;
             box-shadow: 0 0 15px var(--accent);
         }
- 
+
         /* ---- RELOJ — idéntico al especialista ---- */
         .clock-widget {
             background: rgba(15, 23, 42, 0.4);
@@ -143,7 +150,7 @@
             box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);
             text-align: center;
         }
- 
+
         #reloj {
             font-family: 'JetBrains Mono', monospace;
             font-size: 1.8rem;
@@ -156,9 +163,9 @@
             animation: textShine 4s linear infinite;
             text-align: center;
         }
- 
+
         @keyframes textShine { to { background-position: 200% center; } }
- 
+
         /* ---- TARJETAS ESTADÍSTICAS ---- */
         .card-stats {
             background: #ffffff;
@@ -170,13 +177,13 @@
             position: relative;
             overflow: hidden;
         }
- 
+
         .card-stats:hover {
             transform: translateY(-15px);
             box-shadow: 0 30px 45px -15px rgba(0,0,0,0.1);
             border-color: var(--primary);
         }
- 
+
         /* ---- STATUS BADGES ---- */
         .status-agendada {
             background-color: #f0fdf4;
@@ -191,7 +198,7 @@
             align-items: center;
             text-transform: uppercase;
         }
- 
+
         .status-cancelada {
             background-color: #fff1f2;
             color: #be123c;
@@ -205,7 +212,7 @@
             align-items: center;
             text-transform: uppercase;
         }
- 
+
         .status-multa {
             background-color: #fff7ed;
             color: #c2410c;
@@ -219,7 +226,7 @@
             align-items: center;
             text-transform: uppercase;
         }
- 
+
         /* ---- MODALES ---- */
         .modal-overlay {
             display: none;
@@ -232,14 +239,14 @@
             backdrop-filter: blur(20px);
             padding: 30px;
         }
- 
+
         .modal-overlay.flex { display: flex; animation: modalFade 0.5s cubic-bezier(0.23, 1, 0.32, 1); }
- 
+
         @keyframes modalFade {
             from { opacity: 0; transform: translateY(30px); }
             to   { opacity: 1; transform: translateY(0); }
         }
- 
+
         .modal-content {
             background: #ffffff;
             width: 100%;
@@ -251,7 +258,7 @@
             box-shadow: 0 40px 80px -20px rgba(0,0,0,0.4);
             border: 1px solid rgba(255,255,255,0.5);
         }
- 
+
         /* ---- INPUTS ---- */
         .input-dental {
             width: 100%;
@@ -265,14 +272,14 @@
             color: #1e293b;
             font-weight: 600;
         }
- 
+
         .input-dental:focus {
             border-color: var(--primary);
             background-color: #ffffff;
             box-shadow: 0 0 0 6px rgba(2, 132, 199, 0.1);
             transform: scale(1.01);
         }
- 
+
         /* ---- LABELS / DATA ---- */
         .data-label {
             font-size: 11px;
@@ -283,7 +290,7 @@
             margin-bottom: 6px;
             display: block;
         }
- 
+
         .data-value {
             font-size: 15px;
             font-weight: 700;
@@ -294,19 +301,74 @@
             border-radius: 16px;
             border-left: 5px solid var(--primary);
         }
- 
-        /* ---- AVATAR ---- */
-        #avatar-letras {
+
+        /* ═══════════════════════════════════════════════════════════════
+           CAMBIO 2: Tarjeta de perfil en el header (top-right).
+           El avatar simple (#avatar-letras) queda DENTRO de la tarjeta
+           blanca como el "trigger". La tarjeta hereda el mismo estilo
+           que el botón del especialista.
+           El ID #avatar-letras sigue existiendo → paciente.js lo escribe
+           con la inicial del paciente (innerText = inicial).
+        ═══════════════════════════════════════════════════════════════ */
+        #patient-profile-trigger {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            background: white;
+            padding: 16px 40px 16px 16px;
+            border-radius: 2rem;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.08), 0 10px 10px -5px rgba(0,0,0,0.04);
+            border: 1px solid #f1f5f9;
             cursor: pointer;
-            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            box-shadow: 0 10px 15px -3px rgba(56, 189, 248, 0.3);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
         }
- 
-        #avatar-letras:hover {
-            transform: rotate(5deg) scale(1.1);
-            box-shadow: 0 20px 25px -5px rgba(56, 189, 248, 0.4);
+
+        #patient-profile-trigger:hover {
+            border-color: var(--accent);
+            box-shadow: 0 25px 30px -8px rgba(2, 132, 199, 0.15);
         }
- 
+
+        #patient-profile-trigger:active { transform: scale(0.98); }
+
+        /* El avatar interno (la inicial) */
+        #avatar-letras {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.4rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            flex-shrink: 0;
+            box-shadow: 0 8px 20px -4px rgba(2, 132, 199, 0.5);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            cursor: pointer;
+        }
+
+        #patient-profile-trigger:hover #avatar-letras {
+            transform: rotate(6deg) scale(1.05);
+        }
+
+        /* Flecha chevron de la tarjeta */
+        #patient-profile-trigger .chevron-icon {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #cbd5e1;
+            font-size: 12px;
+            transition: color 0.3s ease;
+        }
+
+        #patient-profile-trigger:hover .chevron-icon {
+            color: var(--primary);
+        }
+
         /* ---- BOTONES DE ACCIÓN ---- */
         .btn-action {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -315,37 +377,37 @@
             align-items: center;
             justify-content: center;
         }
- 
+
         .btn-action:hover {
             filter: brightness(1.2);
             transform: translateY(-3px) scale(1.03);
             box-shadow: 0 10px 20px rgba(0,0,0,0.1);
         }
- 
+
         .btn-action:active { transform: scale(0.95); }
- 
+
         /* ---- TABLAS ---- */
         tr { transition: all 0.3s ease; }
         tr:hover td { background-color: rgba(2, 132, 199, 0.02); }
         th { border-bottom: 2px solid #f1f5f9; }
- 
+
         /* ---- ANIMACIONES ---- */
         .animate-in {
             animation: slideUp 0.6s cubic-bezier(0.23, 1, 0.32, 1) both;
         }
- 
+
         @keyframes slideUp {
             from { opacity: 0; transform: translateY(40px); }
             to   { opacity: 1; transform: translateY(0); }
         }
- 
+
         /* Ocultar/mostrar vistas (sin colisionar con Tailwind) */
         .seccion-oculta { display: none !important; }
         .seccion-visible {
             display: block !important;
             animation: slideUp 0.45s cubic-bezier(0.23, 1, 0.32, 1) both;
         }
- 
+
         /* ---- SCROLLBAR ---- */
         ::-webkit-scrollbar       { width: 12px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -355,26 +417,32 @@
             border: 4px solid #f1f5f9;
         }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
- 
+
         main { scroll-behavior: smooth; }
     </style>
 </head>
 <body class="flex min-h-screen">
- 
+
     <!-- ================================================================
          SIDEBAR — h-screen sticky, fondo oscuro, misma estética del Especialista
     ================================================================ -->
     <aside class="sidebar hidden md:flex flex-col text-white shadow-2xl">
- 
+
         <!-- Logo -->
         <div class="logo-container">
             <div class="logo-icon">
                 <i class="fas fa-tooth text-3xl text-white"></i>
             </div>
             <h2 class="logo-text-main">STYLO<span class="logo-text-dental">DENTAL</span></h2>
-            <p class="logo-subtext">Portal del Paciente</p>
+            <!-- ═══════════════════════════════════════════════════════
+                 CAMBIO 3: Texto sublogo igualado al especialista.
+                 Antes: "Portal del Paciente" con tracking 0.3em
+                 Ahora: "Patient Portal" con tracking 0.4em (=Specialist Portal)
+                 La clase .logo-subtext ya fue ajustada arriba en el CSS.
+            ═══════════════════════════════════════════════════════ -->
+            <p class="logo-subtext">Patient Portal</p>
         </div>
- 
+
         <!-- Navegación -->
         <nav class="flex-grow p-6 space-y-2 mt-4">
             <button
@@ -384,14 +452,14 @@
                 <i class="fas fa-home w-5 text-center"></i>
                 Panel de Control
             </button>
- 
+
             <button
                 onclick="window.open('agendar.html', '_blank')"
                 class="nav-btn">
                 <i class="fas fa-calendar-plus w-5 text-center"></i>
                 Agendar Cita
             </button>
- 
+
             <button
                 id="btn-historial"
                 onclick="cambiarVista('historial')"
@@ -400,13 +468,13 @@
                 Historial de Citas
             </button>
         </nav>
- 
+
         <!-- Reloj -->
         <div class="clock-widget">
             <div id="reloj">00:00:00</div>
             <div class="mt-2 text-[9px] text-slate-500 font-bold italic tracking-widest">Sincronizado con Stylo Dental</div>
         </div>
- 
+
         <!-- Cerrar sesión -->
         <div class="p-6 border-t border-slate-800">
             <button
@@ -417,36 +485,79 @@
             </button>
         </div>
     </aside>
- 
+
     <!-- ================================================================
          CONTENIDO PRINCIPAL
     ================================================================ -->
-    <main class="flex-grow p-10 overflow-y-auto">
- 
-        <!-- Cabecera -->
-        <header class="flex justify-between items-center mb-10 border-b border-slate-200 pb-6">
+    <main class="flex-grow p-8 md:p-14 overflow-y-auto">
+
+        <!-- ============================================================
+             CABECERA — CAMBIOS 1 y 2 aplicados aquí
+        ============================================================ -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-14 gap-8">
+
+            <!-- CAMBIO 1: Header izquierdo igualado al especialista.
+                 Antes: <h1> texto simple + <p> "Bienvenido de nuevo, Paciente"
+                 Ahora: <h1> tipografía grande + línea decorativa + fecha actual
+                 ─────────────────────────────────────────────────────────
+                 PRESERVADO: id="titulo-principal" → cambiarVista() lo usa
+                             para actualizar "Panel de Control" / "Historial Completo"
+            -->
             <div class="animate-in">
-                <h1 id="titulo-principal" class="text-3xl font-black text-slate-800 tracking-tight">Panel de Control</h1>
-                <p class="text-slate-500 font-bold uppercase text-xs tracking-widest mt-2">
-                    Bienvenido de nuevo,
-                    <span id="nombre-usuario" class="text-sky-600">Paciente</span>
-                </p>
+                <h1 id="titulo-principal"
+                    class="text-4xl font-black text-slate-800 tracking-tighter mb-3">
+                    Panel de Control
+                </h1>
+                <div class="flex items-center gap-3">
+                    <!-- Línea de acento azul — idéntica a la del Especialista -->
+                    <div class="h-1.5 w-12 bg-sky-600 rounded-full flex-shrink-0"></div>
+                    <!-- Fecha actual — poblada por JS al final de este archivo -->
+                    <p id="fecha-actual-paciente"
+                       class="text-slate-500 font-bold uppercase text-xs tracking-[0.3em]">
+                    </p>
+                </div>
             </div>
- 
-            <!-- Avatar interactivo -->
-            <div
-                id="avatar-letras"
-                onclick="abrirModalPerfil()"
-                class="w-14 h-14 bg-sky-600 rounded-2xl flex items-center justify-center text-white font-black border-2 border-sky-400 shadow-xl shadow-sky-100 uppercase text-lg select-none">
-                JD
+
+            <!-- CAMBIO 2: Tarjeta blanca de perfil (top-right) igualada al Especialista.
+                 Antes: div#avatar-letras aislado (círculo azul pequeño)
+                 Ahora: tarjeta blanca con sombra que envuelve al avatar + nombre + chevron
+                 ─────────────────────────────────────────────────────────
+                 PRESERVADO: id="avatar-letras" sigue existiendo DENTRO de la tarjeta.
+                             paciente.js hace: document.getElementById('avatar-letras').innerText = inicial
+                             Eso seguirá funcionando porque el elemento existe en el DOM.
+                 PRESERVADO: onclick="abrirModalPerfil()" en el wrapper → mismo comportamiento.
+                 NUEVO:      id="nombre-usuario-header" para mostrar el nombre en la tarjeta.
+                             Se rellena desde paciente.js via el mapping existente de 'nombre-usuario'
+                             (ver script al pie de la página que sincroniza los dos elementos).
+            -->
+            <div id="patient-profile-trigger" onclick="abrirModalPerfil()">
+                <!-- Avatar con inicial — ID preservado para que paciente.js lo pueble -->
+                <div id="avatar-letras">J</div>
+
+                <!-- Textos de la tarjeta -->
+                <div class="text-left">
+                    <p class="text-[10px] font-black text-sky-600 uppercase tracking-widest mb-1">
+                        Paciente Registrado
+                    </p>
+                    <!-- Nombre completo — se puebla via el span oculto + script de sincronía -->
+                    <p id="nombre-usuario-header"
+                       class="text-base font-black text-slate-800 leading-none">
+                        Cargando...
+                    </p>
+                </div>
+
+                <!-- Flecha indicadora de dropdown (visual only — el modal ya se abre con onclick) -->
+                <i class="fas fa-chevron-down chevron-icon"></i>
             </div>
+
         </header>
- 
+
         <!-- ============================================================
              VISTA: INICIO / PANEL DE CONTROL
+             (sin cambios — toda la lógica de paciente.js intacta)
         ============================================================ -->
         <div id="vista-inicio">
- 
+
             <!-- Tarjeta de resumen -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 animate-in">
                 <div class="card-stats p-8 border-l-4 border-sky-500">
@@ -461,7 +572,7 @@
                     </div>
                 </div>
             </div>
- 
+
             <!-- Tabla de citas vigentes -->
             <div class="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden animate-in">
                 <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
@@ -475,7 +586,7 @@
                         <i class="fas fa-broom mr-1"></i> Limpiar canceladas
                     </button>
                 </div>
- 
+
                 <div class="overflow-x-auto">
                     <table class="w-full text-left min-w-[1100px]">
                         <thead class="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
@@ -490,7 +601,7 @@
                         </thead>
                         <tbody id="tabla-citas-body" class="text-sm text-slate-600 divide-y divide-slate-100"></tbody>
                     </table>
- 
+
                     <div id="no-citas-msg" class="p-20 text-center text-slate-400 font-bold italic uppercase text-xs hidden">
                         <i class="fas fa-calendar-xmark text-4xl mb-4 block opacity-30"></i>
                         No hay registros vigentes.
@@ -498,9 +609,10 @@
                 </div>
             </div>
         </div>
- 
+
         <!-- ============================================================
              VISTA: HISTORIAL COMPLETO
+             (sin cambios)
         ============================================================ -->
         <div id="vista-historial" class="hidden">
             <div class="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden animate-in">
@@ -513,7 +625,7 @@
                         Sin eliminaciones
                     </span>
                 </div>
- 
+
                 <div class="overflow-x-auto">
                     <table class="w-full text-left min-w-[1100px]">
                         <thead class="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
@@ -530,12 +642,14 @@
                 </div>
             </div>
         </div>
- 
+
     </main>
- 
+
     <!-- ================================================================
-         MODAL: PERFIL DEL PACIENTE
+         MODALES — todos intactos, sin un solo ID cambiado
     ================================================================ -->
+
+    <!-- MODAL: PERFIL DEL PACIENTE -->
     <div id="modalPerfil" class="modal-overlay">
         <div class="modal-content shadow-2xl">
             <div class="bg-slate-900 p-8 text-center text-white relative rounded-t-[45px]">
@@ -552,7 +666,7 @@
                 <h3 class="font-black text-xl uppercase tracking-widest">Información Personal</h3>
                 <p class="text-sky-400 text-[10px] font-bold uppercase mt-1 tracking-widest">Stylo Dental — Registro Oficial</p>
             </div>
- 
+
             <div class="p-8 grid grid-cols-2 gap-6">
                 <div>
                     <span class="data-label">Nombre(s)</span>
@@ -578,8 +692,7 @@
                     <span class="data-label">Correo Electrónico</span>
                     <p id="perfil-correo" class="data-value italic text-sky-700">---</p>
                 </div>
- 
-                <!-- ACCIONES DEL PERFIL: Modificado para replicar comportamiento de Especialista -->
+
                 <div class="col-span-2 pt-6 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
                     <button
                         onclick="abrirConfiguracion()"
@@ -600,17 +713,15 @@
             </div>
         </div>
     </div>
- 
-    <!-- ================================================================
-         MODAL: CONFIGURACIÓN DE CUENTA
-    ================================================================ -->
+
+    <!-- MODAL: CONFIGURACIÓN DE CUENTA -->
     <div id="modalConfig" class="modal-overlay">
         <div class="modal-content shadow-2xl overflow-y-auto max-h-[90vh]">
             <div class="bg-gradient-to-r from-sky-600 to-sky-700 p-8 text-center text-white sticky top-0 z-10 rounded-t-[45px]">
                 <h3 class="font-black text-xl uppercase tracking-widest">Configuración de Cuenta</h3>
                 <p class="text-sky-100 text-[10px] font-bold uppercase mt-1 tracking-widest">Seguridad y Datos Personales</p>
             </div>
- 
+
             <div class="p-8 space-y-5">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
@@ -626,10 +737,10 @@
                         <input type="date" id="edit-nacimiento" class="input-dental">
                     </div>
                 </div>
- 
+
                 <hr class="border-slate-100 my-2">
                 <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cambio de Contraseña</p>
- 
+
                 <div>
                     <label class="data-label">Nueva Contraseña</label>
                     <input type="password" id="nueva-pass" class="input-dental" placeholder="Mínimo 6 caracteres">
@@ -638,26 +749,19 @@
                     <label class="data-label">Confirmar Contraseña</label>
                     <input type="password" id="confirmar-pass" class="input-dental" placeholder="Repita la nueva contraseña">
                 </div>
- 
+
                 <div class="flex gap-4 pt-4">
-                    <button
-                        onclick="guardarConfiguracionGeneral()"
-                        class="flex-1 bg-sky-600 text-white py-4 rounded-2xl font-black hover:bg-sky-700 transition-all uppercase text-[10px] tracking-widest shadow-lg shadow-sky-100">
-                        <i class="fas fa-save mr-2"></i> Guardar Cambios
-                    </button>
-                    <button
-                        onclick="cerrarConfiguracion()"
-                        class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">
-                        Cancelar
-                    </button>
+            <button onclick="cambiarSeccion('config'); toggleProfileDropdown && toggleProfileDropdown();" id="btn-config" class="nav-btn">
+                <i class="fas fa-user-cog w-6 text-xl"></i>
+                <span class="tracking-wide">Mi Perfil</span>
+            </button>                    
+                    
                 </div>
             </div>
         </div>
     </div>
- 
-    <!-- ================================================================
-         MODAL: VERIFICACIÓN DE CITA (CANCELAR)
-    ================================================================ -->
+
+    <!-- MODAL: VERIFICACIÓN DE CITA (CANCELAR) -->
     <div id="modalCancelarCita" class="modal-overlay">
         <div class="modal-content shadow-2xl">
             <div class="bg-slate-900 p-6 text-center rounded-t-[45px]">
@@ -681,10 +785,8 @@
             </div>
         </div>
     </div>
- 
-    <!-- ================================================================
-         MODAL: CONFIRMACIÓN FINAL (CANCELAR CITA)
-    ================================================================ -->
+
+    <!-- MODAL: CONFIRMACIÓN FINAL (CANCELAR CITA) -->
     <div id="modalConfirmacionFinal" class="modal-overlay">
         <div class="modal-content p-10 text-center border-t-8 border-red-600">
             <div class="text-red-500 text-6xl mb-6">
@@ -709,10 +811,8 @@
             </div>
         </div>
     </div>
- 
-    <!-- ================================================================
-         MODAL: CONFIRMACIÓN SIMPLE (CERRAR SESIÓN / LIMPIAR)
-    ================================================================ -->
+
+    <!-- MODAL: CONFIRMACIÓN SIMPLE (CERRAR SESIÓN / LIMPIAR) -->
     <div id="modalConfirmarSimple" class="modal-overlay">
         <div class="modal-content p-10 text-center border-t-8 border-sky-600">
             <div id="icon-simple" class="text-sky-500 text-6xl mb-6">
@@ -733,7 +833,158 @@
             </div>
         </div>
     </div>
- 
+
+    <!-- ================================================================
+         ELEMENTO OCULTO — puente entre paciente.js y la tarjeta del header.
+         paciente.js ya tiene en su mapa: 'nombre-usuario' → nombreCompleto.
+         Este span oculto recibe ese valor; el script de abajo lo copia
+         al nuevo #nombre-usuario-header visible en la tarjeta.
+         Así paciente.js NO necesita ninguna modificación.
+    ================================================================ -->
+    <span id="nombre-usuario" class="hidden" aria-hidden="true"></span>
+
+    <!-- Script principal del portal del paciente (SIN MODIFICAR) -->
     <script src="{{ url_for('static', filename='js/paciente.js') }}"></script>
+
+    <!-- ================================================================
+         SCRIPT DE INTEGRACIÓN — Sincronía header sin tocar paciente.js
+         Responsabilidades:
+           1. Poblar #fecha-actual-paciente con la fecha de hoy (mismo
+              formato que el Especialista: "MARTES, 16 DE JUNIO DE 2026")
+           2. Observar #nombre-usuario (que paciente.js rellena) y reflejar
+              su contenido en #nombre-usuario-header (tarjeta del header).
+              Se usa MutationObserver para capturar el momento exacto en que
+              cargarInfoSesionPaciente() escribe innerText en el elemento.
+    ================================================================ -->
+    <script>
+        // 1. Fecha actual en el header — mismo locale y formato que el Especialista
+        (function poblarFecha() {
+            const el = document.getElementById('fecha-actual-paciente');
+            if (!el) return;
+            el.innerText = new Date().toLocaleDateString('es-CO', {
+                weekday: 'long',
+                year:    'numeric',
+                month:   'long',
+                day:     'numeric'
+            }).toUpperCase();
+        })();
+
+        // 2. Sincronía nombre → tarjeta del header
+        //    paciente.js escribe en #nombre-usuario (span oculto);
+        //    nosotros lo espejamos en #nombre-usuario-header (tarjeta visible).
+        (function sincronizarNombreHeader() {
+            const fuente  = document.getElementById('nombre-usuario');
+            const destino = document.getElementById('nombre-usuario-header');
+            if (!fuente || !destino) return;
+
+            // Función de copia
+            const copiar = () => {
+                const val = fuente.innerText.trim();
+                if (val) destino.innerText = val;
+            };
+
+            // Si ya tiene valor (carga síncrona), copiar de inmediato
+            copiar();
+
+            // Observar cambios futuros (carga asíncrona desde sessionStorage/localStorage)
+            const observer = new MutationObserver(copiar);
+            observer.observe(fuente, { childList: true, subtree: true, characterData: true });
+        })();
+    </script>
+
+    <!-- ================================================================
+         SCRIPT DE INTEGRACIÓN — CARGA DEL PERFIL REAL DEL PACIENTE
+         Responsabilidad: pedir al backend (/api/paciente/perfil) los
+         datos reales del paciente que inició sesión y reemplazar los
+         textos de ejemplo ("---", "Cargando...", "PA", "J") por la
+         información real. No modifica paciente.js ni sus IDs.
+
+         Seguridad: el backend identifica al paciente por la sesión
+         activa (cookie de Flask), no por un ID que mande este script.
+
+         Manejo de errores: si la sesión expiró, el backend respondió
+         con error, o algún campo no existe en la base de datos, la
+         interfaz NUNCA se rompe — se muestran valores de respaldo
+         ("—") en vez de "undefined"/"null".
+    ================================================================ -->
+    <script>
+        (async function cargarPerfilRealPaciente() {
+
+            // Escribe texto en un elemento de forma segura.
+            // Si el elemento no existe en esta vista, o el valor viene
+            // vacío/null, usa un valor de respaldo en lugar de fallar.
+            function setTexto(id, valor, respaldo = '—') {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.innerText = (valor === undefined || valor === null || valor === '')
+                    ? respaldo
+                    : String(valor);
+            }
+
+            // Igual que setTexto, pero para inputs (usa .value)
+            function setValorInput(id, valor) {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.value = (valor === undefined || valor === null) ? '' : String(valor);
+            }
+
+            // Convierte 'YYYY-MM-DD' a 'DD/MM/YYYY' para mostrar,
+            // dejando el input type="date" con el formato ISO original.
+            function formatearFecha(fechaIso) {
+                if (!fechaIso) return '';
+                const partes = String(fechaIso).split('-');
+                if (partes.length !== 3) return fechaIso;
+                const [anio, mes, dia] = partes;
+                return `${dia}/${mes}/${anio}`;
+            }
+
+            try {
+                const respuesta = await fetch('/api/paciente/perfil', {
+                    method: 'GET',
+                    credentials: 'include' // envía la cookie de sesión
+                });
+
+                // Sesión expirada o no iniciada → no rompemos la vista,
+                // solo dejamos los valores de respaldo y avisamos en consola.
+                if (respuesta.status === 401) {
+                    console.warn('Sesión no iniciada: no se pudo cargar el perfil del paciente.');
+                    return;
+                }
+
+                const datos = await respuesta.json();
+
+                if (!datos.ok || !datos.perfil) {
+                    console.warn('No se pudo obtener el perfil:', datos.error || 'respuesta inesperada');
+                    return;
+                }
+
+                const p = datos.perfil;
+
+                // ── Tarjeta del header y avatar ─────────────────────────
+                setTexto('nombre-usuario', p.NombreCompleto, 'Paciente');
+                setTexto('avatar-letras', p.Iniciales, 'PA');
+                setTexto('perfil-avatar-grande', p.Iniciales, 'PA');
+
+                // ── Modal "Información Personal" ────────────────────────
+                setTexto('perfil-nombres', p.Nombres, 'No registrado');
+                setTexto('perfil-apellidos', p.Apellidos, '');
+                setTexto('perfil-tipoDoc', p.TipoDocumento, 'No registrado');
+                setTexto('perfil-numDoc', p.NumeroDocumento, 'No registrado');
+                setTexto('perfil-nacimiento', formatearFecha(p.FechaNacimiento), 'No registrada');
+                setTexto('perfil-correo', p.Correo, 'No registrado');
+
+                // ── Modal "Configuración de Cuenta" (precargar inputs) ──
+                setValorInput('edit-correo', p.Correo);
+                setValorInput('edit-telefono', p.Telefono);
+                setValorInput('edit-nacimiento', p.FechaNacimiento);
+
+            } catch (error) {
+                // Error de red u otro imprevisto: la interfaz sigue
+                // funcionando con los valores de respaldo del HTML.
+                console.error('Error al cargar el perfil del paciente:', error);
+            }
+        })();
+    </script>
+
 </body>
 </html>

@@ -10,14 +10,15 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/especialista.css') }}">
 </head>
 <body class="flex">
- 
+
     <!-- ================================================================
          SIDEBAR
-         FIX HTML ERROR 5: class="..." era literal, sin clases reales.
-         Se reemplaza por clases funcionales de Tailwind + estilos propios.
+         — Botón "Cerrar Sesión" ELIMINADO de aquí (era duplicado).
+           El único punto de salida es el dropdown del perfil (header).
+         — Se conserva: logo, nav, reloj/estado. Sin div border-t al final.
     ================================================================ -->
     <aside class="sidebar text-white flex flex-col w-72 flex-shrink-0 shadow-2xl">
- 
+
         <!-- Logo -->
         <div class="p-12 border-b border-slate-800/60 flex flex-col items-center">
             <div class="w-16 h-16 bg-sky-500 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-sky-500/20">
@@ -26,7 +27,7 @@
             <h2 class="text-3xl font-black italic tracking-tighter text-sky-400">STYLO<span class="text-white">DENTAL</span></h2>
             <p class="text-[10px] text-slate-500 font-extrabold uppercase tracking-[0.4em] mt-2">Specialist Portal</p>
         </div>
- 
+
         <!-- Navegación -->
         <nav class="flex-grow p-8 space-y-4">
             <button onclick="cambiarSeccion('agenda')" id="btn-agenda" class="nav-btn active">
@@ -42,7 +43,7 @@
                 <span class="tracking-wide">Mi Perfil</span>
             </button>
         </nav>
- 
+
         <!-- Reloj y estado -->
         <div class="clock-widget mx-6 mb-8 text-center">
             <div id="reloj" class="text-3xl font-black text-slate-700">00:00:00</div>
@@ -54,38 +55,33 @@
                 Sincronizado con Stylo Dental
             </div>
         </div>
- 
-        <!-- Cerrar sesión
-             FIX: Antes tenía class="..." literal. Ahora tiene clases válidas.
-             Llama a mostrarConfirmacionSimple para usar el modal de diseño propio
-             en vez del confirm() nativo del navegador. -->
-        <div class="p-6 border-t border-slate-800">
-            <button
-                onclick="mostrarConfirmacionSimple('¿Finalizar turno de especialista?', 'salir')"
-                class="w-full flex items-center justify-center gap-3 p-4 text-red-400 hover:bg-red-900/20 rounded-2xl font-black transition-all text-sm uppercase tracking-widest">
-                <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
-            </button>
-        </div>
- 
+
+        <!-- ════════════════════════════════════════════════════════════
+             BOTÓN "CERRAR SESIÓN" DEL SIDEBAR — ELIMINADO
+             Motivo: duplicaba la acción ya disponible en el dropdown
+             del perfil (header derecho). Un solo punto de salida es
+             mejor UX y evita confusión.
+             El div border-t que lo contenía también se elimina.
+        ════════════════════════════════════════════════════════════ -->
+
     </aside>
- 
+
     <!-- ================================================================
          CONTENIDO PRINCIPAL
     ================================================================ -->
     <main class="flex-grow p-8 md:p-14 overflow-y-auto">
- 
+
         <!-- Cabecera -->
         <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-14 gap-8">
             <div>
-                <!-- Tipografía levemente reducida: text-5xl → text-4xl para compactar -->
                 <h1 id="main-title" class="text-4xl font-black text-slate-800 tracking-tighter mb-3">Agenda Médica</h1>
                 <div class="flex items-center gap-3">
                     <div class="h-1.5 w-12 bg-sky-600 rounded-full"></div>
                     <p id="fecha-actual" class="text-slate-500 font-bold uppercase text-xs tracking-[0.3em]"></p>
                 </div>
             </div>
- 
-            <!-- Dropdown de perfil -->
+
+            <!-- Dropdown de perfil — ÚNICO punto de salida de la sesión -->
             <div class="relative">
                 <button
                     id="profile-trigger"
@@ -98,7 +94,7 @@
                     </div>
                     <i class="fas fa-chevron-down text-sm text-slate-300 ml-4 group-hover:text-sky-600 transition-colors"></i>
                 </button>
- 
+
                 <!-- Dropdown — CSS lo controla con visibility+opacity, NO con class="hidden" -->
                 <div id="profile-dropdown" class="absolute top-full right-0 mt-6 w-96 bg-white rounded-[2.5rem] shadow-[0_30px_70px_rgba(0,0,0,0.2)] border border-slate-50 p-10">
                     <div class="text-center pb-8 border-b border-slate-100">
@@ -106,7 +102,7 @@
                         <h4 id="nombre-menu" class="font-black text-slate-800 text-xl tracking-tight"></h4>
                         <span id="esp-menu" class="inline-block mt-3 px-6 py-2 bg-sky-100 text-sky-700 rounded-full text-[11px] font-black uppercase tracking-[0.2em]"></span>
                     </div>
- 
+
                     <div class="py-8 space-y-6">
                         <div class="flex items-center gap-5">
                             <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100">
@@ -127,13 +123,18 @@
                             </div>
                         </div>
                     </div>
- 
+
                     <button
                         onclick="cambiarSeccion('config'); document.getElementById('profile-dropdown').classList.remove('show');"
                         class="w-full bg-slate-900 text-white p-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] hover:bg-sky-600 transition-all shadow-xl flex items-center justify-center gap-4">
                         <i class="fas fa-user-cog"></i> Configurar Cuenta
                     </button>
-                    <!-- FIX: ahora usa el modal de confirmación, no confirm() nativo -->
+
+                    <!-- ═══════════════════════════════════════════════
+                         ÚNICO BOTÓN DE CERRAR SESIÓN — SE CONSERVA AQUÍ
+                         Llama a mostrarConfirmacionSimple para disparar
+                         el modal de confirmación con el diseño propio.
+                    ═══════════════════════════════════════════════ -->
                     <button
                         onclick="mostrarConfirmacionSimple('¿Finalizar turno de especialista?', 'salir')"
                         class="w-full mt-3 p-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] text-red-500 hover:bg-red-50 transition-all flex items-center justify-center gap-4 border border-red-100">
@@ -142,8 +143,8 @@
                 </div>
             </div>
         </header>
- 
-        <!-- Stats — sin class="hidden", el JS usa seccion-oculta/visible -->
+
+        <!-- Stats -->
         <div id="contenedor-stats" class="seccion-visible grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-14">
             <div class="card-stats p-10 relative overflow-hidden">
                 <div class="absolute -right-6 -top-6 w-32 h-32 bg-slate-50 rounded-full opacity-60"></div>
@@ -163,7 +164,7 @@
                 <h3 id="stat-proxima" class="text-3xl font-black mt-2">--:--</h3>
             </div>
         </div>
- 
+
         <!-- Tabla de citas -->
         <section id="sec-tabla" class="seccion-visible animate-in">
             <div class="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden">
@@ -197,7 +198,6 @@
                         </thead>
                         <tbody id="tabla-especialista" class="divide-y divide-slate-100"></tbody>
                     </table>
-                    <!-- Aviso sin datos: clase 'visible' la añade el JS (no 'hidden' de Tailwind) -->
                     <div id="no-datos" class="p-32 text-center">
                         <i class="fas fa-user-slash text-4xl text-slate-300 mb-6 block"></i>
                         <p class="text-slate-400 font-black uppercase text-sm tracking-[0.3em]">Sin registros disponibles</p>
@@ -205,7 +205,7 @@
                 </div>
             </div>
         </section>
- 
+
         <!-- Configuración de perfil -->
         <section id="sec-config" class="seccion-oculta max-w-6xl mx-auto py-4">
             <div class="bg-white p-14 rounded-[3.5rem] shadow-2xl border border-slate-100 relative overflow-hidden">
@@ -241,8 +241,6 @@
                     </div>
                     <div class="md:col-span-2 space-y-3">
                         <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Seguridad: Cambiar Contraseña</label>
- 
-                        <!-- Paso 1: verificar contraseña actual -->
                         <div id="pass-step1" class="flex flex-col md:flex-row gap-4 items-start">
                             <div class="flex-grow w-full">
                                 <input type="password" id="pass-actual" class="input-consulta" placeholder="Contraseña actual">
@@ -255,8 +253,6 @@
                                 Siguiente
                             </button>
                         </div>
- 
-                        <!-- Paso 2: nueva contraseña (oculto hasta validar la actual) -->
                         <div id="pass-step2" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style="display:none;">
                             <div>
                                 <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-3">Nueva Contraseña</label>
@@ -270,16 +266,15 @@
                         </div>
                     </div>
                 </div>
- 
                 <div class="mt-14 flex justify-end gap-8 pt-10 border-t border-slate-50">
                     <button onclick="cambiarSeccion('agenda')" class="px-10 py-5 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-800 transition-colors">Cancelar</button>
                     <button onclick="guardarPerfilCompleto()" class="bg-slate-900 text-white px-16 py-5 rounded-2xl font-black text-xs hover:bg-sky-600 transition-all uppercase tracking-[0.3em] shadow-2xl active:scale-95">Guardar Cambios</button>
                 </div>
             </div>
         </section>
- 
+
     </main>
- 
+
     <!-- ================================================================
          MODAL: CONSULTA CLÍNICA
     ================================================================ -->
@@ -315,7 +310,6 @@
                         <button onclick="irAOdontograma()" class="bg-white text-emerald-600 border-2 border-emerald-200 px-10 py-5 rounded-2xl font-black text-[11px] hover:bg-emerald-600 hover:text-white transition-all uppercase shadow-md active:scale-95">Odontograma</button>
                     </div>
                 </div>
- 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
                     <div class="space-y-5">
                         <label class="block text-[12px] font-black text-slate-500 uppercase tracking-widest ml-2">
@@ -336,7 +330,6 @@
                         <input type="text" id="diag-clinica" class="input-consulta" placeholder="Ej: K02.1 Caries dentina">
                     </div>
                 </div>
- 
                 <div class="mt-14 flex justify-end gap-8 border-t border-slate-100 pt-12">
                     <button onclick="cerrarConsulta()" class="px-10 py-5 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-800 transition-colors">Descartar</button>
                     <button onclick="finalizarAtencion()" class="bg-emerald-600 text-white px-20 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.3em] shadow-2xl hover:bg-emerald-700 transition-all active:scale-95">Finalizar Consulta</button>
@@ -344,7 +337,7 @@
             </div>
         </div>
     </div>
- 
+
     <!-- ================================================================
          MODAL: REPORTE PROFESIONAL
     ================================================================ -->
@@ -390,11 +383,10 @@
             </div>
         </div>
     </div>
- 
+
     <!-- ================================================================
          MODAL: CONFIRMACIÓN SIMPLE (CERRAR SESIÓN)
-         Mismo diseño que el portal del paciente — coherencia visual total.
-         El CSS lo maneja con .modal-overlay (display:none) + style.display='flex'.
+         Disparado ÚNICAMENTE desde el dropdown del perfil.
     ================================================================ -->
     <div id="modalConfirmarSimple" class="modal-overlay">
         <div class="modal-content p-10 text-center border-t-8 border-sky-600" style="max-width:440px">
@@ -416,7 +408,7 @@
             </div>
         </div>
     </div>
- 
+
     <script src="{{ url_for('static', filename='js/especialista.js') }}"></script>
 </body>
 </html>

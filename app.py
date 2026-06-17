@@ -3,7 +3,7 @@ app.py — Stylo Dental
 Punto de entrada de Flask. Registra todos los blueprints y sirve las vistas HTML.
 """
  
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, jsonify, request, render_template, session
 from flask_cors import CORS
 import random
 import smtplib
@@ -28,7 +28,17 @@ from modulo_eps.routes import eps_bp
 from db import get_db_connection
  
 app = Flask(__name__)
-CORS(app)
+
+# Necesaria para firmar la cookie de sesión (session). Sin esto, Flask
+# no puede mantener al paciente "logueado" entre peticiones.
+# TODO: en producción, cargar esto desde una variable de entorno,
+# nunca dejarlo escrito en el código fuente.
+app.secret_key = "CAMBIA-ESTO-POR-UNA-CLAVE-LARGA-Y-ALEATORIA"
+
+# supports_credentials=True permite que el navegador envíe/reciba la
+# cookie de sesión en las peticiones fetch (necesario para que
+# /api/paciente/perfil sepa quién está logueado).
+CORS(app, supports_credentials=True)
  
 # =============================================================================
 # REGISTRO DE BLUEPRINTS
@@ -71,8 +81,98 @@ def paciente_por_usuario(usuario_id):
         return jsonify({"error": str(e)}), 500
     finally:
         if con: con.close()
- 
- 
+
+
+# =============================================================================
+# ENDPOINT — Perfil completo del paciente autenticado (datos reales)
+# Reemplaza los textos hardcodeados de paciente.html (nombre, documento,
+# teléfono, correo, fecha de nacimiento, EPS, etc.)
+#
+# IMPORTANTE: el Usuario_ID NO se recibe del cliente, se lee de la sesión
+# activa de Flask (session). Así un paciente no puede consultar los datos
+# de otro cambiando un ID en la URL o en localStorage.
+#
+# Requiere que, en tu login (modulo_usuarios/routes.py), tras validar las
+# credenciales agregues:
+#       session['usuario_id'] = usuario['Usuario_ID']
+# =============================================================================
+
+@app.route('/api/paciente/perfil', methods=['GET'])
+def perfil_paciente():
+    usuario_id = session.get('usuario_id')
+
+    if not usuario_id:
+        # No hay sesión activa: el frontend debe redirigir a login.
+        return jsonify({"ok": False, "error": "Sesión no iniciada"}), 401
+
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+        cur.execute(
+            """
+            SELECT
+                u.Usuario_ID,
+                u.Nombres,
+                u.Apellidos,
+                u.NumeroDocumento,
+                u.Correo,
+                u.Telefono,
+                u.FechaNacimiento,
+                td.Nombre_Tipo_Documento AS TipoDocumento,
+                e.Nombre_EPS              AS EPS,
+                a.Numero_Afiliado         AS NumeroAfiliado,
+                a.Estado                  AS EstadoAfiliacion
+            FROM usuarios u
+            LEFT JOIN tipo_documento td ON u.TipoDoc_ID = td.TipoDoc_ID
+            LEFT JOIN afiliacion a      ON a.Usuario_ID = u.Usuario_ID
+            LEFT JOIN eps e             ON a.EPS_ID     = e.EPS_ID
+            WHERE u.Usuario_ID = ?
+            """,
+            (usuario_id,)
+        )
+        fila = cur.fetchone()
+
+        if not fila:
+            return jsonify({"ok": False, "error": "Paciente no encontrado"}), 404
+
+        perfil = dict(fila)
+
+        # ── Saneamiento: ningún campo debe llegar como None/NULL al
+        # frontend, o el HTML mostraría literalmente "None" o "undefined" ──
+        valores_por_defecto = {
+            "Nombres":          "Paciente",
+            "Apellidos":        "",
+            "NumeroDocumento":  "No registrado",
+            "Correo":           "No registrado",
+            "Telefono":         "No registrado",
+            "FechaNacimiento":  "",
+            "TipoDocumento":    "No registrado",
+            "EPS":              "Sin afiliación",
+            "NumeroAfiliado":   "No registrado",
+            "EstadoAfiliacion": "Pendiente",
+        }
+        for campo, defecto in valores_por_defecto.items():
+            if perfil.get(campo) in (None, ""):
+                perfil[campo] = defecto
+
+        nombre_completo = f"{perfil['Nombres']} {perfil['Apellidos']}".strip()
+        iniciales = (
+            perfil['Nombres'][:1] + (perfil['Apellidos'][:1] if perfil['Apellidos'] else "")
+        ).upper() or "PA"
+
+        perfil["NombreCompleto"] = nombre_completo
+        perfil["Iniciales"] = iniciales
+
+        return jsonify({"ok": True, "perfil": perfil}), 200
+
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if con:
+            con.close()
+
+
 # =============================================================================
 # CONFIGURACIÓN SMTP
 # =============================================================================
