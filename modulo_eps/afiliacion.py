@@ -1,17 +1,15 @@
 # =============================================================================
 # modulo_eps/afiliacion.py
-# CRUD para la tabla afiliacion — incluye JOINs con usuarios, eps y tipo_eps
+# Adaptado al esquema real: afiliacion(Afiliacion_ID, Usuario_ID, EPS_ID,
+#                                       TipoEPS_ID, Fecha_Afiliacion)
+# TipoEPS_ID → FK a tipo_eps (Cotizante / Beneficiario)
 # =============================================================================
- 
+
 from db import get_db_connection
- 
- 
-def crear_afiliacion(usuario_id, eps_id, regimen_eps_id, fecha_afiliacion,
+
+
+def crear_afiliacion(usuario_id, eps_id, tipo_eps_id, fecha_afiliacion,
                      numero_afiliado=None, estado=None):
-    """
-    Registra una nueva afiliación de un usuario a una EPS.
-    Retorna el ID del registro creado.
-    """
     conexion = None
     cursor = None
     try:
@@ -20,12 +18,10 @@ def crear_afiliacion(usuario_id, eps_id, regimen_eps_id, fecha_afiliacion,
         cursor.execute(
             """
             INSERT INTO afiliacion
-                (ID_Usuario, ID_EPS, ID_Regimen_EPS, Fecha_Afiliacion,
-                 Numero_Afiliado, Estado)
-            VALUES (?, ?, ?, ?, ?, ?)
+                (Usuario_ID, EPS_ID, TipoEPS_ID, Fecha_Afiliacion)
+            VALUES (?, ?, ?, ?)
             """,
-            (usuario_id, eps_id, regimen_eps_id, fecha_afiliacion,
-             numero_afiliado, estado)
+            (usuario_id, eps_id, tipo_eps_id, fecha_afiliacion)
         )
         conexion.commit()
         return cursor.lastrowid
@@ -38,17 +34,9 @@ def crear_afiliacion(usuario_id, eps_id, regimen_eps_id, fecha_afiliacion,
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
+
+
 def obtener_afiliaciones():
-    """
-    Retorna todas las afiliaciones enriquecidas con:
-      - Nombre completo del usuario (Nombres || ' ' || Apellidos)
-      - Nombre de la EPS
-      - Tipo de EPS
-      - Nombre del régimen
-    Usa INNER JOIN con usuarios, eps, tipo_eps y regimen_eps.
-    """
     conexion = None
     cursor = None
     try:
@@ -57,24 +45,22 @@ def obtener_afiliaciones():
         cursor.execute(
             """
             SELECT
-                a.ID_Afiliacion,
-                a.Numero_Afiliado,
+                a.Afiliacion_ID,
                 a.Fecha_Afiliacion,
-                a.Estado,
-                a.ID_Usuario,
+                a.Usuario_ID,
                 u.Nombres || ' ' || u.Apellidos AS Nombre_Completo_Usuario,
                 u.Correo                         AS Correo_Usuario,
-                a.ID_EPS,
+                a.EPS_ID,
                 e.Nombre_EPS,
-                e.ID_Tipo_EPS,
-                t.Nombre_Tipo                    AS Tipo_EPS,
-                a.ID_Regimen_EPS,
-                r.Nombre_Regimen                 AS Regimen
+                e.Regimen_ID,
+                r.Descripcion                    AS Nombre_Regimen,
+                a.TipoEPS_ID,
+                t.Nombre_Tipo                    AS Tipo_EPS
             FROM afiliacion a
-            INNER JOIN usuarios   u ON a.ID_Usuario     = u.ID_Usuario
-            INNER JOIN eps        e ON a.ID_EPS          = e.ID_EPS
-            INNER JOIN tipo_eps   t ON e.ID_Tipo_EPS     = t.ID_Tipo_EPS
-            INNER JOIN regimen_eps r ON a.ID_Regimen_EPS = r.ID_Regimen_EPS
+            INNER JOIN usuarios   u ON a.Usuario_ID  = u.Usuario_ID
+            INNER JOIN eps        e ON a.EPS_ID       = e.EPS_ID
+            LEFT  JOIN regimen_eps r ON e.Regimen_ID  = r.Regimen_ID
+            INNER JOIN tipo_eps   t ON a.TipoEPS_ID  = t.TipoEPS_ID
             ORDER BY a.Fecha_Afiliacion DESC
             """
         )
@@ -88,13 +74,9 @@ def obtener_afiliaciones():
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
+
+
 def obtener_afiliacion_por_id(afiliacion_id):
-    """
-    Retorna una afiliación específica por su ID, enriquecida con JOINs.
-    Devuelve None si no existe.
-    """
     conexion = None
     cursor = None
     try:
@@ -103,25 +85,23 @@ def obtener_afiliacion_por_id(afiliacion_id):
         cursor.execute(
             """
             SELECT
-                a.ID_Afiliacion,
-                a.Numero_Afiliado,
+                a.Afiliacion_ID,
                 a.Fecha_Afiliacion,
-                a.Estado,
-                a.ID_Usuario,
+                a.Usuario_ID,
                 u.Nombres || ' ' || u.Apellidos AS Nombre_Completo_Usuario,
                 u.Correo                         AS Correo_Usuario,
-                a.ID_EPS,
+                a.EPS_ID,
                 e.Nombre_EPS,
-                e.ID_Tipo_EPS,
-                t.Nombre_Tipo                    AS Tipo_EPS,
-                a.ID_Regimen_EPS,
-                r.Nombre_Regimen                 AS Regimen
+                e.Regimen_ID,
+                r.Descripcion                    AS Nombre_Regimen,
+                a.TipoEPS_ID,
+                t.Nombre_Tipo                    AS Tipo_EPS
             FROM afiliacion a
-            INNER JOIN usuarios    u ON a.ID_Usuario     = u.ID_Usuario
-            INNER JOIN eps         e ON a.ID_EPS          = e.ID_EPS
-            INNER JOIN tipo_eps    t ON e.ID_Tipo_EPS     = t.ID_Tipo_EPS
-            INNER JOIN regimen_eps r ON a.ID_Regimen_EPS = r.ID_Regimen_EPS
-            WHERE a.ID_Afiliacion = ?
+            INNER JOIN usuarios   u ON a.Usuario_ID  = u.Usuario_ID
+            INNER JOIN eps        e ON a.EPS_ID       = e.EPS_ID
+            LEFT  JOIN regimen_eps r ON e.Regimen_ID  = r.Regimen_ID
+            INNER JOIN tipo_eps   t ON a.TipoEPS_ID  = t.TipoEPS_ID
+            WHERE a.Afiliacion_ID = ?
             """,
             (afiliacion_id,)
         )
@@ -137,14 +117,10 @@ def obtener_afiliacion_por_id(afiliacion_id):
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
-def actualizar_afiliacion(afiliacion_id, eps_id, regimen_eps_id,
+
+
+def actualizar_afiliacion(afiliacion_id, eps_id, tipo_eps_id,
                           fecha_afiliacion, numero_afiliado=None, estado=None):
-    """
-    Actualiza los campos de una afiliación existente.
-    Retorna True si se modificó al menos un registro, False si no se encontró.
-    """
     conexion = None
     cursor = None
     try:
@@ -153,15 +129,12 @@ def actualizar_afiliacion(afiliacion_id, eps_id, regimen_eps_id,
         cursor.execute(
             """
             UPDATE afiliacion
-            SET ID_EPS          = ?,
-                ID_Regimen_EPS  = ?,
-                Fecha_Afiliacion = ?,
-                Numero_Afiliado  = ?,
-                Estado           = ?
-            WHERE ID_Afiliacion = ?
+            SET EPS_ID           = ?,
+                TipoEPS_ID       = ?,
+                Fecha_Afiliacion = ?
+            WHERE Afiliacion_ID = ?
             """,
-            (eps_id, regimen_eps_id, fecha_afiliacion,
-             numero_afiliado, estado, afiliacion_id)
+            (eps_id, tipo_eps_id, fecha_afiliacion, afiliacion_id)
         )
         conexion.commit()
         return cursor.rowcount > 0
@@ -174,20 +147,16 @@ def actualizar_afiliacion(afiliacion_id, eps_id, regimen_eps_id,
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
+
+
 def eliminar_afiliacion(afiliacion_id):
-    """
-    Elimina una afiliación por su ID.
-    Retorna True si se eliminó, False si no existía.
-    """
     conexion = None
     cursor = None
     try:
         conexion = get_db_connection()
         cursor = conexion.cursor()
         cursor.execute(
-            "DELETE FROM afiliacion WHERE ID_Afiliacion = ?",
+            "DELETE FROM afiliacion WHERE Afiliacion_ID = ?",
             (afiliacion_id,)
         )
         conexion.commit()
@@ -201,17 +170,9 @@ def eliminar_afiliacion(afiliacion_id):
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
-# ---------------------------------------------------------------------------
-# Consulta de reporte: conteo de afiliados por EPS
-# ---------------------------------------------------------------------------
- 
+
+
 def reporte_afiliados_por_eps():
-    """
-    Retorna un conteo de afiliaciones agrupado por EPS.
-    Cada fila incluye el nombre de la EPS y el total de afiliados.
-    """
     conexion = None
     cursor = None
     try:
@@ -220,12 +181,12 @@ def reporte_afiliados_por_eps():
         cursor.execute(
             """
             SELECT
-                e.ID_EPS,
+                e.EPS_ID,
                 e.Nombre_EPS,
-                COUNT(a.ID_Afiliacion) AS Total_Afiliados
+                COUNT(a.Afiliacion_ID) AS Total_Afiliados
             FROM eps e
-            LEFT JOIN afiliacion a ON e.ID_EPS = a.ID_EPS
-            GROUP BY e.ID_EPS, e.Nombre_EPS
+            LEFT JOIN afiliacion a ON e.EPS_ID = a.EPS_ID
+            GROUP BY e.EPS_ID, e.Nombre_EPS
             ORDER BY Total_Afiliados DESC
             """
         )

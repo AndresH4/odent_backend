@@ -2,7 +2,7 @@
     box-sizing: border-box;
     font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
- 
+
 body {
     margin: 0;
     background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 50%, #e8f4fd 100%);
@@ -12,7 +12,7 @@ body {
     min-height: 100vh;
     padding: 30px 16px;
 }
- 
+
 .container {
     width: 100%;
     max-width: 620px;
@@ -22,7 +22,7 @@ body {
     overflow: hidden;
     border: 1px solid rgba(14, 165, 233, 0.1);
 }
- 
+
 /* ─── HEADER ─── */
 .header {
     background: linear-gradient(135deg, #0369a1 0%, #0284c7 50%, #0ea5e9 100%);
@@ -32,7 +32,7 @@ body {
     position: relative;
     overflow: hidden;
 }
- 
+
 .header::before {
     content: '';
     position: absolute;
@@ -41,7 +41,7 @@ body {
     background: rgba(255,255,255,0.07);
     border-radius: 50%;
 }
- 
+
 .header::after {
     content: '';
     position: absolute;
@@ -50,7 +50,7 @@ body {
     background: rgba(255,255,255,0.05);
     border-radius: 50%;
 }
- 
+
 .header-icon {
     width: 52px; height: 52px;
     background: rgba(255,255,255,0.2);
@@ -59,7 +59,7 @@ body {
     margin: 0 auto 12px;
     backdrop-filter: blur(4px);
 }
- 
+
 .header h2 {
     margin: 0 0 4px;
     font-weight: 700;
@@ -67,14 +67,14 @@ body {
     letter-spacing: -0.3px;
     position: relative; z-index: 1;
 }
- 
+
 .header p {
     margin: 0;
     font-size: 13px;
     opacity: 0.85;
     position: relative; z-index: 1;
 }
- 
+
 /* ─── STEP INDICATOR ─── */
 .step-indicator {
     display: flex;
@@ -83,7 +83,7 @@ body {
     padding: 20px 40px 0;
     gap: 0;
 }
- 
+
 .step-dot {
     width: 36px; height: 36px;
     border-radius: 50%;
@@ -95,18 +95,18 @@ body {
     transition: all 0.3s ease;
     flex-shrink: 0;
 }
- 
+
 .step-dot.active {
     background: linear-gradient(135deg, #0284c7, #0ea5e9);
     color: white;
     box-shadow: 0 4px 12px rgba(14, 165, 233, 0.4);
 }
- 
+
 .step-dot.done {
     background: #10b981;
     color: white;
 }
- 
+
 .step-line {
     flex: 1;
     height: 2px;
@@ -114,22 +114,22 @@ body {
     max-width: 80px;
     transition: background 0.3s ease;
 }
- 
+
 .step-line.done {
     background: #10b981;
 }
- 
+
 /* ─── BODY ─── */
 .body {
     padding: 28px 36px 36px;
     max-height: 72vh;
     overflow-y: auto;
 }
- 
+
 .body::-webkit-scrollbar { width: 5px; }
 .body::-webkit-scrollbar-track { background: transparent; }
 .body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
- 
+
 /* ─── SECTION TITLES ─── */
 .section-title {
     display: flex;
@@ -144,70 +144,137 @@ body {
     padding-bottom: 10px;
     border-bottom: 1.5px solid #e0f2fe;
 }
- 
+
 /* ─── FORM LAYOUT ─── */
 .form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 14px;
 }
- 
+
 .form-group {
     margin-bottom: 18px;
     display: flex;
     flex-direction: column;
 }
- 
+
 label {
     font-weight: 600;
     margin-bottom: 7px;
     font-size: 13px;
     color: #374151;
 }
- 
-input, select {
+
+/* ─── UNIFIED FORM CONTROL ─── */
+/* Targets both input and select via shared class, overriding all prior per-tag rules */
+input,
+select,
+.form-control {
     padding: 11px 13px;
     border-radius: 9px;
     border: 1.5px solid #e2e8f0;
     background-color: #f8fafc;
     font-size: 14px;
     color: #0f172a;
-    transition: all 0.2s ease;
+    font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
     appearance: none;
     -webkit-appearance: none;
+    width: 100%;
+    line-height: 1.5;
 }
- 
-select {
+
+select.form-control {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 12px center;
     padding-right: 36px;
+    cursor: pointer;
 }
- 
-input:focus, select:focus {
+
+/* Disabled selects in cascading dropdowns */
+select.form-control:disabled {
+    background-color: #f1f5f9;
+    color: #94a3b8;
+    cursor: not-allowed;
+    border-color: #e2e8f0;
+}
+
+input.form-control:focus,
+select.form-control:focus {
     border-color: #0ea5e9;
     background-color: #ffffff;
     box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
     outline: none;
 }
- 
-input::placeholder {
+
+input.form-control::placeholder {
     color: #b0bdc9;
     font-size: 13px;
 }
- 
+
+/* ─── DATE INPUT WRAPPER ─── */
+.date-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.date-input-wrap .form-control.fecha-nacimiento-input {
+    padding-right: 44px;
+    width: 100%;
+}
+
+.date-picker-btn {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 42px;
+    background: transparent;
+    border: none;
+    border-left: 1.5px solid #e2e8f0;
+    border-radius: 0 9px 9px 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    transition: color 0.2s ease, background-color 0.2s ease;
+    padding: 0;
+    margin: 0;
+    box-shadow: none;
+    width: 42px;
+}
+
+.date-picker-btn:hover {
+    color: #0284c7;
+    background-color: #f0f9ff;
+    transform: none;
+    box-shadow: none;
+}
+
+.date-picker-btn:active {
+    transform: none;
+}
+
+.fecha-nacimiento-input.typing-mode::placeholder {
+    color: #94a3b8;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+}
+
 /* ─── PASSWORD WRAPPER ─── */
 .input-password-wrap {
     position: relative;
     display: flex;
     align-items: center;
 }
- 
-.input-password-wrap input {
-    width: 100%;
+
+.input-password-wrap .form-control {
     padding-right: 44px;
 }
- 
+
 .toggle-password {
     position: absolute;
     right: 12px;
@@ -218,26 +285,31 @@ input::placeholder {
     transition: color 0.2s;
     user-select: none;
 }
- 
+
 .toggle-password:hover { color: #0284c7; }
- 
+
 /* ─── VALIDATION ─── */
-.invalid {
+.form-control.invalid,
+input.invalid,
+select.invalid {
     border-color: #ef4444 !important;
-    background: #fef2f2 !important;
+    background-color: #fef2f2 !important;
 }
- 
-.invalid:focus {
+
+.form-control.invalid:focus,
+input.invalid:focus,
+select.invalid:focus {
     box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12) !important;
 }
- 
+
 .error-msg {
     font-size: 11.5px;
     color: #ef4444;
     margin-top: 5px;
     font-weight: 500;
+    min-height: 16px;
 }
- 
+
 .password-hint {
     font-size: 11.5px;
     color: #64748b;
@@ -248,7 +320,7 @@ input::placeholder {
     border-radius: 6px;
     border-left: 3px solid #0ea5e9;
 }
- 
+
 /* ─── BUTTON ─── */
 button {
     width: 100%;
@@ -268,25 +340,26 @@ button {
     justify-content: center;
     gap: 8px;
     letter-spacing: 0.2px;
+    font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
- 
+
 button:hover {
     background: linear-gradient(135deg, #0369a1, #0284c7);
     transform: translateY(-1px);
     box-shadow: 0 6px 18px rgba(14, 165, 233, 0.35);
 }
- 
+
 button:active { transform: translateY(0); }
- 
+
 /* ─── FORM STEPS ─── */
 .form-step { display: none; animation: fadeIn 0.35s ease; }
 .form-step.active { display: block; }
- 
+
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+    to   { opacity: 1; transform: translateY(0); }
 }
- 
+
 /* ─── SUCCESS ─── */
 .success-msg {
     text-align: center;
@@ -299,7 +372,7 @@ button:active { transform: translateY(0); }
     border-radius: 10px;
     border: 1px solid #a7f3d0;
 }
- 
+
 /* ─── BOTÓN VERDE ─── */
 .btn-login-success {
     background: linear-gradient(135deg, #059669, #10b981);
@@ -307,12 +380,12 @@ button:active { transform: translateY(0); }
     margin-top: 12px;
     display: none;
 }
- 
+
 .btn-login-success:hover {
     background: linear-gradient(135deg, #047857, #059669);
     box-shadow: 0 6px 18px rgba(16, 185, 129, 0.35);
 }
- 
+
 /* ─── SECCIÓN ESPECIALISTA ─── */
 #especialistaExtra {
     display: none;
@@ -322,7 +395,7 @@ button:active { transform: translateY(0); }
     margin-bottom: 18px;
     border: 1.5px solid #bbf7d0;
 }
- 
+
 /* ─── SECCIÓN MÉDICA (PACIENTES) ─── */
 .seccion-medica {
     display: none;
@@ -332,7 +405,7 @@ button:active { transform: translateY(0); }
     margin-bottom: 18px;
     border: 1.5px solid #bae6fd;
 }
- 
+
 /* ─── LABEL DE SECCIÓN ─── */
 .seccion-label {
     display: flex;
@@ -347,12 +420,12 @@ button:active { transform: translateY(0); }
     padding-bottom: 8px;
     border-bottom: 1px solid rgba(14, 165, 233, 0.2);
 }
- 
+
 #especialistaExtra .seccion-label {
     color: #15803d;
     border-bottom-color: rgba(34, 197, 94, 0.2);
 }
- 
+
 /* ─── SECCIÓN ACUDIENTE ─── */
 #acudienteSection {
     display: none;
@@ -362,29 +435,29 @@ button:active { transform: translateY(0); }
     margin-bottom: 18px;
     border: 1.5px solid #e9d5ff;
 }
- 
+
 #acudienteSection .seccion-label {
     color: #7c3aed;
     border-bottom-color: rgba(139, 92, 246, 0.2);
 }
- 
-/* ─── EPS PERSONALIZADA (CREACIÓN) ─── */
+
+/* ─── EPS PERSONALIZADA ─── */
 #eps-otro-container-creacion {
     animation: fadeIn 0.25s ease;
     margin-top: 4px;
 }
- 
-#eps-otro-container-creacion input {
+
+#eps-otro-container-creacion .form-control {
     border-color: #bae6fd;
     background: #f0f9ff;
 }
- 
-#eps-otro-container-creacion input:focus {
+
+#eps-otro-container-creacion .form-control:focus {
     border-color: #0ea5e9;
     background-color: #ffffff;
     box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
 }
- 
+
 /* ─── EMAIL CARD SIMULADA ─── */
 .email-card {
     border: 1.5px solid #e2e8f0;
@@ -393,7 +466,7 @@ button:active { transform: translateY(0); }
     box-shadow: 0 4px 20px rgba(0,0,0,0.07);
     background: #ffffff;
 }
- 
+
 .email-card-topbar {
     background: #f1f5f9;
     border-bottom: 1px solid #e2e8f0;
@@ -402,41 +475,41 @@ button:active { transform: translateY(0); }
     align-items: center;
     gap: 10px;
 }
- 
+
 .email-topbar-dots {
     display: flex;
     gap: 5px;
 }
- 
+
 .email-topbar-dots span {
     width: 10px; height: 10px;
     border-radius: 50%;
     background: #cbd5e1;
     display: block;
 }
- 
+
 .email-topbar-dots span:nth-child(1) { background: #fca5a5; }
 .email-topbar-dots span:nth-child(2) { background: #fcd34d; }
 .email-topbar-dots span:nth-child(3) { background: #6ee7b7; }
- 
+
 .email-topbar-label {
     font-size: 12px;
     font-weight: 600;
     color: #94a3b8;
     letter-spacing: 0.3px;
 }
- 
+
 .email-card-body {
     padding: 18px 20px 20px;
 }
- 
+
 .email-from-row {
     display: flex;
     align-items: flex-start;
     gap: 10px;
     margin-bottom: 14px;
 }
- 
+
 .email-avatar {
     width: 36px; height: 36px;
     border-radius: 50%;
@@ -447,55 +520,53 @@ button:active { transform: translateY(0); }
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
 }
- 
-.email-meta {
-    flex: 1;
-}
- 
+
+.email-meta { flex: 1; }
+
 .email-from {
     font-size: 13px;
     font-weight: 700;
     color: #1e293b;
 }
- 
+
 .email-from span {
     font-weight: 400;
     color: #94a3b8;
     font-size: 12px;
 }
- 
+
 .email-to {
     font-size: 12px;
     color: #94a3b8;
     margin-top: 1px;
 }
- 
+
 .email-to span {
     color: #475569;
     font-weight: 500;
 }
- 
+
 .email-time {
     font-size: 11.5px;
     color: #94a3b8;
     white-space: nowrap;
     flex-shrink: 0;
 }
- 
+
 .email-subject {
     font-size: 14px;
     font-weight: 700;
     color: #1e293b;
     margin-bottom: 8px;
 }
- 
+
 .email-message {
     font-size: 13px;
     color: #475569;
     line-height: 1.6;
     margin-bottom: 16px;
 }
- 
+
 .email-code-display {
     background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
     border: 2px dashed #7dd3fc;
@@ -509,7 +580,7 @@ button:active { transform: translateY(0); }
     margin-bottom: 14px;
     font-family: 'Inter', sans-serif;
 }
- 
+
 .email-footer-note {
     font-size: 11px;
     color: #b0bdc9;
@@ -517,7 +588,7 @@ button:active { transform: translateY(0); }
     border-top: 1px solid #f1f5f9;
     padding-top: 10px;
 }
- 
+
 /* ─── RESPONSIVE ─── */
 @media (max-width: 520px) {
     .body { padding: 20px 18px 24px; }
