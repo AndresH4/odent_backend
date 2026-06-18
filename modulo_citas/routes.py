@@ -53,7 +53,7 @@ def get_especialistas():
                 u.Nombres || ' ' || u.Apellidos   AS NombreCompleto,
                 GROUP_CONCAT(esp.Nombre_Especialidad, ', ') AS Especialidades,
                 e.Tarjeta_Profesional
-            FROM especialista e
+            FROM especialistas e
             JOIN usuarios u        ON u.Usuario_ID      = e.Usuario_ID
             JOIN especialista_especialidad ee ON ee.Especialista_ID = e.Especialista_ID
             JOIN especialidad esp  ON esp.Especialidad_ID = ee.Especialidad_ID
@@ -94,15 +94,15 @@ def get_agenda():
                 esp.Nombre_Especialidad,
                 a.Fecha,
                 a.Hora_Inicio,
-                a.Hora_Final,
+                a.Hora_Fin,
                 ea.Nombre_Estado                 AS EstadoAgenda
             FROM agenda a
-            JOIN especialista e   ON e.Especialista_ID = a.Especialista_ID
+            JOIN especialistas e   ON e.Especialista_ID = a.Especialista_ID
             JOIN usuarios u       ON u.Usuario_ID      = e.Usuario_ID
             JOIN especialista_especialidad ee ON ee.Especialista_ID = e.Especialista_ID
             JOIN especialidad esp ON esp.Especialidad_ID = ee.Especialidad_ID
-            JOIN estado_agenda ea ON ea.EstadoAgenda_ID = a.EstadoAgenda_ID
-            WHERE a.EstadoAgenda_ID = 1          -- solo 'Disponible'
+            JOIN estado_agenda ea ON ea.Estado_ID = a.Estado_ID
+            WHERE a.Estado_ID = 1          -- solo 'Disponible'
         """
         params = []
 
@@ -149,11 +149,11 @@ def get_citas():
                 up.NumeroDocumento,
                 up.Telefono                        AS TelefonoPaciente,
                 up.Correo                          AS CorreoPaciente,
-                -- Agenda / Especialista
+                -- Agenda / Especialistas
                 a.Agenda_ID,
                 a.Fecha,
                 a.Hora_Inicio,
-                a.Hora_Final,
+                a.Hora_Fin,
                 ea.Nombre_Estado                   AS EstadoAgenda,
                 e.Especialista_ID,
                 ue.Nombres || ' ' || ue.Apellidos  AS NombreEspecialista,
@@ -162,8 +162,8 @@ def get_citas():
             JOIN paciente p   ON p.Paciente_ID     = c.Paciente_ID
             JOIN usuarios up  ON up.Usuario_ID     = p.Usuario_ID
             JOIN agenda a     ON a.Agenda_ID       = c.Agenda_ID
-            JOIN estado_agenda ea ON ea.EstadoAgenda_ID = a.EstadoAgenda_ID
-            JOIN especialista e   ON e.Especialista_ID  = a.Especialista_ID
+            JOIN estado_agenda ea ON ea.Estado_ID = a.Estado_ID
+            JOIN especialistas e   ON e.Especialista_ID  = a.Especialista_ID
             JOIN usuarios ue  ON ue.Usuario_ID     = e.Usuario_ID
             LEFT JOIN especialista_especialidad ee ON ee.Especialista_ID = e.Especialista_ID
             LEFT JOIN especialidad esp ON esp.Especialidad_ID = ee.Especialidad_ID
@@ -212,12 +212,12 @@ def crear_cita():
 
         # ── 1. Verificar que el slot exista y esté disponible ────────────────
         cur.execute(
-            "SELECT EstadoAgenda_ID FROM agenda WHERE Agenda_ID = ?", (agenda_id,)
+            "SELECT Estado_ID FROM agenda WHERE Agenda_ID = ?", (agenda_id,)
         )
         slot = cur.fetchone()
         if not slot:
             return _json_error('El slot de agenda no existe.', 404)
-        if slot['EstadoAgenda_ID'] != 1:
+        if slot['Estado_ID'] != 1:
             return _json_error('Ese horario ya no está disponible.')
 
         # ── 2. Verificar que el paciente no tenga cita activa ────────────────
@@ -226,7 +226,7 @@ def crear_cita():
             FROM cita c
             JOIN agenda a ON a.Agenda_ID = c.Agenda_ID
             WHERE c.Paciente_ID = ?
-              AND a.EstadoAgenda_ID IN (1, 2)   -- Disponible u Ocupado
+              AND a.Estado_ID IN (1, 2)   -- Disponible u Ocupado
         """, (paciente_id,))
         if cur.fetchone():
             return _json_error('El paciente ya tiene una cita activa pendiente.')
@@ -238,9 +238,9 @@ def crear_cita():
         )
         cita_id = cur.lastrowid
 
-        # ── 4. Marcar el slot como 'Ocupado' (EstadoAgenda_ID = 2) ───────────
+        # ── 4. Marcar el slot como 'Ocupado' (Estado_ID = 2) ───────────
         cur.execute(
-            "UPDATE agenda SET EstadoAgenda_ID = 2 WHERE Agenda_ID = ?", (agenda_id,)
+            "UPDATE agenda SET Estado_ID = 2 WHERE Agenda_ID = ?", (agenda_id,)
         )
 
         con.commit()
@@ -269,15 +269,15 @@ def get_cita(cita_id):
                 p.Paciente_ID,
                 up.Nombres || ' ' || up.Apellidos AS NombrePaciente,
                 up.NumeroDocumento, up.Correo,
-                a.Fecha, a.Hora_Inicio, a.Hora_Final,
+                a.Fecha, a.Hora_Inicio, a.Hora_Fin,
                 ea.Nombre_Estado AS EstadoAgenda,
                 ue.Nombres || ' ' || ue.Apellidos AS NombreEspecialista
             FROM cita c
             JOIN paciente p   ON p.Paciente_ID = c.Paciente_ID
             JOIN usuarios up  ON up.Usuario_ID = p.Usuario_ID
             JOIN agenda a     ON a.Agenda_ID   = c.Agenda_ID
-            JOIN estado_agenda ea ON ea.EstadoAgenda_ID = a.EstadoAgenda_ID
-            JOIN especialista e ON e.Especialista_ID = a.Especialista_ID
+            JOIN estado_agenda ea ON ea.Estado_ID = a.Estado_ID
+            JOIN especialistas e ON e.Especialista_ID = a.Especialista_ID
             JOIN usuarios ue ON ue.Usuario_ID = e.Usuario_ID
             WHERE c.Cita_ID = ?
         """, (cita_id,))
@@ -295,7 +295,7 @@ def get_cita(cita_id):
 def cancelar_cita(cita_id):
     """
     Cancela una cita:
-      - Libera el slot de agenda (EstadoAgenda_ID = 3 'Cancelado').
+      - Libera el slot de agenda (Estado_ID = 3 'Cancelado').
       - Crea una multa en estado 'Pendiente' (EstadoMulta_ID = 1).
     """
     con = None
@@ -313,7 +313,7 @@ def cancelar_cita(cita_id):
 
         # Marcar agenda como Cancelada (ID = 3)
         cur.execute(
-            "UPDATE agenda SET EstadoAgenda_ID = 3 WHERE Agenda_ID = ?", (agenda_id,)
+            "UPDATE agenda SET Estado_ID = 3 WHERE Agenda_ID = ?", (agenda_id,)
         )
 
         # Crear multa pendiente (EstadoMulta_ID = 1)
@@ -351,15 +351,15 @@ def get_citas_paciente(paciente_id):
                 c.Motivo_Consulta,
                 a.Fecha,
                 a.Hora_Inicio,
-                a.Hora_Final,
+                a.Hora_Fin,
                 ea.Nombre_Estado              AS EstadoAgenda,
                 ue.Nombres || ' ' || ue.Apellidos AS NombreEspecialista,
                 esp.Nombre_Especialidad,
                 COALESCE(em.Nombre_Estado, 'Sin multa') AS EstadoMulta
             FROM cita c
             JOIN agenda a     ON a.Agenda_ID   = c.Agenda_ID
-            JOIN estado_agenda ea ON ea.EstadoAgenda_ID = a.EstadoAgenda_ID
-            JOIN especialista e ON e.Especialista_ID = a.Especialista_ID
+            JOIN estado_agenda ea ON ea.Estado_ID = a.Estado_ID
+            JOIN especialistas e ON e.Especialista_ID = a.Especialista_ID
             JOIN usuarios ue ON ue.Usuario_ID = e.Usuario_ID
             LEFT JOIN especialista_especialidad ee ON ee.Especialista_ID = e.Especialista_ID
             LEFT JOIN especialidad esp ON esp.Especialidad_ID = ee.Especialidad_ID
@@ -395,7 +395,7 @@ def get_citas_especialista(especialista_id):
                 c.Motivo_Consulta,
                 a.Fecha,
                 a.Hora_Inicio,
-                a.Hora_Final,
+                a.Hora_Fin,
                 ea.Nombre_Estado              AS EstadoAgenda,
                 up.Nombres || ' ' || up.Apellidos AS NombrePaciente,
                 up.NumeroDocumento,
@@ -404,7 +404,7 @@ def get_citas_especialista(especialista_id):
                 COALESCE(em.Nombre_Estado, 'Sin multa') AS EstadoMulta
             FROM cita c
             JOIN agenda a    ON a.Agenda_ID   = c.Agenda_ID
-            JOIN estado_agenda ea ON ea.EstadoAgenda_ID = a.EstadoAgenda_ID
+            JOIN estado_agenda ea ON ea.Estado_ID = a.Estado_ID
             JOIN paciente p  ON p.Paciente_ID = c.Paciente_ID
             JOIN usuarios up ON up.Usuario_ID = p.Usuario_ID
             LEFT JOIN especialista_especialidad ee ON ee.Especialista_ID = a.Especialista_ID
