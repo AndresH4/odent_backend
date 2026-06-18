@@ -1,30 +1,81 @@
 # =============================================================================
 # modulo_eps/tabla_respuesta.py
-# CRUD para la tabla tabla_respuesta — JOINs con tabla_pregunta y paciente
+# CRUD para la tabla respuesta_ranking.
+# Los ESPECIALISTAS son los calificados; los PACIENTES son los calificantes.
+#
+# Esquema real (init_db.py):
+#   respuesta_ranking (
+#     Respuesta_ID INTEGER PK,
+#     Cita_ID      INT NOT NULL → cita(Cita_ID),
+#     Preguntas_ID INT NOT NULL → preguntas_ranking(Preguntas_ID),
+#     Respuesta    INT NOT NULL   ← valor numérico 1-5
+#   )
+#
+# Cadena de JOINs para llegar al especialista calificado:
+#   respuesta_ranking
+#     → cita          (Cita_ID)
+#     → agenda        (Agenda_ID)          ← agenda pertenece al especialista
+#     → especialista  (Especialista_ID)
+#     → usuarios      (Usuario_ID)          ← nombre del especialista
+#     → especialista_especialidad           ← primera especialidad asignada
+#     → especialidad  (Especialidad_ID)
+#
+# Cadena para el paciente calificante:
+#   cita → paciente → usuarios
 # =============================================================================
- 
+
 from db import get_db_connection
- 
- 
+
+
+# ---------------------------------------------------------------------------
+# CREAR RESPUESTA
+# ---------------------------------------------------------------------------
 def crear_respuesta(pregunta_id, paciente_id, texto_respuesta):
     """
-    Registra la respuesta de un paciente a una pregunta del formulario.
-    Retorna el ID del registro creado.
+    Registra la respuesta de un paciente a una pregunta.
+    Busca la Cita_ID más reciente del paciente para relacionar la respuesta.
     """
+    try:
+        valor_int = int(texto_respuesta)
+    except (ValueError, TypeError):
+        raise ValueError(
+            f"Texto_Respuesta debe ser un número entero, recibido: {texto_respuesta!r}"
+        )
+
     conexion = None
-    cursor = None
+    cursor   = None
     try:
         conexion = get_db_connection()
-        cursor = conexion.cursor()
+        cursor   = conexion.cursor()
+
         cursor.execute(
             """
-            INSERT INTO tabla_respuesta (ID_Pregunta, ID_Paciente, Texto_Respuesta)
+            SELECT c.Cita_ID
+            FROM cita c
+            WHERE c.Paciente_ID = ?
+            ORDER BY c.Cita_ID DESC
+            LIMIT 1
+            """,
+            (paciente_id,)
+        )
+        fila_cita = cursor.fetchone()
+        if fila_cita is None:
+            raise ValueError(
+                f"No se encontró ninguna cita para el paciente ID {paciente_id}"
+            )
+
+        cita_id = fila_cita[0]
+
+        cursor.execute(
+            """
+            INSERT INTO respuesta_ranking (Cita_ID, Preguntas_ID, Respuesta)
             VALUES (?, ?, ?)
             """,
-            (pregunta_id, paciente_id, texto_respuesta)
+            (cita_id, pregunta_id, valor_int)
         )
         conexion.commit()
         return cursor.lastrowid
+
     except Exception as e:
         if conexion:
             conexion.rollback()
@@ -34,38 +85,52 @@ def crear_respuesta(pregunta_id, paciente_id, texto_respuesta):
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
+
+
+# ---------------------------------------------------------------------------
+# OBTENER TODAS LAS RESPUESTAS (con JOINs enriquecidos)
+# ---------------------------------------------------------------------------
 def obtener_respuestas():
     """
-    Retorna todas las respuestas enriquecidas con:
-      - Texto de la pregunta (JOIN con tabla_pregunta)
-      - Nombre completo del paciente (JOIN con paciente y usuarios)
+    Retorna todas las respuestas con datos del especialista calificado
+    y del paciente calificante.
+    Claves del dict de salida:
+      ID_Respuesta, Texto_Respuesta, ID_Pregunta, Texto_Pregunta,
+      Orden_Pregunta, ID_Especialista, Nombre_Especialista,
+      ID_Paciente, Nombre_Paciente
     """
     conexion = None
-    cursor = None
+    cursor   = None
     try:
         conexion = get_db_connection()
-        cursor = conexion.cursor()
+        cursor   = conexion.cursor()
         cursor.execute(
             """
             SELECT
-                r.ID_Respuesta,
-                r.Texto_Respuesta,
-                r.ID_Pregunta,
-                p.Texto_Pregunta,
-                p.Orden           AS Orden_Pregunta,
-                r.ID_Paciente,
-                u.Nombres || ' ' || u.Apellidos AS Nombre_Paciente
-            FROM tabla_respuesta r
-            INNER JOIN tabla_pregunta p ON r.ID_Pregunta = p.ID_Pregunta
-            INNER JOIN paciente       pa ON r.ID_Paciente = pa.ID_Paciente
-            INNER JOIN usuarios       u  ON pa.ID_Usuario = u.ID_Usuario
-            ORDER BY r.ID_Paciente ASC, p.Orden ASC
+                rr.Respuesta_ID,
+                CAST(rr.Respuesta AS TEXT)              AS Texto_Respuesta,
+                rr.Preguntas_ID                         AS ID_Pregunta,
+                pr.Texto_Pregunta,
+                rr.Preguntas_ID                         AS Orden_Pregunta,
+                e.Especialista_ID                       AS ID_Especialista,
+                ue.Nombres || ' ' || ue.Apellidos       AS Nombre_Especialista,
+                p.Paciente_ID                           AS ID_Paciente,
+                up.Nombres || ' ' || up.Apellidos       AS Nombre_Paciente
+            FROM respuesta_ranking  rr
+            INNER JOIN preguntas_ranking  pr ON rr.Preguntas_ID  = pr.Preguntas_ID
+            INNER JOIN cita               c  ON rr.Cita_ID       = c.Cita_ID
+            -- Especialista calificado (a través de la agenda de la cita)
+            INNER JOIN agenda             ag ON c.Agenda_ID      = ag.Agenda_ID
+            INNER JOIN especialista       e  ON ag.Especialista_ID = e.Especialista_ID
+            INNER JOIN usuarios           ue ON e.Usuario_ID     = ue.Usuario_ID
+            -- Paciente calificante
+            INNER JOIN paciente           p  ON c.Paciente_ID   = p.Paciente_ID
+            INNER JOIN usuarios           up ON p.Usuario_ID    = up.Usuario_ID
+            ORDER BY e.Especialista_ID ASC, rr.Preguntas_ID ASC
             """
         )
         columnas = [desc[0] for desc in cursor.description]
-        filas = cursor.fetchall()
+        filas    = cursor.fetchall()
         return [dict(zip(columnas, fila)) for fila in filas]
     except Exception as e:
         raise e
@@ -74,38 +139,47 @@ def obtener_respuestas():
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
+
+
+# ---------------------------------------------------------------------------
+# OBTENER RESPUESTA POR ID
+# ---------------------------------------------------------------------------
 def obtener_respuesta_por_id(respuesta_id):
     """
-    Retorna una respuesta específica por su ID, con los JOINs enriquecidos.
+    Retorna una respuesta específica por su Respuesta_ID con JOINs completos.
     Devuelve None si no existe.
     """
     conexion = None
-    cursor = None
+    cursor   = None
     try:
         conexion = get_db_connection()
-        cursor = conexion.cursor()
+        cursor   = conexion.cursor()
         cursor.execute(
             """
             SELECT
-                r.ID_Respuesta,
-                r.Texto_Respuesta,
-                r.ID_Pregunta,
-                p.Texto_Pregunta,
-                p.Orden           AS Orden_Pregunta,
-                r.ID_Paciente,
-                u.Nombres || ' ' || u.Apellidos AS Nombre_Paciente
-            FROM tabla_respuesta r
-            INNER JOIN tabla_pregunta p ON r.ID_Pregunta  = p.ID_Pregunta
-            INNER JOIN paciente       pa ON r.ID_Paciente = pa.ID_Paciente
-            INNER JOIN usuarios       u  ON pa.ID_Usuario = u.ID_Usuario
-            WHERE r.ID_Respuesta = ?
+                rr.Respuesta_ID,
+                CAST(rr.Respuesta AS TEXT)              AS Texto_Respuesta,
+                rr.Preguntas_ID                         AS ID_Pregunta,
+                pr.Texto_Pregunta,
+                rr.Preguntas_ID                         AS Orden_Pregunta,
+                e.Especialista_ID                       AS ID_Especialista,
+                ue.Nombres || ' ' || ue.Apellidos       AS Nombre_Especialista,
+                p.Paciente_ID                           AS ID_Paciente,
+                up.Nombres || ' ' || up.Apellidos       AS Nombre_Paciente
+            FROM respuesta_ranking  rr
+            INNER JOIN preguntas_ranking  pr ON rr.Preguntas_ID    = pr.Preguntas_ID
+            INNER JOIN cita               c  ON rr.Cita_ID         = c.Cita_ID
+            INNER JOIN agenda             ag ON c.Agenda_ID        = ag.Agenda_ID
+            INNER JOIN especialista       e  ON ag.Especialista_ID = e.Especialista_ID
+            INNER JOIN usuarios           ue ON e.Usuario_ID       = ue.Usuario_ID
+            INNER JOIN paciente           p  ON c.Paciente_ID      = p.Paciente_ID
+            INNER JOIN usuarios           up ON p.Usuario_ID       = up.Usuario_ID
+            WHERE rr.Respuesta_ID = ?
             """,
             (respuesta_id,)
         )
         columnas = [desc[0] for desc in cursor.description]
-        fila = cursor.fetchone()
+        fila     = cursor.fetchone()
         if fila is None:
             return None
         return dict(zip(columnas, fila))
@@ -116,40 +190,109 @@ def obtener_respuesta_por_id(respuesta_id):
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
-def obtener_respuestas_por_paciente(paciente_id):
+
+
+# ---------------------------------------------------------------------------
+# RANKING CONSOLIDADO POR ESPECIALISTA
+# Nuevo método que agrega el promedio de calificaciones por especialista,
+# incluyendo su primera especialidad registrada.
+# ---------------------------------------------------------------------------
+def obtener_ranking_especialistas():
     """
-    Reporte consolidado: retorna todas las preguntas con sus respuestas
-    para un paciente específico, ordenadas por el campo Orden de la pregunta.
-    Incluye el nombre completo del paciente en cada fila.
+    Retorna el ranking de especialistas ordenado por promedio descendente.
+    Cada registro incluye:
+      ID_Especialista, Nombre_Especialista, Especialidad,
+      Promedio (float, 1 decimal), Total_Evaluaciones (int)
+    Solo incluye especialistas que hayan recibido al menos una evaluación.
     """
     conexion = None
-    cursor = None
+    cursor   = None
     try:
         conexion = get_db_connection()
-        cursor = conexion.cursor()
+        cursor   = conexion.cursor()
         cursor.execute(
             """
             SELECT
-                r.ID_Respuesta,
-                r.ID_Paciente,
-                u.Nombres || ' ' || u.Apellidos AS Nombre_Paciente,
-                p.ID_Pregunta,
-                p.Texto_Pregunta,
-                p.Orden                          AS Orden_Pregunta,
-                r.Texto_Respuesta
-            FROM tabla_respuesta r
-            INNER JOIN tabla_pregunta p ON r.ID_Pregunta  = p.ID_Pregunta
-            INNER JOIN paciente       pa ON r.ID_Paciente = pa.ID_Paciente
-            INNER JOIN usuarios       u  ON pa.ID_Usuario = u.ID_Usuario
-            WHERE r.ID_Paciente = ?
-            ORDER BY p.Orden ASC, p.ID_Pregunta ASC
+                e.Especialista_ID                           AS ID_Especialista,
+                ue.Nombres || ' ' || ue.Apellidos           AS Nombre_Especialista,
+                COALESCE(esp.Nombre_Especialidad, '—')      AS Especialidad,
+                ROUND(AVG(CAST(rr.Respuesta AS REAL)), 2)   AS Promedio,
+                COUNT(rr.Respuesta_ID)                      AS Total_Evaluaciones
+            FROM respuesta_ranking  rr
+            INNER JOIN cita               c  ON rr.Cita_ID         = c.Cita_ID
+            INNER JOIN agenda             ag ON c.Agenda_ID        = ag.Agenda_ID
+            INNER JOIN especialista       e  ON ag.Especialista_ID = e.Especialista_ID
+            INNER JOIN usuarios           ue ON e.Usuario_ID       = ue.Usuario_ID
+            -- Primera especialidad del especialista (MIN para consistencia)
+            LEFT JOIN (
+                SELECT ee.Especialista_ID, MIN(esp2.Nombre_Especialidad) AS Nombre_Especialidad
+                FROM especialista_especialidad ee
+                INNER JOIN especialidad esp2 ON ee.Especialidad_ID = esp2.Especialidad_ID
+                GROUP BY ee.Especialista_ID
+            ) esp ON e.Especialista_ID = esp.Especialista_ID
+            GROUP BY e.Especialista_ID, ue.Nombres, ue.Apellidos, esp.Nombre_Especialidad
+            ORDER BY Promedio DESC, Total_Evaluaciones DESC
+            """
+        )
+        columnas = [desc[0] for desc in cursor.description]
+        filas    = cursor.fetchall()
+        resultado = []
+        for fila in filas:
+            row = dict(zip(columnas, fila))
+            # Asegurar tipos correctos para la serialización JSON
+            row['Promedio']           = float(row['Promedio']) if row['Promedio'] is not None else 0.0
+            row['Total_Evaluaciones'] = int(row['Total_Evaluaciones'])
+            resultado.append(row)
+        return resultado
+    except Exception as e:
+        raise e
+    finally:
+        if cursor:
+            cursor.close()
+        if conexion:
+            conexion.close()
+
+
+# ---------------------------------------------------------------------------
+# RESPUESTAS POR PACIENTE (reporte de formulario completo)
+# ---------------------------------------------------------------------------
+def obtener_respuestas_por_paciente(paciente_id):
+    """
+    Reporte consolidado: preguntas + respuestas de un paciente específico,
+    incluyendo el nombre del especialista que atendió cada cita.
+    """
+    conexion = None
+    cursor   = None
+    try:
+        conexion = get_db_connection()
+        cursor   = conexion.cursor()
+        cursor.execute(
+            """
+            SELECT
+                rr.Respuesta_ID,
+                p.Paciente_ID                           AS ID_Paciente,
+                up.Nombres || ' ' || up.Apellidos       AS Nombre_Paciente,
+                pr.Preguntas_ID                         AS ID_Pregunta,
+                pr.Texto_Pregunta,
+                rr.Preguntas_ID                         AS Orden_Pregunta,
+                CAST(rr.Respuesta AS TEXT)              AS Texto_Respuesta,
+                e.Especialista_ID                       AS ID_Especialista,
+                ue.Nombres || ' ' || ue.Apellidos       AS Nombre_Especialista
+            FROM respuesta_ranking  rr
+            INNER JOIN preguntas_ranking  pr ON rr.Preguntas_ID    = pr.Preguntas_ID
+            INNER JOIN cita               c  ON rr.Cita_ID         = c.Cita_ID
+            INNER JOIN agenda             ag ON c.Agenda_ID        = ag.Agenda_ID
+            INNER JOIN especialista       e  ON ag.Especialista_ID = e.Especialista_ID
+            INNER JOIN usuarios           ue ON e.Usuario_ID       = ue.Usuario_ID
+            INNER JOIN paciente           p  ON c.Paciente_ID      = p.Paciente_ID
+            INNER JOIN usuarios           up ON p.Usuario_ID       = up.Usuario_ID
+            WHERE p.Paciente_ID = ?
+            ORDER BY rr.Preguntas_ID ASC
             """,
             (paciente_id,)
         )
         columnas = [desc[0] for desc in cursor.description]
-        filas = cursor.fetchall()
+        filas    = cursor.fetchall()
         return [dict(zip(columnas, fila)) for fila in filas]
     except Exception as e:
         raise e
@@ -158,25 +301,31 @@ def obtener_respuestas_por_paciente(paciente_id):
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
+
+
+# ---------------------------------------------------------------------------
+# ACTUALIZAR RESPUESTA
+# ---------------------------------------------------------------------------
 def actualizar_respuesta(respuesta_id, texto_respuesta):
     """
-    Actualiza el texto de una respuesta existente.
-    Retorna True si se modificó al menos un registro, False si no se encontró.
+    Actualiza el valor de una respuesta existente.
+    Retorna True si se modificó, False si no se encontró.
     """
+    try:
+        valor_int = int(texto_respuesta)
+    except (ValueError, TypeError):
+        raise ValueError(
+            f"Texto_Respuesta debe ser un número entero, recibido: {texto_respuesta!r}"
+        )
+
     conexion = None
-    cursor = None
+    cursor   = None
     try:
         conexion = get_db_connection()
-        cursor = conexion.cursor()
+        cursor   = conexion.cursor()
         cursor.execute(
-            """
-            UPDATE tabla_respuesta
-            SET Texto_Respuesta = ?
-            WHERE ID_Respuesta = ?
-            """,
-            (texto_respuesta, respuesta_id)
+            "UPDATE respuesta_ranking SET Respuesta = ? WHERE Respuesta_ID = ?",
+            (valor_int, respuesta_id)
         )
         conexion.commit()
         return cursor.rowcount > 0
@@ -189,20 +338,23 @@ def actualizar_respuesta(respuesta_id, texto_respuesta):
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
+
+
+# ---------------------------------------------------------------------------
+# ELIMINAR RESPUESTA
+# ---------------------------------------------------------------------------
 def eliminar_respuesta(respuesta_id):
     """
-    Elimina una respuesta por su ID.
+    Elimina una respuesta por su Respuesta_ID.
     Retorna True si se eliminó, False si no existía.
     """
     conexion = None
-    cursor = None
+    cursor   = None
     try:
         conexion = get_db_connection()
-        cursor = conexion.cursor()
+        cursor   = conexion.cursor()
         cursor.execute(
-            "DELETE FROM tabla_respuesta WHERE ID_Respuesta = ?",
+            "DELETE FROM respuesta_ranking WHERE Respuesta_ID = ?",
             (respuesta_id,)
         )
         conexion.commit()

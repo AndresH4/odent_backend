@@ -1,31 +1,28 @@
 # =============================================================================
 # modulo_eps/tabla_pregunta.py
-# CRUD para la tabla tabla_pregunta
+# CRUD para la tabla preguntas_ranking
+# Esquema real (init_db.py):
+#   preguntas_ranking (Preguntas_ID INTEGER PK, Texto_Pregunta VARCHAR(150))
 # =============================================================================
- 
+
 from db import get_db_connection
- 
- 
+
+
 def crear_pregunta(texto_pregunta, orden=None, activa=1):
     """
-    Registra una nueva pregunta del formulario de aseguramiento/historia.
-    Parámetros:
-      - texto_pregunta : Texto completo de la pregunta.
-      - orden          : Posición de la pregunta dentro del formulario (opcional).
-      - activa         : 1 = activa, 0 = inactiva (por defecto 1).
-    Retorna el ID del registro creado.
+    Registra una nueva pregunta en preguntas_ranking.
+    Los parámetros `orden` y `activa` se aceptan por compatibilidad con
+    routes.py pero no se persisten (la tabla real no tiene esas columnas).
+    Retorna el ID del registro creado (Preguntas_ID).
     """
     conexion = None
-    cursor = None
+    cursor   = None
     try:
         conexion = get_db_connection()
-        cursor = conexion.cursor()
+        cursor   = conexion.cursor()
         cursor.execute(
-            """
-            INSERT INTO tabla_pregunta (Texto_Pregunta, Orden, Activa)
-            VALUES (?, ?, ?)
-            """,
-            (texto_pregunta, orden, activa)
+            "INSERT INTO preguntas_ranking (Texto_Pregunta) VALUES (?)",
+            (texto_pregunta,)
         )
         conexion.commit()
         return cursor.lastrowid
@@ -38,33 +35,33 @@ def crear_pregunta(texto_pregunta, orden=None, activa=1):
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
+
+
 def obtener_preguntas(solo_activas=False):
     """
-    Retorna todas las preguntas ordenadas por su campo Orden.
-    Si solo_activas=True, filtra únicamente las que estén activas (Activa = 1).
+    Retorna todas las preguntas de preguntas_ranking.
+    El parámetro `solo_activas` se acepta por compatibilidad pero no filtra.
+    Serializa cada fila como dict con las claves que espera routes.py:
+      ID_Pregunta, Texto_Pregunta, Orden, Activa
     """
     conexion = None
-    cursor = None
+    cursor   = None
     try:
         conexion = get_db_connection()
-        cursor = conexion.cursor()
-        if solo_activas:
-            cursor.execute(
-                """
-                SELECT * FROM tabla_pregunta
-                WHERE Activa = 1
-                ORDER BY Orden ASC, ID_Pregunta ASC
-                """
-            )
-        else:
-            cursor.execute(
-                "SELECT * FROM tabla_pregunta ORDER BY Orden ASC, ID_Pregunta ASC"
-            )
-        columnas = [desc[0] for desc in cursor.description]
+        cursor   = conexion.cursor()
+        cursor.execute(
+            "SELECT Preguntas_ID, Texto_Pregunta FROM preguntas_ranking ORDER BY Preguntas_ID ASC"
+        )
         filas = cursor.fetchall()
-        return [dict(zip(columnas, fila)) for fila in filas]
+        return [
+            {
+                "ID_Pregunta":    fila[0],
+                "Texto_Pregunta": fila[1],
+                "Orden":          idx + 1,
+                "Activa":         1
+            }
+            for idx, fila in enumerate(filas)
+        ]
     except Exception as e:
         raise e
     finally:
@@ -72,27 +69,31 @@ def obtener_preguntas(solo_activas=False):
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
+
+
 def obtener_pregunta_por_id(pregunta_id):
     """
-    Retorna una pregunta específica por su ID.
+    Retorna una pregunta específica por su Preguntas_ID.
     Devuelve None si no existe.
     """
     conexion = None
-    cursor = None
+    cursor   = None
     try:
         conexion = get_db_connection()
-        cursor = conexion.cursor()
+        cursor   = conexion.cursor()
         cursor.execute(
-            "SELECT * FROM tabla_pregunta WHERE ID_Pregunta = ?",
+            "SELECT Preguntas_ID, Texto_Pregunta FROM preguntas_ranking WHERE Preguntas_ID = ?",
             (pregunta_id,)
         )
-        columnas = [desc[0] for desc in cursor.description]
         fila = cursor.fetchone()
         if fila is None:
             return None
-        return dict(zip(columnas, fila))
+        return {
+            "ID_Pregunta":    fila[0],
+            "Texto_Pregunta": fila[1],
+            "Orden":          None,
+            "Activa":         1
+        }
     except Exception as e:
         raise e
     finally:
@@ -100,27 +101,21 @@ def obtener_pregunta_por_id(pregunta_id):
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
+
+
 def actualizar_pregunta(pregunta_id, texto_pregunta, orden=None, activa=1):
     """
-    Actualiza el texto, orden y estado de activación de una pregunta.
+    Actualiza el Texto_Pregunta de una pregunta existente.
     Retorna True si se modificó al menos un registro, False si no se encontró.
     """
     conexion = None
-    cursor = None
+    cursor   = None
     try:
         conexion = get_db_connection()
-        cursor = conexion.cursor()
+        cursor   = conexion.cursor()
         cursor.execute(
-            """
-            UPDATE tabla_pregunta
-            SET Texto_Pregunta = ?,
-                Orden          = ?,
-                Activa         = ?
-            WHERE ID_Pregunta = ?
-            """,
-            (texto_pregunta, orden, activa, pregunta_id)
+            "UPDATE preguntas_ranking SET Texto_Pregunta = ? WHERE Preguntas_ID = ?",
+            (texto_pregunta, pregunta_id)
         )
         conexion.commit()
         return cursor.rowcount > 0
@@ -133,20 +128,20 @@ def actualizar_pregunta(pregunta_id, texto_pregunta, orden=None, activa=1):
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
+
+
 def eliminar_pregunta(pregunta_id):
     """
-    Elimina una pregunta por su ID.
+    Elimina una pregunta por su Preguntas_ID.
     Retorna True si se eliminó, False si no existía.
     """
     conexion = None
-    cursor = None
+    cursor   = None
     try:
         conexion = get_db_connection()
-        cursor = conexion.cursor()
+        cursor   = conexion.cursor()
         cursor.execute(
-            "DELETE FROM tabla_pregunta WHERE ID_Pregunta = ?",
+            "DELETE FROM preguntas_ranking WHERE Preguntas_ID = ?",
             (pregunta_id,)
         )
         conexion.commit()
@@ -160,4 +155,3 @@ def eliminar_pregunta(pregunta_id):
             cursor.close()
         if conexion:
             conexion.close()
- 

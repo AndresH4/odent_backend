@@ -53,6 +53,7 @@ from .tabla_respuesta import (
     obtener_respuestas,
     obtener_respuesta_por_id,
     obtener_respuestas_por_paciente,
+    obtener_ranking_especialistas,   # ← nuevo
     actualizar_respuesta,
     eliminar_respuesta,
 )
@@ -127,6 +128,21 @@ def borrar_tipo_eps(tipo_eps_id):
         if not eliminado:
             return jsonify({"ok": False, "error": "Tipo de EPS no encontrado"}), 404
         return jsonify({"ok": True, "mensaje": "Tipo de EPS eliminado correctamente"}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    
+@eps_bp.route('/reporte/ranking-especialistas', methods=['GET'])
+def reporte_ranking_especialistas():
+    """
+    Retorna el ranking de especialistas ordenado por promedio de calificación.
+    Solo incluye especialistas con al menos una evaluación recibida.
+    Respuesta: [{ "ID_Especialista": 1, "Nombre_Especialista": "...",
+                  "Especialidad": "...", "Promedio": 4.8,
+                  "Total_Evaluaciones": 12 }, ...]
+    """
+    try:
+        datos = obtener_ranking_especialistas()
+        return jsonify({"ok": True, "data": datos}), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
  
