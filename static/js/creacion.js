@@ -1,30 +1,17 @@
-/**
- * creacion.js — Stylo Dental
- *
- * Responsabilidades:
- *  1. Cargar catálogos (roles, EPS) desde el backend.
- *  2. Validar el formulario paso a paso.
- *  3. Enviar código de verificación y confirmarlo.
- *  4. Construir el payload COMPLETO (incluyendo EPS, tarjeta profesional,
- *     especialidad, tipo de afiliación, género, tipo de documento) y
- *     enviarlo al backend transaccional POST /api/usuarios.
- *  5. Tras crear el usuario, si el rol es Paciente:
- *     - Registrar en POST /api/paciente (datos clínicos).
- *     - Registrar en POST /api/afiliacion (EPS + régimen).
- *  6. Notificar al usuario sobre éxito o cualquier fallo ocurrido.
- */
- 
 "use strict";
- 
+
 // ── ESTADO GLOBAL ──────────────────────────────────────────────────────────────
-let correoVerificacion  = "";
-let esMenor             = false;
-const EPS_OTRO_VALUE    = '__OTRO__';
-let todasLasEPS         = [];
- 
-const acudienteSection  = document.getElementById("acudienteSection");
- 
-// ── HELPERS DE ENTRADA ─────────────────────────────────────────────────────────
+let correoVerificacion = "";
+let esMenor           = false;
+const EPS_OTRO_VALUE  = '__OTRO__';
+
+let todasLasEPS    = [];
+let epsFiltradas   = [];
+let todosTiposEps  = [];
+
+const acudienteSection = document.getElementById("acudienteSection");
+
+// ── HELPERS ────────────────────────────────────────────────────────────────────
 function soloLetras(input) {
     input.value = input.value.replace(/[^a-zA-ZÁÉÍÓÚáéíóúñÑ\s]/g, '');
 }
@@ -37,90 +24,257 @@ function validarEmail(email) {
 function validarPassword(pass) {
     return /^(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(pass);
 }
- 
-// ── NOTIFICACIÓN AL USUARIO ────────────────────────────────────────────────────
-/**
- * Muestra un mensaje de error visible en la UI.
- * Usa un elemento con id="mensajeError" si existe; si no, hace alert().
- */
+
+// ── NOTIFICACIONES ─────────────────────────────────────────────────────────────
 function mostrarError(mensaje) {
     const el = document.getElementById("mensajeError");
     if (el) {
         el.innerText = mensaje;
         el.style.display = "block";
-        // Auto-ocultar tras 8 segundos
         setTimeout(() => { el.style.display = "none"; }, 8000);
     } else {
         alert("Error: " + mensaje);
     }
-    console.error("[crearUsuario] Error:", mensaje);
 }
- 
 function limpiarMensajeError() {
     const el = document.getElementById("mensajeError");
     if (el) { el.style.display = "none"; el.innerText = ""; }
 }
- 
+
+// ── CAMPO FECHA: LÓGICA DE PLACEHOLDER + FORMATO MANUAL ──────────────────────
+function inicializarCampoFecha() {
+    const inputTexto  = document.getElementById("fechaNacimiento");
+    const inputNativo = document.getElementById("fechaNacimientoNative");
+    const btnCalendario = document.getElementById("datePickerBtn");
+
+    if (!inputTexto || !inputNativo || !btnCalendario) return;
+
+    // Al ganar foco: cambiar placeholder a formato
+    inputTexto.addEventListener("focus", () => {
+        inputTexto.placeholder = "DD/MM/AAAA";
+        inputTexto.classList.add("typing-mode");
+    });
+
+    // Al perder foco: restaurar placeholder descriptivo si vacío
+    inputTexto.addEventListener("blur", () => {
+        if (!inputTexto.value) {
+            inputTexto.placeholder = "Ingrese su fecha de nacimiento";
+            inputTexto.classList.remove("typing-mode");
+        }
+    });
+
+    // Formateo automático con separadores mientras escribe
+    inputTexto.addEventListener("input", (e) => {
+        let raw = inputTexto.value.replace(/\D/g, '').slice(0, 8);
+        let formatted = '';
+
+        if (raw.length > 0) formatted += raw.slice(0, 2);
+        if (raw.length > 2) formatted += '/' + raw.slice(2, 4);
+        if (raw.length > 4) formatted += '/' + raw.slice(4, 8);
+
+        inputTexto.value = formatted;
+
+        // Sincronizar con input nativo cuando la fecha está completa (DD/MM/AAAA)
+        if (raw.length === 8) {
+            const dd   = raw.slice(0, 2);
+            const mm   = raw.slice(2, 4);
+            const yyyy = raw.slice(4, 8);
+            const isoDate = `${yyyy}-${mm}-${dd}`;
+            inputNativo.value = isoDate;
+            verificarEdad();
+        } else {
+            inputNativo.value = '';
+        }
+    });
+
+    // Botón de calendario: abrir el date picker nativo
+    btnCalendario.addEventListener("click", () => {
+        // Mostrar el input nativo brevemente para disparar el picker
+        inputNativo.style.position   = 'absolute';
+        inputNativo.style.opacity    = '0';
+        inputNativo.style.width      = '1px';
+        inputNativo.style.height     = '1px';
+        inputNativo.style.pointerEvents = 'auto';
+        inputNativo.showPicker ? inputNativo.showPicker() : inputNativo.click();
+    });
+
+    // Cuando el usuario elige una fecha del picker nativo, reflejarla en el campo texto
+    inputNativo.addEventListener("change", () => {
+        const val = inputNativo.value; // formato YYYY-MM-DD
+        if (!val) return;
+        const [yyyy, mm, dd] = val.split('-');
+        inputTexto.value = `${dd}/${mm}/${yyyy}`;
+        verificarEdad();
+    });
+}
+
+// ── LEER FECHA DEL CAMPO TEXTO (retorna YYYY-MM-DD para el backend) ───────────
+function leerFechaISO() {
+    const inputTexto  = document.getElementById("fechaNacimiento");
+    const inputNativo = document.getElementById("fechaNacimientoNative");
+
+    // Si el nativo tiene valor (sync via picker o escritura completa), usarlo
+    if (inputNativo && inputNativo.value) return inputNativo.value;
+
+    // Fallback: parsear campo texto manualmente
+    if (inputTexto && inputTexto.value) {
+        const parts = inputTexto.value.split('/');
+        if (parts.length === 3 && parts[2].length === 4) {
+            return `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+    }
+    return '';
+}
+
 // ── INICIALIZACIÓN ─────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
- 
     document.querySelectorAll("#nombres,#apellidos,#nombresAcudiente,#apellidosAcudiente")
         .forEach(el => el.addEventListener("input", function () { soloLetras(this); }));
- 
+
     document.querySelectorAll("#telefono,#documento,#telefonoAcudiente")
         .forEach(el => el.addEventListener("input", function () { soloNumeros(this); }));
- 
+
     document.getElementById("tipoDocumento")
         .addEventListener("change", checkRequisitosAcudiente);
- 
+
+    inicializarCampoFecha();
     cargarRolesEnFormulario();
-    cargarEPSEnFormulario();
+    cargarRegimenesEnFormulario();
+    cargarTiposEpsEnFormulario();
+    cargarTodasLasEPS();
 });
- 
-// ── CATÁLOGO: EPS ──────────────────────────────────────────────────────────────
-async function cargarEPSEnFormulario() {
-    const selectEps = document.getElementById("eps");
- 
-    const epsFallback = [
-        { ID_EPS: 1, Nombre_EPS: 'Compensar' },
-        { ID_EPS: 2, Nombre_EPS: 'Salud Total' },
-        { ID_EPS: 3, Nombre_EPS: 'NuevaEPS' },
-        { ID_EPS: 4, Nombre_EPS: 'Famisanar' },
-        { ID_EPS: 5, Nombre_EPS: 'Sanitas' },
-        { ID_EPS: 6, Nombre_EPS: 'CapitalSalud' },
-        { ID_EPS: 7, Nombre_EPS: 'Sura' },
+
+// ── CATÁLOGO: REGÍMENES ────────────────────────────────────────────────────────
+async function cargarRegimenesEnFormulario() {
+    const select   = document.getElementById("regimen");
+    const fallback = [
+        { Regimen_ID: 1, Descripcion: 'Contributivo' },
+        { Regimen_ID: 2, Descripcion: 'Subsidiado' }
     ];
- 
-    const poblarEPS = (lista) => {
-        todasLasEPS = lista;
-        selectEps.innerHTML = '<option value="">Seleccione una EPS...</option>';
-        lista.forEach(eps => {
+
+    const poblar = (lista) => {
+        select.innerHTML = '<option value="">Seleccione el régimen...</option>';
+        lista.forEach(r => {
             const opt = document.createElement('option');
-            opt.value       = eps.ID_EPS;
-            opt.textContent = eps.Nombre_EPS;
-            selectEps.appendChild(opt);
+            opt.value       = r.Regimen_ID || r.ID_Regimen_EPS;
+            opt.textContent = r.Descripcion || r.Nombre_Regimen;
+            select.appendChild(opt);
         });
-        const optOtro = document.createElement('option');
-        optOtro.value       = EPS_OTRO_VALUE;
-        optOtro.textContent = 'Otro';
-        selectEps.appendChild(optOtro);
     };
- 
+
+    try {
+        const res  = await fetch('/api/regimen-eps');
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error);
+        poblar(data.data);
+    } catch (err) {
+        console.warn('Regímenes fallback:', err);
+        poblar(fallback);
+    }
+}
+
+// ── CATÁLOGO: TIPOS DE EPS ─────────────────────────────────────────────────────
+async function cargarTiposEpsEnFormulario() {
+    const fallback = [
+        { TipoEPS_ID: 1, Nombre_Tipo: 'Cotizante' },
+        { TipoEPS_ID: 2, Nombre_Tipo: 'Beneficiario' }
+    ];
+    try {
+        const res  = await fetch('/api/tipo-eps');
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error);
+        todosTiposEps = data.data;
+    } catch (err) {
+        console.warn('Tipos EPS fallback:', err);
+        todosTiposEps = fallback;
+    }
+}
+
+// ── CATÁLOGO: TODAS LAS EPS ────────────────────────────────────────────────────
+async function cargarTodasLasEPS() {
+    const fallback = [
+        { ID_EPS: 1, Nombre_EPS: 'Compensar',   Regimen_ID: 1 },
+        { ID_EPS: 2, Nombre_EPS: 'Salud Total',  Regimen_ID: 1 },
+        { ID_EPS: 3, Nombre_EPS: 'NuevaEPS',     Regimen_ID: 1 },
+        { ID_EPS: 4, Nombre_EPS: 'Famisanar',    Regimen_ID: 1 },
+        { ID_EPS: 5, Nombre_EPS: 'Sanitas',      Regimen_ID: 1 },
+        { ID_EPS: 6, Nombre_EPS: 'CapitalSalud', Regimen_ID: 2 },
+        { ID_EPS: 7, Nombre_EPS: 'Sura',         Regimen_ID: 1 },
+    ];
     try {
         const res  = await fetch('/api/eps');
         const data = await res.json();
-        if (!data.ok) throw new Error(data.error || 'Error al cargar EPS');
-        poblarEPS(data.data);
+        if (!data.ok) throw new Error(data.error);
+        todasLasEPS = data.data;
     } catch (err) {
-        console.warn('Usando lista de EPS de respaldo:', err);
-        poblarEPS(epsFallback);
+        console.warn('EPS fallback:', err);
+        todasLasEPS = fallback;
     }
 }
- 
-// Muestra/oculta los campos de EPS personalizada
+
+// ── CASCADING: RÉGIMEN → TIPO EPS → EPS ───────────────────────────────────────
+function onRegimenChange() {
+    const regimenId  = document.getElementById('regimen').value;
+    const selectTipo = document.getElementById('tipoEps');
+    const selectEps  = document.getElementById('eps');
+
+    document.getElementById('errorRegimen').innerText = '';
+    document.getElementById('regimen').classList.remove('invalid');
+
+    selectTipo.innerHTML = '<option value="">Seleccione el tipo de EPS...</option>';
+    selectEps.innerHTML  = '<option value="">Seleccione primero el tipo de EPS</option>';
+    selectTipo.disabled  = true;
+    selectEps.disabled   = true;
+    document.getElementById('eps-otro-container-creacion').style.display = 'none';
+
+    if (!regimenId) return;
+
+    todosTiposEps.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value       = t.TipoEPS_ID || t.ID_Tipo_EPS;
+        opt.textContent = t.Nombre_Tipo;
+        selectTipo.appendChild(opt);
+    });
+    selectTipo.disabled = false;
+
+    epsFiltradas = todasLasEPS.filter(e => String(e.Regimen_ID) === String(regimenId));
+}
+
+function onTipoEpsChange() {
+    const selectEps  = document.getElementById('eps');
+    const selectTipo = document.getElementById('tipoEps');
+
+    document.getElementById('errorTipoEps').innerText = '';
+    selectTipo.classList.remove('invalid');
+
+    selectEps.innerHTML = '<option value="">Seleccione la EPS...</option>';
+    selectEps.disabled  = true;
+    document.getElementById('eps-otro-container-creacion').style.display = 'none';
+
+    if (!selectTipo.value) return;
+
+    const lista = epsFiltradas.length > 0 ? epsFiltradas : todasLasEPS;
+    lista.forEach(eps => {
+        const opt = document.createElement('option');
+        opt.value       = eps.ID_EPS || eps.EPS_ID;
+        opt.textContent = eps.Nombre_EPS;
+        selectEps.appendChild(opt);
+    });
+
+    const optOtro = document.createElement('option');
+    optOtro.value       = EPS_OTRO_VALUE;
+    optOtro.textContent = 'Otro';
+    selectEps.appendChild(optOtro);
+
+    selectEps.disabled = false;
+}
+
 function manejarSeleccionEPSCreacion() {
     const epsSelect     = document.getElementById('eps');
     const otroContainer = document.getElementById('eps-otro-container-creacion');
+    document.getElementById('errorEps').innerText = '';
+    epsSelect.classList.remove('invalid');
+
     if (epsSelect.value === EPS_OTRO_VALUE) {
         otroContainer.style.display = 'block';
     } else {
@@ -129,47 +283,26 @@ function manejarSeleccionEPSCreacion() {
         document.getElementById('eps-otro-telefono-creacion').value = '';
     }
 }
- 
-// Crea la EPS en el backend y devuelve el ID asignado (o null si falla)
-async function crearNuevaEPS(nombre, telefono, tipoEpsId = 1) {
-    try {
-        const res = await fetch('/api/eps', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ Nombre_EPS: nombre, ID_Tipo_EPS: tipoEpsId, Telefono: telefono })
-        });
-        const data = await res.json();
-        if (!data.ok) {
-            console.error('Error al crear EPS:', data.error);
-            return null;
-        }
-        return data.data.ID_EPS;
-    } catch (err) {
-        console.error('[crearNuevaEPS]', err);
-        return null;
-    }
-}
- 
+
 // ── CATÁLOGO: ROLES ────────────────────────────────────────────────────────────
 async function cargarRolesEnFormulario() {
-    const selectRol = document.getElementById("rolUsuario");
+    const selectRol     = document.getElementById("rolUsuario");
     const rolesFallback = [
         { Rol_ID: 1, Nombre_Rol: "Administrador" },
-        { Rol_ID: 2, Nombre_Rol: "Especialista" },
-        { Rol_ID: 3, Nombre_Rol: "Paciente" }
+        { Rol_ID: 2, Nombre_Rol: "Especialista"  },
+        { Rol_ID: 3, Nombre_Rol: "Paciente"      }
     ];
- 
+
     const poblarRoles = (lista) => {
         selectRol.innerHTML = '<option value="">Seleccione un rol</option>';
         lista.forEach(rol => {
             const opt = document.createElement("option");
-            // Guardamos el ID numérico como value para enviarlo directo al backend
             opt.value       = rol.Rol_ID || rol.Nombre_Rol;
             opt.textContent = rol.Nombre_Rol || rol.Descripcion;
             selectRol.appendChild(opt);
         });
     };
- 
+
     try {
         const res  = await fetch("/api/roles");
         if (!res.ok) throw new Error("Respuesta no OK");
@@ -177,24 +310,27 @@ async function cargarRolesEnFormulario() {
         if (!Array.isArray(lista) || lista.length === 0) throw new Error("Lista vacía");
         poblarRoles(lista);
     } catch (err) {
-        console.warn("Backend no disponible, usando roles de respaldo:", err);
+        console.warn("Roles fallback:", err);
         poblarRoles(rolesFallback);
     }
 }
- 
+
 // ── LÓGICA DE FORMULARIO ───────────────────────────────────────────────────────
 function verificarEdad() {
-    const fecha = document.getElementById("fechaNacimiento").value;
-    if (!fecha) return;
-    const hoy   = new Date();
-    const cumple = new Date(fecha);
+    const fechaISO = leerFechaISO();
+    if (!fechaISO) return;
+
+    const hoy    = new Date();
+    const cumple = new Date(fechaISO);
+    if (isNaN(cumple.getTime())) return;
+
     let edad = hoy.getFullYear() - cumple.getFullYear();
     const m  = hoy.getMonth() - cumple.getMonth();
     if (m < 0 || (m === 0 && hoy.getDate() < cumple.getDate())) edad--;
     esMenor = (edad < 18);
     checkRequisitosAcudiente();
 }
- 
+
 function checkRequisitosAcudiente() {
     const tipoDoc = document.getElementById("tipoDocumento").value;
     if (tipoDoc === "Tarjeta de identidad" || esMenor) {
@@ -207,36 +343,38 @@ function checkRequisitosAcudiente() {
         document.getElementById("correoUsuarioGroup").style.display = "flex";
     }
 }
- 
+
 function checkRolEspecialista() {
-    const rolVal = document.getElementById("rolUsuario").value;
-    // Normalizar: puede venir como "2" o "Especialista"
+    const rolVal         = document.getElementById("rolUsuario").value;
     const esEspecialista = (rolVal === "2" || rolVal === "Especialista");
     const esPaciente     = (rolVal === "3" || rolVal === "Paciente");
- 
-    document.getElementById("especialistaExtra").style.display  = esEspecialista ? "block" : "none";
-    document.getElementById("contenedor_datos_medicos").style.display = esPaciente ? "block" : "none";
- 
+
+    document.getElementById("especialistaExtra").style.display        = esEspecialista ? "block" : "none";
+    document.getElementById("contenedor_datos_medicos").style.display = esPaciente     ? "block" : "none";
+
     if (!esPaciente) {
-        document.getElementById("eps").value = "";
-        document.getElementById("tipoAfiliacion").value = "";
-        document.getElementById("eps-otro-container-creacion").style.display = "none";
+        document.getElementById("regimen").value                               = "";
+        document.getElementById("tipoEps").innerHTML                           = '<option value="">Seleccione primero el régimen</option>';
+        document.getElementById("tipoEps").disabled                            = true;
+        document.getElementById("eps").innerHTML                               = '<option value="">Seleccione primero el tipo de EPS</option>';
+        document.getElementById("eps").disabled                                = true;
+        document.getElementById("eps-otro-container-creacion").style.display  = 'none';
     }
 }
- 
+
 function replicarCorreoAcudiente() {
     if (acudienteSection.style.display === "block") {
         document.getElementById("emailAcudiente").value =
             document.getElementById("email").value;
     }
 }
- 
+
 function limpiarErrores() {
     document.querySelectorAll(".error-msg").forEach(e => e.innerText = "");
     document.querySelectorAll("input, select").forEach(i => i.classList.remove("invalid"));
     limpiarMensajeError();
 }
- 
+
 // ── INDICADOR DE PASOS ─────────────────────────────────────────────────────────
 function actualizarIndicador(pasoActual) {
     document.querySelectorAll(".step-dot").forEach((dot, i) => {
@@ -249,19 +387,20 @@ function actualizarIndicador(pasoActual) {
         if (i + 1 < pasoActual) line.classList.add("done");
     });
 }
- 
-// ── PASO 1: VALIDACIÓN Y ENVÍO DE CÓDIGO ──────────────────────────────────────
+
+// ── PASO 1: VALIDACIÓN ─────────────────────────────────────────────────────────
 function validarPaso1() {
     limpiarErrores();
     let valido = true;
- 
-    const nombres        = document.getElementById("nombres");
-    const apellidos      = document.getElementById("apellidos");
-    const fechaNacimiento = document.getElementById("fechaNacimiento");
-    const rolUsuario     = document.getElementById("rolUsuario");
-    const documento      = document.getElementById("documento");
-    const telefono       = document.getElementById("telefono");
- 
+
+    const nombres         = document.getElementById("nombres");
+    const apellidos       = document.getElementById("apellidos");
+    const fechaInput      = document.getElementById("fechaNacimiento");
+    const rolUsuario      = document.getElementById("rolUsuario");
+    const documento       = document.getElementById("documento");
+    const telefono        = document.getElementById("telefono");
+    const fechaISO        = leerFechaISO();
+
     if (nombres.value.trim().length < 2) {
         nombres.classList.add("invalid");
         document.getElementById("errorNombres").innerText = "Ingrese sus nombres.";
@@ -272,21 +411,40 @@ function validarPaso1() {
         document.getElementById("errorApellidos").innerText = "Ingrese sus apellidos.";
         valido = false;
     }
-    if (!fechaNacimiento.value) {
-        fechaNacimiento.classList.add("invalid");
-        document.getElementById("errorFecha").innerText = "Seleccione su fecha de nacimiento.";
+    if (!fechaISO) {
+        fechaInput.classList.add("invalid");
+        document.getElementById("errorFecha").innerText = "Ingrese su fecha de nacimiento.";
         valido = false;
+    } else {
+        const fechaObj = new Date(fechaISO);
+        if (isNaN(fechaObj.getTime())) {
+            fechaInput.classList.add("invalid");
+            document.getElementById("errorFecha").innerText = "Fecha inválida. Use el formato DD/MM/AAAA.";
+            valido = false;
+        }
     }
     if (!rolUsuario.value) {
         rolUsuario.classList.add("invalid");
         document.getElementById("errorRol").innerText = "Seleccione un rol.";
         valido = false;
     }
- 
-    // Validar campos específicos de Paciente
+
     const rolVal     = rolUsuario.value;
     const esPaciente = (rolVal === "3" || rolVal === "Paciente");
+
     if (esPaciente) {
+        const regimenEl = document.getElementById("regimen");
+        if (!regimenEl.value) {
+            regimenEl.classList.add("invalid");
+            document.getElementById("errorRegimen").innerText = "Seleccione un régimen.";
+            valido = false;
+        }
+        const tipoEpsEl = document.getElementById("tipoEps");
+        if (!tipoEpsEl.value) {
+            tipoEpsEl.classList.add("invalid");
+            document.getElementById("errorTipoEps").innerText = "Seleccione el tipo de EPS.";
+            valido = false;
+        }
         const epsVal = document.getElementById("eps").value;
         if (!epsVal) {
             document.getElementById("eps").classList.add("invalid");
@@ -297,25 +455,17 @@ function validarPaso1() {
             const telefonoOtro = document.getElementById('eps-otro-telefono-creacion');
             if (!nombreOtro.value.trim()) {
                 nombreOtro.classList.add('invalid');
-                document.getElementById('err-eps-otro-nombre-creacion').innerText =
-                    'Ingrese el nombre de la nueva EPS.';
+                document.getElementById('err-eps-otro-nombre-creacion').innerText = 'Ingrese el nombre de la nueva EPS.';
                 valido = false;
             }
             if (!telefonoOtro.value.trim()) {
                 telefonoOtro.classList.add('invalid');
-                document.getElementById('err-eps-otro-telefono-creacion').innerText =
-                    'Ingrese el teléfono de la nueva EPS.';
+                document.getElementById('err-eps-otro-telefono-creacion').innerText = 'Ingrese el teléfono de la nueva EPS.';
                 valido = false;
             }
         }
-        if (!document.getElementById("tipoAfiliacion").value) {
-            document.getElementById("tipoAfiliacion").classList.add("invalid");
-            document.getElementById("errorAfiliacion").innerText = "Seleccione un tipo de afiliación.";
-            valido = false;
-        }
     }
- 
-    // Validar tarjeta profesional si es Especialista
+
     const esEspecialista = (rolVal === "2" || rolVal === "Especialista");
     if (esEspecialista) {
         const tarjeta = document.getElementById("tarjetaProfesional");
@@ -326,7 +476,7 @@ function validarPaso1() {
             valido = false;
         }
     }
- 
+
     if (documento.value.trim().length < 5) {
         documento.classList.add("invalid");
         document.getElementById("errorDocumento").innerText = "Documento no válido.";
@@ -337,11 +487,11 @@ function validarPaso1() {
         document.getElementById("errorTelefono").innerText = "El teléfono debe tener 10 dígitos.";
         valido = false;
     }
- 
+
     const correoUsado = (document.getElementById("correoUsuarioGroup").style.display === "none")
         ? document.getElementById("emailAcudiente").value
         : document.getElementById("email").value;
- 
+
     if (!validarEmail(correoUsado)) {
         if (document.getElementById("correoUsuarioGroup").style.display === "none") {
             document.getElementById("emailAcudiente").classList.add("invalid");
@@ -352,17 +502,15 @@ function validarPaso1() {
         }
         valido = false;
     }
- 
+
     if (!valido) return;
- 
-    // Enviar código de verificación
-    correoVerificacion = correoUsado.trim().toLowerCase();
-    const nombreMostrar = document.getElementById("nombres").value;
-    const btnContinuar  = document.querySelector("#step1 button");
- 
-    btnContinuar.disabled = true;
-    btnContinuar.innerHTML = "Enviando código...";
- 
+
+    correoVerificacion          = correoUsado.trim().toLowerCase();
+    const nombreMostrar         = document.getElementById("nombres").value;
+    const btnContinuar          = document.querySelector("#step1 button");
+    btnContinuar.disabled       = true;
+    btnContinuar.innerHTML      = "Enviando código...";
+
     fetch("/api/enviar-codigo", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -370,10 +518,10 @@ function validarPaso1() {
     })
     .then(r => r.json())
     .then(data => {
-        btnContinuar.disabled = false;
+        btnContinuar.disabled  = false;
         btnContinuar.innerHTML = "Continuar &#8594;";
         if (data.ok) {
-            document.getElementById("emailDestino").innerText      = correoVerificacion;
+            document.getElementById("emailDestino").innerText       = correoVerificacion;
             document.getElementById("nombreDestinatario").innerText = nombreMostrar;
             document.getElementById("step1").classList.remove("active");
             document.getElementById("step2").classList.add("active");
@@ -383,26 +531,26 @@ function validarPaso1() {
         }
     })
     .catch(() => {
-        btnContinuar.disabled = false;
+        btnContinuar.disabled  = false;
         btnContinuar.innerHTML = "Continuar &#8594;";
         mostrarError("No se pudo conectar con el servidor. Verifica tu conexión.");
     });
 }
- 
+
 // ── PASO 2: VERIFICAR CÓDIGO ───────────────────────────────────────────────────
 function verificarCodigo() {
-    const ingresado  = document.getElementById("codigo").value.trim();
+    const ingresado   = document.getElementById("codigo").value.trim();
     const errorCodigo = document.getElementById("errorCodigo");
- 
+
     if (!ingresado) {
         errorCodigo.innerText = "Ingresa el código.";
         return;
     }
- 
-    const btnVerificar = document.querySelector("#step2 button");
-    btnVerificar.disabled = true;
+
+    const btnVerificar     = document.querySelector("#step2 button");
+    btnVerificar.disabled  = true;
     btnVerificar.innerHTML = "Verificando...";
- 
+
     fetch("/api/verificar-codigo", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -410,7 +558,7 @@ function verificarCodigo() {
     })
     .then(r => r.json())
     .then(data => {
-        btnVerificar.disabled = false;
+        btnVerificar.disabled  = false;
         btnVerificar.innerHTML = "Verificar código ✓";
         if (data.ok) {
             document.getElementById("step2").classList.remove("active");
@@ -422,43 +570,23 @@ function verificarCodigo() {
         }
     })
     .catch(() => {
-        btnVerificar.disabled = false;
+        btnVerificar.disabled  = false;
         btnVerificar.innerHTML = "Verificar código ✓";
         document.getElementById("errorCodigo").innerText = "Error de conexión. Intenta de nuevo.";
     });
 }
 
-// ── REGISTRO DE PACIENTE (POST /api/paciente) ──────────────────────────────────
-/**
- * Llama al endpoint /api/paciente para registrar los datos clínicos del paciente.
- * @param {number} usuarioId - ID del usuario recién creado.
- * @returns {Promise<{ok: boolean, pacienteId: number|null, error: string|null}>}
- */
+// ── REGISTRO DE PACIENTE ───────────────────────────────────────────────────────
 async function registrarPacienteEnBackend(usuarioId) {
-    const fechaNacimiento = document.getElementById("fechaNacimiento").value || null;
-
-    const grupoSanguineoEl = document.getElementById("grupoSanguineo");
-    const grupoSanguineo   = grupoSanguineoEl ? (grupoSanguineoEl.value || null) : null;
-
-    const alergiasEl = document.getElementById("alergias");
-    const alergias   = alergiasEl ? (alergiasEl.value.trim() || null) : null;
-
-    const antecedentesEl = document.getElementById("antecedentes");
-    const antecedentes   = antecedentesEl ? (antecedentesEl.value.trim() || null) : null;
-
-    const observacionesEl = document.getElementById("observaciones");
-    const observaciones   = observacionesEl ? (observacionesEl.value.trim() || null) : null;
-
     const payload = {
         ID_Usuario:       usuarioId,
-        Fecha_Nacimiento: fechaNacimiento,
+        Fecha_Nacimiento: leerFechaISO() || null,
         Genero:           null,
-        Grupo_Sanguineo:  grupoSanguineo,
-        Alergias:         alergias,
-        Antecedentes:     antecedentes,
-        Observaciones:    observaciones
+        Grupo_Sanguineo:  document.getElementById("grupoSanguineo")?.value       || null,
+        Alergias:         document.getElementById("alergias")?.value.trim()      || null,
+        Antecedentes:     document.getElementById("antecedentes")?.value.trim()  || null,
+        Observaciones:    document.getElementById("observaciones")?.value.trim() || null,
     };
-
     try {
         const res  = await fetch('/api/paciente', {
             method:  'POST',
@@ -466,38 +594,21 @@ async function registrarPacienteEnBackend(usuarioId) {
             body:    JSON.stringify(payload)
         });
         const data = await res.json();
-        if (!data.ok) {
-            console.error('[registrarPacienteEnBackend] Error:', data.error);
-            return { ok: false, pacienteId: null, error: data.error || 'Error al registrar paciente.' };
-        }
+        if (!data.ok) return { ok: false, pacienteId: null, error: data.error };
         return { ok: true, pacienteId: data.data.ID_Paciente, error: null };
     } catch (err) {
-        console.error('[registrarPacienteEnBackend] Red:', err);
         return { ok: false, pacienteId: null, error: err.message };
     }
 }
 
-// ── REGISTRO DE AFILIACIÓN (POST /api/afiliacion) ─────────────────────────────
-/**
- * Llama al endpoint /api/afiliacion para vincular al usuario con su EPS.
- * Usa tipoAfiliacion (1=Cotizante / 2=Beneficiario) como ID_Regimen_EPS.
- * @param {number} usuarioId - ID del usuario recién creado.
- * @param {number} epsId     - ID de la EPS seleccionada (ya resuelta, incluyendo "Otro").
- * @param {number} regimenId - ID del régimen / tipo de afiliación.
- * @returns {Promise<{ok: boolean, afiliacionId: number|null, error: string|null}>}
- */
-async function registrarAfiliacionEnBackend(usuarioId, epsId, regimenId) {
-    const hoy = new Date().toISOString().split('T')[0];
-
+// ── REGISTRO DE AFILIACIÓN ─────────────────────────────────────────────────────
+async function registrarAfiliacionEnBackend(usuarioId, epsId, tipoEpsId) {
     const payload = {
-        ID_Usuario:      usuarioId,
-        ID_EPS:          epsId,
-        ID_Regimen_EPS:  regimenId,
-        Fecha_Afiliacion: hoy,
-        Numero_Afiliado: null,
-        Estado:          'Activo'
+        ID_Usuario:       usuarioId,
+        ID_EPS:           epsId,
+        ID_Tipo_EPS:      tipoEpsId,
+        Fecha_Afiliacion: new Date().toISOString().split('T')[0],
     };
-
     try {
         const res  = await fetch('/api/afiliacion', {
             method:  'POST',
@@ -505,25 +616,38 @@ async function registrarAfiliacionEnBackend(usuarioId, epsId, regimenId) {
             body:    JSON.stringify(payload)
         });
         const data = await res.json();
-        if (!data.ok) {
-            console.error('[registrarAfiliacionEnBackend] Error:', data.error);
-            return { ok: false, afiliacionId: null, error: data.error || 'Error al registrar afiliación.' };
-        }
+        if (!data.ok) return { ok: false, afiliacionId: null, error: data.error };
         return { ok: true, afiliacionId: data.data.ID_Afiliacion, error: null };
     } catch (err) {
-        console.error('[registrarAfiliacionEnBackend] Red:', err);
         return { ok: false, afiliacionId: null, error: err.message };
     }
 }
- 
-// ── PASO 3: CREAR USUARIO (payload completo + manejo de errores) ───────────────
+
+// ── CREAR EPS NUEVA ────────────────────────────────────────────────────────────
+async function crearNuevaEPS(nombre, telefono, tipoEpsId) {
+    try {
+        const res  = await fetch('/api/eps', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ Nombre_EPS: nombre, ID_Tipo_EPS: tipoEpsId, Telefono: telefono })
+        });
+        const data = await res.json();
+        if (!data.ok) { console.error('Error al crear EPS:', data.error); return null; }
+        return data.data.ID_EPS;
+    } catch (err) {
+        console.error('[crearNuevaEPS]', err);
+        return null;
+    }
+}
+
+// ── PASO 3: CREAR USUARIO ──────────────────────────────────────────────────────
 async function crearUsuario() {
     limpiarErrores();
- 
+
     const password        = document.getElementById("password");
     const confirmPassword = document.getElementById("confirmPassword");
     const mensajeFinal    = document.getElementById("mensajeFinal");
- 
+
     if (!validarPassword(password.value)) {
         password.classList.add("invalid");
         document.getElementById("errorPassword").innerText =
@@ -535,199 +659,136 @@ async function crearUsuario() {
         document.getElementById("errorConfirm").innerText = "Las contraseñas no coinciden.";
         return;
     }
- 
-    // ── Leer todos los campos del formulario ──────────────────────────────────
+
     const correoRegistro = (
         document.getElementById("correoUsuarioGroup").style.display === "none"
             ? document.getElementById("emailAcudiente").value
             : document.getElementById("email").value
     ).trim().toLowerCase();
- 
-    const rolSelect      = document.getElementById("rolUsuario");
-    const rolValor       = rolSelect.value;                      // "1", "2", "3" o texto
-    const rolTexto       = rolSelect.options[rolSelect.selectedIndex]?.text || "";
- 
-    // Normalizar rol_id a entero
+
+    const rolSelect  = document.getElementById("rolUsuario");
+    const rolValor   = rolSelect.value;
+    const rolTexto   = rolSelect.options[rolSelect.selectedIndex]?.text || "";
+
     let rolIdNumerico = parseInt(rolValor, 10);
     if (isNaN(rolIdNumerico)) {
-        if (rolTexto === "Paciente")      rolIdNumerico = 3;
+        if (rolTexto === "Paciente")          rolIdNumerico = 3;
         else if (rolTexto === "Especialista") rolIdNumerico = 2;
-        else if (rolTexto === "Administrador") rolIdNumerico = 1;
-        else rolIdNumerico = 3;
+        else                                  rolIdNumerico = 1;
     }
- 
-    // Género: leer del select si existe, default 1
-    const generoSelect  = document.getElementById("genero");
-    const generoId      = generoSelect ? parseInt(generoSelect.value, 10) || 1 : 1;
- 
-    // Tipo de documento: mapear texto a ID
-    const tipoDocTexto  = document.getElementById("tipoDocumento").value;
-    const mapaTipoDoc   = {
+
+    const generoSelect = document.getElementById("genero");
+    const generoId     = generoSelect ? parseInt(generoSelect.value, 10) || 1 : 1;
+
+    const tipoDocTexto = document.getElementById("tipoDocumento").value;
+    const mapaTipoDoc  = {
         "Cedula de ciudadania": 1,
         "Tarjeta de identidad": 2,
         "Permiso por protección temporal": 3
     };
     const tipoDocId = mapaTipoDoc[tipoDocTexto] || 1;
- 
-    // EPS: puede requerir crear una nueva antes del registro de usuario
+
     const epsSelect = document.getElementById("eps");
-    let epsId       = epsSelect.value === EPS_OTRO_VALUE ? null : (parseInt(epsSelect.value, 10) || null);
- 
+    const tipoEpsId = parseInt(document.getElementById("tipoEps").value, 10)  || null;
+    const regimenId = parseInt(document.getElementById("regimen").value, 10)   || null;
+    let   epsId     = epsSelect.value === EPS_OTRO_VALUE
+        ? null
+        : (parseInt(epsSelect.value, 10) || null);
+
     if (epsSelect.value === EPS_OTRO_VALUE) {
         const nombreOtro   = document.getElementById('eps-otro-nombre-creacion').value.trim();
         const telefonoOtro = document.getElementById('eps-otro-telefono-creacion').value.trim();
- 
         mostrarProgreso("Registrando nueva EPS...");
-        const nuevoEpsId = await crearNuevaEPS(nombreOtro, telefonoOtro, 1);
- 
+        const nuevoEpsId = await crearNuevaEPS(nombreOtro, telefonoOtro, tipoEpsId);
         if (!nuevoEpsId) {
             mostrarError("No se pudo registrar la nueva EPS. Intenta de nuevo.");
             return;
         }
         epsId = nuevoEpsId;
-        await cargarEPSEnFormulario();   // refrescar select
+        await cargarTodasLasEPS();
     }
- 
-    const tipoAfiliacionId = parseInt(document.getElementById("tipoAfiliacion").value, 10) || null;
- 
-    // Especialista: tarjeta y especialidad
-    const tarjetaEl         = document.getElementById("tarjetaProfesional");
+
+    const especialidadEl     = document.getElementById("especialidadMedica");
+    const especialidadId     = especialidadEl?.value ? parseInt(especialidadEl.value, 10) : null;
+    const tarjetaEl          = document.getElementById("tarjetaProfesional");
     const tarjetaProfesional = tarjetaEl ? tarjetaEl.value.trim() : "";
- 
-    const especialidadEl  = document.getElementById("especialidadMedica");
-    const especialidadId  = especialidadEl && especialidadEl.value
-        ? parseInt(especialidadEl.value, 10)
-        : null;
- 
-    // ── Construir payload que refleja exactamente lo que espera el backend ────
-    /** @type {Object} */
+
     const datosUsuarioBackend = {
-        nombres:            document.getElementById("nombres").value.trim(),
-        apellidos:          document.getElementById("apellidos").value.trim(),
-        documento:          document.getElementById("documento").value.trim(),
-        telefono:           document.getElementById("telefono").value.trim(),
-        correo:             correoRegistro,
-        contrasena:         password.value,
-        fecha_nacimiento:   document.getElementById("fechaNacimiento").value,
-        genero_id:          generoId,
-        tipo_documento_id:  tipoDocId,
-        estado_id:          1,               // Activo por defecto
-        rol_id:             rolIdNumerico,
- 
-        // Paciente
-        eps_id:             epsId,
-        tipo_afiliacion_id: tipoAfiliacionId,
- 
-        // Especialista
+        nombres:             document.getElementById("nombres").value.trim(),
+        apellidos:           document.getElementById("apellidos").value.trim(),
+        documento:           document.getElementById("documento").value.trim(),
+        telefono:            document.getElementById("telefono").value.trim(),
+        correo:              correoRegistro,
+        contrasena:          password.value,
+        fecha_nacimiento:    leerFechaISO(),
+        genero_id:           generoId,
+        tipo_documento_id:   tipoDocId,
+        estado_id:           1,
+        rol_id:              rolIdNumerico,
+        eps_id:              epsId,
+        tipo_eps_id:         tipoEpsId,
+        regimen_id:          regimenId,
         tarjeta_profesional: tarjetaProfesional || null,
         especialidad_id:     especialidadId
     };
- 
-    // ── Enviar al backend transaccional ────────────────────────────────────────
+
     const btnFinalizar = document.getElementById("btnFinalizar");
-    if (btnFinalizar) {
-        btnFinalizar.disabled = true;
-        btnFinalizar.innerHTML = "Creando usuario...";
-    }
- 
+    if (btnFinalizar) { btnFinalizar.disabled = true; btnFinalizar.innerHTML = "Creando usuario..."; }
+
     try {
         const respuesta = await fetch('/api/usuarios', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify(datosUsuarioBackend)
         });
- 
         const resultado = await respuesta.json();
- 
-        if (btnFinalizar) {
-            btnFinalizar.disabled = false;
-            btnFinalizar.innerHTML = "Finalizar";
-        }
- 
-        if (!resultado.ok) {
-            // El backend hizo ROLLBACK: mostrar el mensaje exacto
-            mostrarError(
-                "No se pudo crear el usuario: " +
-                (resultado.error || "Error desconocido. Revisa los datos e intenta de nuevo.")
-            );
-            return;    // Detenemos aquí; el formulario sigue visible para corregir
-        }
- 
-        // ── Usuario creado: registrar Paciente + Afiliación si corresponde ────
-        const usuarioId = resultado.usuario_id;
-        console.log("Usuario creado con ID:", usuarioId);
 
+        if (btnFinalizar) { btnFinalizar.disabled = false; btnFinalizar.innerHTML = "Finalizar"; }
+
+        if (!resultado.ok) {
+            mostrarError("No se pudo crear el usuario: " +
+                (resultado.error || "Error desconocido. Revisa los datos e intenta de nuevo."));
+            return;
+        }
+
+        const usuarioId  = resultado.usuario_id;
         const esPaciente = (rolIdNumerico === 3 || rolTexto === "Paciente");
 
         if (esPaciente && usuarioId) {
-
-            // 1. Registrar en tabla paciente
             mostrarProgreso("Registrando datos del paciente...");
             const resPaciente = await registrarPacienteEnBackend(usuarioId);
             if (!resPaciente.ok) {
-                // El usuario se creó; advertir sin bloquear el flujo
-                console.warn("Paciente no registrado:", resPaciente.error);
-                mostrarError(
-                    "Usuario creado, pero no se pudieron guardar los datos clínicos: " +
-                    resPaciente.error
-                );
-            } else {
-                console.log("Paciente registrado con ID:", resPaciente.pacienteId);
+                mostrarError("Usuario creado, pero no se pudieron guardar los datos clínicos: " + resPaciente.error);
             }
-
-            // 2. Registrar en tabla afiliacion (solo si hay EPS y régimen válidos)
-            if (epsId && tipoAfiliacionId) {
+            if (epsId && tipoEpsId) {
                 mostrarProgreso("Registrando afiliación a EPS...");
-                const resAfiliacion = await registrarAfiliacionEnBackend(
-                    usuarioId,
-                    epsId,
-                    tipoAfiliacionId
-                );
+                const resAfiliacion = await registrarAfiliacionEnBackend(usuarioId, epsId, tipoEpsId);
                 if (!resAfiliacion.ok) {
-                    console.warn("Afiliación no registrada:", resAfiliacion.error);
-                    mostrarError(
-                        "Usuario creado, pero no se pudo registrar la afiliación a la EPS: " +
-                        resAfiliacion.error
-                    );
-                } else {
-                    console.log("Afiliación registrada con ID:", resAfiliacion.afiliacionId);
+                    mostrarError("Usuario creado, pero no se pudo registrar la afiliación: " + resAfiliacion.error);
                 }
-            } else {
-                console.warn("No se registró afiliación: falta EPS ID o régimen ID.", { epsId, tipoAfiliacionId });
             }
         }
- 
-        // ── Éxito: mostrar confirmación y botón de login ───────────────────
-        document.getElementById("groupPassword").style.display  = "none";
-        document.getElementById("groupConfirm").style.display   = "none";
+
+        document.getElementById("groupPassword").style.display = "none";
+        document.getElementById("groupConfirm").style.display  = "none";
         if (btnFinalizar) btnFinalizar.style.display            = "none";
- 
         mensajeFinal.innerText = "¡Usuario registrado correctamente!";
-        document.getElementById("btnIrAlLogin").style.display = "flex";
- 
+        document.getElementById("btnIrAlLogin").style.display  = "flex";
+
     } catch (errorRed) {
-        if (btnFinalizar) {
-            btnFinalizar.disabled = false;
-            btnFinalizar.innerHTML = "Finalizar";
-        }
-        mostrarError(
-            "Error de conexión con el servidor. Verifica tu red e intenta de nuevo. " +
-            "(" + errorRed.message + ")"
-        );
+        if (btnFinalizar) { btnFinalizar.disabled = false; btnFinalizar.innerHTML = "Finalizar"; }
+        mostrarError("Error de conexión con el servidor. (" + errorRed.message + ")");
     }
 }
- 
-// ── UTILIDAD: indicador de progreso en mensajeFinal ───────────────────────────
+
+// ── UTILIDADES ─────────────────────────────────────────────────────────────────
 function mostrarProgreso(texto) {
     const el = document.getElementById("mensajeFinal");
     if (el) el.innerText = texto;
 }
- 
-// ── NAVEGACIÓN ─────────────────────────────────────────────────────────────────
 function abrirLogin() {
     window.location.href = "/login.html";
 }
- 
 function togglePassword(id) {
     const input = document.getElementById(id);
     if (input) input.type = input.type === "password" ? "text" : "password";
