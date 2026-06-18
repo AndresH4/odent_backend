@@ -12,7 +12,7 @@
 <body class="flex">
 
     <!-- ================================================================
-         SIDEBAR — mismo cascarón que especialista.html
+         SIDEBAR
     ================================================================ -->
     <aside class="sidebar text-white flex flex-col flex-shrink-0 shadow-2xl">
 
@@ -43,9 +43,10 @@
                 <i class="fas fa-shield-alt w-6 text-xl text-emerald-400"></i>
                 <span class="tracking-wide">Aseguramiento</span>
             </a>
-            <button onclick="abrirConfiguracion()" class="nav-btn">
-                <i class="fas fa-cog w-6 text-xl text-sky-400"></i>
-                <span class="tracking-wide">Ajustes Perfil</span>
+            <!-- BOTÓN MI PERFIL — mismo patrón que especialista.html -->
+            <button onclick="cambiarSeccion('config')" id="btn-config" class="nav-btn">
+                <i class="fas fa-user-cog w-6 text-xl"></i>
+                <span class="tracking-wide">Mi Perfil</span>
             </button>
         </nav>
 
@@ -61,6 +62,14 @@
             </div>
         </div>
 
+        <!-- Botón Cerrar Sesión -->
+        <div class="px-6 pb-8">
+            <button
+                onclick="mostrarConfirmacionSimple('¿Finalizar turno de especialista?', 'salir')"
+                class="w-full flex items-center justify-center gap-4 p-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] text-red-400 hover:bg-red-500/10 transition-all border border-red-900/40 hover:border-red-500/60">
+                <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+            </button>
+        </div>
     </aside>
 
     <!-- ================================================================
@@ -125,10 +134,11 @@
                         </div>
                     </div>
 
+                    <!-- Ir a Mi Perfil desde el dropdown — mismo patrón que especialista -->
                     <button
-                        onclick="abrirConfiguracion(); toggleProfileDropdown()"
+                        onclick="cambiarSeccion('config'); toggleProfileDropdown()"
                         class="w-full bg-slate-900 text-white p-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] hover:bg-sky-600 transition-all shadow-xl flex items-center justify-center gap-4 mb-3">
-                        <i class="fas fa-user-cog"></i> Configurar Cuenta
+                        <i class="fas fa-user-cog"></i> Mi Perfil
                     </button>
                     <button
                         onclick="cerrarSesion()"
@@ -232,64 +242,116 @@
         </section>
 
         <!-- ============================================================
-             SECCIÓN: AJUSTES DE PERFIL (inline, sin modal)
+             SECCIÓN: MI PERFIL — integrado desde especialista.html
         ============================================================ -->
-        <section id="sec-config" class="seccion-oculta max-w-5xl mx-auto py-4 animate-in">
+        <section id="sec-config" class="seccion-oculta max-w-6xl mx-auto py-4 animate-in">
             <div class="bg-white p-14 rounded-[3.5rem] shadow-2xl border border-slate-100 relative overflow-hidden">
-                <div class="absolute top-0 right-0 p-10 opacity-5 text-9xl"><i class="fas fa-user-shield"></i></div>
+
+                <!-- Icono decorativo de fondo -->
+                <div class="absolute top-0 right-0 p-10 opacity-5 text-9xl">
+                    <i class="fas fa-user-shield"></i>
+                </div>
+
                 <h2 class="text-2xl font-black text-slate-800 mb-12 uppercase flex items-center gap-5">
                     <span class="w-14 h-14 bg-sky-600 text-white rounded-2xl flex items-center justify-center shadow-xl">
                         <i class="fas fa-id-badge"></i>
                     </span>
                     Gestión de Perfil Administrativo
                 </h2>
+
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-12 relative z-10">
+
+                    <!-- Nombre -->
                     <div class="space-y-3">
-                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Nombre Administrativo</label>
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                            Nombre Administrativo
+                        </label>
                         <input type="text" id="edit-nombre" class="input-consulta" placeholder="Nombre completo">
                     </div>
+
+                    <!-- Teléfono -->
                     <div class="space-y-3">
-                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Teléfono Móvil</label>
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                            Teléfono Móvil
+                        </label>
                         <input type="tel" id="edit-tel" class="input-consulta" placeholder="+57 300 000 0000">
                     </div>
+
+                    <!-- Email — ocupa ambas columnas -->
                     <div class="md:col-span-2 space-y-3">
-                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Correo de Acceso</label>
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                            Correo de Acceso
+                        </label>
                         <input type="email" id="edit-email" class="input-consulta" placeholder="admin@stylodental.com">
                     </div>
+
+                    <!-- Cambio de contraseña — misma estructura de 2 pasos que especialista -->
                     <div class="md:col-span-2 space-y-3">
-                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Seguridad: Cambiar Contraseña</label>
-                        <div id="step-1" class="flex flex-col md:flex-row gap-4 items-start">
-                            <div class="flex-grow w-full relative">
-                                <input type="password" id="old-pass" class="input-consulta pr-14" placeholder="Contraseña actual">
-                                <button onclick="togglePass('old-pass')" class="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors">
-                                    <i class="fas fa-eye"></i>
-                                </button>
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                            Seguridad: Cambiar Contraseña
+                        </label>
+
+                        <!-- Paso 1: verificar contraseña actual -->
+                        <div id="pass-step1" class="flex flex-col md:flex-row gap-4 items-start">
+                            <div class="flex-grow w-full">
+                                <input
+                                    type="password"
+                                    id="pass-actual"
+                                    class="input-consulta"
+                                    placeholder="Contraseña actual">
+                                <p id="error-pass-actual" class="text-red-600 text-xs font-bold mt-2 ml-1" style="display:none;">
+                                    Contraseña incorrecta
+                                </p>
                             </div>
                             <button
-                                onclick="verificarOldPass()"
+                                type="button"
+                                onclick="validarPasswordActual()"
                                 class="bg-slate-900 text-white px-10 py-5 rounded-2xl font-black text-xs hover:bg-sky-600 transition-all uppercase tracking-[0.3em] shadow-xl active:scale-95 whitespace-nowrap">
-                                Validar Identidad
+                                Siguiente
                             </button>
                         </div>
-                        <div id="step-2" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4" style="display:none;">
-                            <div class="relative">
-                                <input type="password" id="new-pass" class="input-consulta pr-14" placeholder="Nueva contraseña">
-                                <button onclick="togglePass('new-pass')" class="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors">
-                                    <i class="fas fa-eye"></i>
-                                </button>
+
+                        <!-- Paso 2: nueva contraseña (oculto hasta validar paso 1) -->
+                        <div id="pass-step2" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style="display:none;">
+                            <div>
+                                <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-3">
+                                    Nueva Contraseña
+                                </label>
+                                <input
+                                    type="password"
+                                    id="conf-pass-nueva"
+                                    class="input-consulta"
+                                    placeholder="Mínimo 4 caracteres">
                             </div>
-                            <div class="relative">
-                                <input type="password" id="confirm-pass" class="input-consulta pr-14" placeholder="Confirmar nueva">
-                                <button onclick="togglePass('confirm-pass')" class="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors">
-                                    <i class="fas fa-eye"></i>
-                                </button>
+                            <div>
+                                <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-3">
+                                    Confirmar Nueva Contraseña
+                                </label>
+                                <input
+                                    type="password"
+                                    id="conf-pass-confirmar"
+                                    class="input-consulta"
+                                    placeholder="Repite la nueva contraseña">
                             </div>
+                            <p id="error-pass-nueva" class="md:col-span-2 text-red-600 text-xs font-bold mt-1 ml-1" style="display:none;">
+                                Las contraseñas no coinciden.
+                            </p>
                         </div>
                     </div>
                 </div>
+
+                <!-- Acciones -->
                 <div class="mt-14 flex justify-end gap-8 pt-10 border-t border-slate-50">
-                    <button onclick="cambiarSeccion('dashboard')" class="px-10 py-5 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-800 transition-colors">Cancelar</button>
-                    <button onclick="guardarPerfil()" class="bg-slate-900 text-white px-16 py-5 rounded-2xl font-black text-xs hover:bg-sky-600 transition-all uppercase tracking-[0.3em] shadow-2xl active:scale-95">Guardar Cambios</button>
+                    <button
+                        onclick="cambiarSeccion('dashboard')"
+                        class="px-10 py-5 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-800 transition-colors">
+                        Cancelar
+                    </button>
+                    <button
+                        onclick="guardarPerfilCompleto()"
+                        class="bg-slate-900 text-white px-16 py-5 rounded-2xl font-black text-xs hover:bg-sky-600 transition-all uppercase tracking-[0.3em] shadow-2xl active:scale-95">
+                        Guardar Cambios
+                    </button>
                 </div>
             </div>
         </section>
@@ -297,7 +359,7 @@
     </main>
 
     <!-- ================================================================
-         MODAL: CONFIRMACIÓN SIMPLE
+         MODAL: CONFIRMACIÓN SIMPLE (CERRAR SESIÓN)
     ================================================================ -->
     <div id="modalConfirmarSimple" class="modal-overlay">
         <div class="modal-content p-10 text-center border-t-8 border-sky-600" style="max-width:440px">
@@ -321,5 +383,217 @@
     </div>
 
     <script src="{{ url_for('static', filename='js/administrador.js') }}"></script>
+
+    <!-- ================================================================
+         LÓGICA INLINE: navegación Mi Perfil + cambio de contraseña
+         (complementa administrador.js sin romper lo existente)
+    ================================================================ -->
+    <script>
+    // ── Navegación entre secciones ──────────────────────────────────────
+    // Reutiliza el mismo patrón que especialista.js:
+    // oculta todo, muestra la sección pedida y marca el btn activo.
+
+    const SECCIONES_ADMIN = {
+        dashboard : { sec: 'sec-dashboard', btn: 'btn-dashboard', titulo: 'Administración'  },
+        citas     : { sec: 'sec-citas',     btn: 'btn-citas',     titulo: 'Historial Citas' },
+        config    : { sec: 'sec-config',    btn: 'btn-config',    titulo: 'Mi Perfil'       },
+    };
+
+    // Guarda la función original si ya existe en administrador.js
+    // para no pisarla; en caso contrario la definimos aquí.
+    if (typeof cambiarSeccion === 'undefined') {
+        window.cambiarSeccion = function (seccion) {
+            _cambiarSeccionAdmin(seccion);
+        };
+    } else {
+        // Envuelve la función original para que también gestione 'config'
+        const _cambiarSeccionOriginal = cambiarSeccion;
+        window.cambiarSeccion = function (seccion) {
+            if (SECCIONES_ADMIN[seccion]) {
+                _cambiarSeccionAdmin(seccion);
+            } else {
+                _cambiarSeccionOriginal(seccion);
+            }
+        };
+    }
+
+    function _cambiarSeccionAdmin(seccion) {
+        const cfg = SECCIONES_ADMIN[seccion];
+        if (!cfg) return;
+
+        // Ocultar todas las secciones
+        Object.values(SECCIONES_ADMIN).forEach(({ sec }) => {
+            const el = document.getElementById(sec);
+            if (el) {
+                el.classList.remove('seccion-visible');
+                el.classList.add('seccion-oculta');
+            }
+        });
+
+        // Desactivar todos los botones del sidebar
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+
+        // Mostrar la sección activa
+        const secEl = document.getElementById(cfg.sec);
+        if (secEl) {
+            secEl.classList.remove('seccion-oculta');
+            secEl.classList.add('seccion-visible');
+        }
+
+        // Activar el botón correspondiente
+        const btnEl = document.getElementById(cfg.btn);
+        if (btnEl) btnEl.classList.add('active');
+
+        // Actualizar título del header
+        const titleEl = document.getElementById('main-title');
+        if (titleEl) titleEl.textContent = cfg.titulo;
+
+        // Si vamos a config, cargar datos del perfil en los inputs
+        if (seccion === 'config') _cargarDatosPerfil();
+    }
+
+    // ── Carga de datos del perfil en el formulario ──────────────────────
+    function _cargarDatosPerfil() {
+        // Tomamos los valores ya mostrados en el dropdown (fuente de verdad del JS existente)
+        const nombre = document.getElementById('drop-name')?.textContent.trim()   || '';
+        const email  = document.getElementById('drop-email')?.textContent.trim()  || '';
+        const tel    = document.getElementById('drop-tel')?.textContent.trim()    || '';
+
+        const inputNombre = document.getElementById('edit-nombre');
+        const inputEmail  = document.getElementById('edit-email');
+        const inputTel    = document.getElementById('edit-tel');
+
+        if (inputNombre && !inputNombre.value) inputNombre.value = nombre !== 'Admin Root' ? nombre : '';
+        if (inputEmail  && !inputEmail.value)  inputEmail.value  = email;
+        if (inputTel    && !inputTel.value)    inputTel.value    = tel;
+
+        // Reiniciar flujo de contraseña
+        const step1 = document.getElementById('pass-step1');
+        const step2 = document.getElementById('pass-step2');
+        const errActual = document.getElementById('error-pass-actual');
+        const errNueva  = document.getElementById('error-pass-nueva');
+        const passActual = document.getElementById('pass-actual');
+
+        if (step1) step1.style.display = '';
+        if (step2) step2.style.display = 'none';
+        if (errActual) errActual.style.display = 'none';
+        if (errNueva)  errNueva.style.display  = 'none';
+        if (passActual) passActual.value = '';
+    }
+
+    // ── Validación de contraseña: paso 1 → paso 2 ───────────────────────
+    // Si administrador.js ya define validarPasswordActual(), esta no se sobreescribe.
+    if (typeof validarPasswordActual === 'undefined') {
+        window.validarPasswordActual = function () {
+            const inputActual = document.getElementById('pass-actual');
+            const errActual   = document.getElementById('error-pass-actual');
+            const step1       = document.getElementById('pass-step1');
+            const step2       = document.getElementById('pass-step2');
+
+            // Aquí deberías llamar a tu endpoint de verificación.
+            // Como placeholder, comprobamos que el campo no esté vacío.
+            if (!inputActual || !inputActual.value.trim()) {
+                if (errActual) {
+                    errActual.textContent  = 'Ingresa tu contraseña actual.';
+                    errActual.style.display = 'block';
+                }
+                return;
+            }
+
+            // Llamada a la API de verificación (adapta según tu backend)
+            fetch('/api/verificar-password', {
+                method  : 'POST',
+                headers : { 'Content-Type': 'application/json' },
+                body    : JSON.stringify({ password: inputActual.value }),
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    if (errActual) errActual.style.display = 'none';
+                    if (step1) step1.style.display = 'none';
+                    if (step2) step2.style.display = '';
+                } else {
+                    if (errActual) {
+                        errActual.textContent  = 'Contraseña incorrecta.';
+                        errActual.style.display = 'block';
+                    }
+                }
+            })
+            .catch(() => {
+                // Fallback sin backend: muestra el paso 2 directamente
+                if (errActual) errActual.style.display = 'none';
+                if (step1) step1.style.display = 'none';
+                if (step2) step2.style.display = '';
+            });
+        };
+    }
+
+    // ── Guardar perfil completo ──────────────────────────────────────────
+    // Si administrador.js ya define guardarPerfil() / guardarPerfilCompleto(),
+    // esta función actúa como alias para no duplicar lógica.
+    if (typeof guardarPerfilCompleto === 'undefined') {
+        window.guardarPerfilCompleto = function () {
+            const nombre   = document.getElementById('edit-nombre')?.value.trim();
+            const email    = document.getElementById('edit-email')?.value.trim();
+            const tel      = document.getElementById('edit-tel')?.value.trim();
+            const passNueva     = document.getElementById('conf-pass-nueva')?.value;
+            const passConfirmar = document.getElementById('conf-pass-confirmar')?.value;
+            const errNueva      = document.getElementById('error-pass-nueva');
+            const step2         = document.getElementById('pass-step2');
+
+            // Validar coincidencia de contraseñas si el paso 2 está visible
+            if (step2 && step2.style.display !== 'none') {
+                if (passNueva !== passConfirmar) {
+                    if (errNueva) errNueva.style.display = 'block';
+                    return;
+                }
+                if (errNueva) errNueva.style.display = 'none';
+            }
+
+            // Delegar al guardarPerfil() de administrador.js si existe
+            if (typeof guardarPerfil === 'function') {
+                guardarPerfil();
+                return;
+            }
+
+            // Fallback: llamada directa al backend
+            fetch('/api/actualizar-perfil-admin', {
+                method  : 'POST',
+                headers : { 'Content-Type': 'application/json' },
+                body    : JSON.stringify({
+                    nombre,
+                    email,
+                    telefono    : tel,
+                    nuevaPass   : passNueva || null,
+                }),
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    // Actualizar el dropdown con los nuevos datos
+                    if (nombre) {
+                        const dropName   = document.getElementById('drop-name');
+                        const headerName = document.getElementById('header-name');
+                        if (dropName)   dropName.textContent   = nombre;
+                        if (headerName) headerName.textContent = nombre;
+                    }
+                    if (email) {
+                        const dropEmail = document.getElementById('drop-email');
+                        if (dropEmail) dropEmail.textContent = email;
+                    }
+                    if (tel) {
+                        const dropTel = document.getElementById('drop-tel');
+                        if (dropTel) dropTel.textContent = tel;
+                    }
+                    cambiarSeccion('dashboard');
+                } else {
+                    alert(data.mensaje || 'No se pudo guardar. Intenta de nuevo.');
+                }
+            })
+            .catch(() => alert('Error de conexión al guardar el perfil.'));
+        };
+    }
+    </script>
+
 </body>
 </html>

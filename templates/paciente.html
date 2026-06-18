@@ -8,97 +8,132 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/paciente.css') }}">
-
 </head>
-<body class="flex min-h-screen">
+<body class="flex">
 
-    <aside class="sidebar hidden md:flex flex-col text-white shadow-2xl">
+    <aside class="sidebar text-white flex flex-col flex-shrink-0 shadow-2xl">
 
-        <div class="logo-container">
-            <div class="logo-icon">
-                <i class="fas fa-tooth text-3xl text-white"></i>
+        <div class="p-12 border-b border-slate-800/60 flex flex-col items-center flex-shrink-0">
+            <div class="w-16 h-16 bg-sky-500 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-sky-500/20">
+                <i class="fas fa-tooth text-3xl"></i>
             </div>
-            <h2 class="logo-text-main">STYLO<span class="logo-text-dental">DENTAL</span></h2>
-            <p class="logo-subtext">Patient Portal</p>
+            <h2 class="text-3xl font-black italic tracking-tighter text-sky-400">STYLO<span class="text-white">DENTAL</span></h2>
+            <p class="text-[10px] text-slate-500 font-extrabold uppercase tracking-[0.4em] mt-2">Patient Portal</p>
         </div>
 
-        <nav class="flex-grow p-6 space-y-2 mt-4">
-            <button
-                id="btn-inicio"
-                onclick="cambiarVista('inicio')"
-                class="nav-btn active">
-                <i class="fas fa-home w-5 text-center"></i>
-                Panel de Control
+        <nav class="flex-grow p-8 space-y-4">
+            <button onclick="cambiarVista('inicio')" id="btn-inicio" class="nav-btn active">
+                <i class="fas fa-home w-6 text-xl"></i>
+                <span class="tracking-wide">Panel de Control</span>
             </button>
-
-            <button
-                onclick="window.open('agendar.html', '_blank')"
-                class="nav-btn">
-                <i class="fas fa-calendar-plus w-5 text-center"></i>
-                Agendar Cita
+            <button onclick="window.open('agendar.html', '_blank')" class="nav-btn">
+                <i class="fas fa-calendar-plus w-6 text-xl"></i>
+                <span class="tracking-wide">Agendar Cita</span>
             </button>
-
-            <button
-                id="btn-historial"
-                onclick="cambiarVista('historial')"
-                class="nav-btn">
-                <i class="fas fa-history w-5 text-center"></i>
-                Historial de Citas
+            <button onclick="cambiarVista('historial')" id="btn-historial" class="nav-btn">
+                <i class="fas fa-history w-6 text-xl"></i>
+                <span class="tracking-wide">Historial de Citas</span>
+            </button>
+            <button onclick="cambiarVista('config')" id="btn-config" class="nav-btn">
+                <i class="fas fa-user-cog w-6 text-xl"></i>
+                <span class="tracking-wide">Mi Perfil</span>
             </button>
         </nav>
 
-        <div class="clock-widget">
-            <div id="reloj">00:00:00</div>
-            <div class="mt-2 text-[9px] text-slate-500 font-bold italic tracking-widest">Sincronizado con Stylo Dental</div>
+        <div class="clock-widget mx-6 mb-8 text-center flex-shrink-0">
+            <div id="reloj" class="font-black">00:00:00</div>
+            <div id="status-laboral" class="mt-4 flex items-center justify-center bg-slate-900/50 py-3 px-4 rounded-2xl border border-slate-700/50">
+                <span id="status-dot" class="status-dot dot-active"></span>
+                <span id="status-text" class="text-[11px] font-black uppercase tracking-widest text-slate-400">Iniciando...</span>
+            </div>
+            <div class="mt-4 text-[9px] text-slate-600 font-black italic uppercase tracking-widest">
+                Bogotá GMT-5
+            </div>
         </div>
 
-        <div class="p-6 border-t border-slate-800">
+        <!-- Botón Cerrar Sesión en sidebar -->
+        <div class="px-6 pb-8">
             <button
                 onclick="mostrarConfirmacionSimple('¿Desea cerrar sesión?', 'salir')"
-                class="w-full flex items-center justify-center gap-3 p-4 text-red-400 hover:bg-red-900/20 rounded-2xl font-black transition-all text-sm uppercase tracking-widest">
-                <i class="fas fa-sign-out-alt"></i>
-                Cerrar Sesión
+                class="w-full flex items-center justify-center gap-4 p-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] text-red-400 hover:bg-red-500/10 transition-all border border-red-900/40 hover:border-red-500/60">
+                <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
             </button>
         </div>
+
     </aside>
 
     <main class="flex-grow p-8 md:p-14 overflow-y-auto">
 
         <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-14 gap-8">
-
-            <div class="animate-in">
-                <h1 id="titulo-principal"
-                    class="text-4xl font-black text-slate-800 tracking-tighter mb-3">
-                    Panel de Control
-                </h1>
+            <div>
+                <h1 id="titulo-principal" class="text-4xl font-black text-slate-800 tracking-tighter mb-3">Panel de Control</h1>
                 <div class="flex items-center gap-3">
-                    <div class="h-1.5 w-12 bg-sky-600 rounded-full flex-shrink-0"></div>
-                    <p id="fecha-actual-paciente"
-                       class="text-slate-500 font-bold uppercase text-xs tracking-[0.3em]">
-                    </p>
+                    <div class="h-1.5 w-12 bg-sky-600 rounded-full"></div>
+                    <p id="fecha-actual-paciente" class="text-slate-500 font-bold uppercase text-xs tracking-[0.3em]"></p>
                 </div>
             </div>
 
-            <div id="patient-profile-trigger" onclick="abrirModalPerfil()">
-                <div id="avatar-letras">J</div>
-                <div class="text-left">
-                    <p class="text-[10px] font-black text-sky-600 uppercase tracking-widest mb-1">
-                        Paciente Registrado
-                    </p>
-                    <p id="nombre-usuario-header"
-                       class="text-base font-black text-slate-800 leading-none">
-                        Cargando...
-                    </p>
-                </div>
-                <i class="fas fa-chevron-down chevron-icon"></i>
-            </div>
+            <div class="relative">
+                <button
+                    id="profile-trigger"
+                    onclick="toggleProfileDropdown()"
+                    class="flex items-center gap-6 bg-white p-5 pr-12 rounded-[2rem] shadow-xl border border-slate-100 cursor-pointer hover:border-sky-500 transition-all active:scale-95 group z-50">
+                    <div id="avatar-letras"
+                         class="w-14 h-14 bg-gradient-to-br from-sky-600 to-sky-800 rounded-2xl flex items-center justify-center text-white text-2xl font-black shadow-2xl shadow-sky-600/30 uppercase group-hover:rotate-6 transition-transform">P</div>
+                    <div class="text-left">
+                        <p class="text-[10px] font-black text-sky-600 uppercase tracking-widest mb-1">Paciente Registrado</p>
+                        <p id="nombre-usuario-header" class="text-base font-black text-slate-800 leading-none">Cargando...</p>
+                    </div>
+                    <i class="fas fa-chevron-down text-sm text-slate-300 ml-4 group-hover:text-sky-600 transition-colors"></i>
+                </button>
 
+                <div id="profile-dropdown"
+                     class="absolute top-full right-0 mt-6 w-96 bg-white rounded-[2.5rem] shadow-[0_30px_70px_rgba(0,0,0,0.2)] border border-slate-50 p-10">
+                    <div class="text-center pb-8 border-b border-slate-100">
+                        <div id="perfil-avatar-grande"
+                             class="w-24 h-24 bg-sky-50 text-sky-600 rounded-3xl flex items-center justify-center text-4xl font-black uppercase mx-auto mb-5 border-4 border-white shadow-xl">PA</div>
+                        <h4 id="nombre-menu" class="font-black text-slate-800 text-xl tracking-tight"></h4>
+                        <span id="doc-menu"
+                              class="inline-block mt-3 px-6 py-2 bg-sky-100 text-sky-700 rounded-full text-[11px] font-black uppercase tracking-[0.2em]"></span>
+                    </div>
+                    <div class="py-8 space-y-6">
+                        <div class="flex items-center gap-5">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100">
+                                <i class="fas fa-envelope text-lg"></i>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Correo Electrónico</p>
+                                <p id="email-menu" class="text-sm font-bold text-slate-700"></p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-5">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100">
+                                <i class="fas fa-shield-alt text-lg"></i>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">EPS / Aseguramiento</p>
+                                <p id="eps-menu" class="text-sm font-bold text-slate-700"></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pt-6 border-t border-slate-100 flex flex-col gap-3">
+                        <button onclick="closeProfileDropdown(); cambiarVista('config')"
+                            class="w-full bg-sky-50 text-sky-700 py-4 rounded-2xl font-black hover:bg-sky-100 transition-all uppercase text-[10px] tracking-widest border border-sky-100">
+                            <i class="fas fa-user-edit mr-2"></i> Actualizar Datos
+                        </button>
+                        <button onclick="mostrarConfirmacionSimple('¿Desea cerrar sesión?', 'salir')"
+                            class="w-full bg-red-50 text-red-600 py-4 rounded-2xl font-black hover:bg-red-100 transition-all uppercase text-[10px] tracking-widest border border-red-100">
+                            <i class="fas fa-sign-out-alt mr-2"></i> Cerrar Sesión
+                        </button>
+                    </div>
+                </div>
+            </div>
         </header>
 
+        <!-- VISTA: INICIO -->
         <div id="vista-inicio">
-
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 animate-in">
-                <div class="card-stats p-8 border-l-4 border-sky-500 w-96">
+                <div class="card-stats p-8 border-l-4 border-sky-500">
                     <div class="flex justify-between items-center">
                         <div>
                             <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">Citas Activas</p>
@@ -106,11 +141,9 @@
                         </div>
                         <div class="text-sky-500 text-4xl opacity-15">
                             <i class="fas fa-calendar-check"></i>
+                        </div>
                     </div>
                 </div>
-            </div>
-                <!-- Módulo EPS: tarjeta de EPS afiliada del paciente -->
-                
             </div>
 
             <div class="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden animate-in">
@@ -119,13 +152,11 @@
                         <p class="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Gestión de Citas</p>
                         <h3 class="font-black text-slate-700 text-sm">Citas Vigentes y Recientes</h3>
                     </div>
-                    <button
-                        onclick="mostrarConfirmacionSimple('¿Ocultar todas las canceladas de esta vista?', 'limpiar')"
+                    <button onclick="mostrarConfirmacionSimple('¿Ocultar todas las canceladas de esta vista?', 'limpiar')"
                         class="text-[10px] text-slate-400 hover:text-red-500 font-black uppercase tracking-widest transition-colors border border-slate-200 hover:border-red-200 px-4 py-2 rounded-xl">
                         <i class="fas fa-broom mr-1"></i> Limpiar canceladas
                     </button>
                 </div>
-
                 <div class="overflow-x-auto">
                     <table class="w-full text-left min-w-[1100px]">
                         <thead class="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
@@ -140,7 +171,6 @@
                         </thead>
                         <tbody id="tabla-citas-body" class="text-sm text-slate-600 divide-y divide-slate-100"></tbody>
                     </table>
-
                     <div id="no-citas-msg" class="p-20 text-center text-slate-400 font-bold italic uppercase text-xs hidden">
                         <i class="fas fa-calendar-xmark text-4xl mb-4 block opacity-30"></i>
                         No hay registros vigentes.
@@ -149,6 +179,7 @@
             </div>
         </div>
 
+        <!-- VISTA: HISTORIAL -->
         <div id="vista-historial" class="hidden">
             <div class="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden animate-in">
                 <div class="p-6 border-b border-slate-100 bg-slate-900 text-white flex justify-between items-center">
@@ -156,11 +187,8 @@
                         <p class="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">Registro Permanente</p>
                         <h3 class="font-black uppercase tracking-widest text-sm">Historial Cronológico de Citas</h3>
                     </div>
-                    <span class="text-[9px] bg-sky-500 px-3 py-1.5 rounded-full font-black uppercase tracking-widest">
-                        Sin eliminaciones
-                    </span>
+                    <span class="text-[9px] bg-sky-500 px-3 py-1.5 rounded-full font-black uppercase tracking-widest">Sin eliminaciones</span>
                 </div>
-
                 <div class="overflow-x-auto">
                     <table class="w-full text-left min-w-[1100px]">
                         <thead class="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
@@ -178,130 +206,74 @@
             </div>
         </div>
 
+        <!-- VISTA: MI PERFIL -->
+        <div id="vista-config" class="hidden">
+            <div class="max-w-6xl mx-auto py-4 animate-in">
+                <div class="bg-white p-14 rounded-[3.5rem] shadow-2xl border border-slate-100 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 p-10 opacity-5 text-9xl">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    <h2 class="text-2xl font-black text-slate-800 mb-12 uppercase flex items-center gap-5">
+                        <span class="w-14 h-14 bg-sky-600 text-white rounded-2xl flex items-center justify-center shadow-xl">
+                            <i class="fas fa-id-card"></i>
+                        </span>
+                        Gestión de Perfil del Paciente
+                    </h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-12 relative z-10">
+                        <div class="space-y-3">
+                            <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Correo Electrónico</label>
+                            <input type="email" id="edit-correo" class="input-dental w-full" placeholder="correo@ejemplo.com">
+                        </div>
+                        <div class="space-y-3">
+                            <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Teléfono / Celular</label>
+                            <input type="tel" id="edit-telefono" class="input-dental w-full" placeholder="+57 300 000 0000">
+                        </div>
+                        <div class="md:col-span-2 space-y-3">
+                            <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Fecha de Nacimiento</label>
+                            <input type="date" id="edit-nacimiento" class="input-dental w-full">
+                        </div>
+                        <div class="md:col-span-2 space-y-3">
+                            <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Seguridad: Cambiar Contraseña</label>
+                            <div id="pass-step1" class="flex flex-col md:flex-row gap-4 items-start">
+                                <div class="flex-grow w-full">
+                                    <input type="password" id="pass-actual" class="input-dental w-full" placeholder="Contraseña actual">
+                                    <p id="error-pass-actual" class="text-red-600 text-xs font-bold mt-2 ml-1" style="display:none;">Contraseña incorrecta</p>
+                                </div>
+                                <button type="button" onclick="validarPasswordActual()"
+                                    class="bg-slate-900 text-white px-10 py-5 rounded-2xl font-black text-xs hover:bg-sky-600 transition-all uppercase tracking-[0.3em] shadow-xl active:scale-95 whitespace-nowrap">
+                                    Siguiente
+                                </button>
+                            </div>
+                            <div id="pass-step2" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style="display:none;">
+                                <div>
+                                    <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-3">Nueva Contraseña</label>
+                                    <input type="password" id="conf-pass-nueva" class="input-dental w-full" placeholder="Mínimo 6 caracteres">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-3">Confirmar Nueva Contraseña</label>
+                                    <input type="password" id="conf-pass-confirmar" class="input-dental w-full" placeholder="Repite la nueva contraseña">
+                                </div>
+                                <p id="error-pass-nueva" class="md:col-span-2 text-red-600 text-xs font-bold mt-1 ml-1" style="display:none;">Las contraseñas no coinciden.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-14 flex justify-end gap-8 pt-10 border-t border-slate-50">
+                        <button onclick="cambiarVista('inicio')"
+                            class="px-10 py-5 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-800 transition-colors">
+                            Cancelar
+                        </button>
+                        <button onclick="guardarPerfilPaciente()"
+                            class="bg-slate-900 text-white px-16 py-5 rounded-2xl font-black text-xs hover:bg-sky-600 transition-all uppercase tracking-[0.3em] shadow-2xl active:scale-95">
+                            Guardar Cambios
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </main>
 
-    <!-- MODAL: PERFIL DEL PACIENTE -->
-    <div id="modalPerfil" class="modal-overlay">
-        <div class="modal-content shadow-2xl">
-            <div class="bg-slate-900 p-8 text-center text-white relative rounded-t-[45px]">
-                <button
-                    onclick="cerrarModalPerfil()"
-                    class="absolute right-6 top-6 text-slate-500 hover:text-white transition-colors w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-800">
-                    <i class="fas fa-times text-lg"></i>
-                </button>
-                <div
-                    id="perfil-avatar-grande"
-                    class="w-20 h-20 bg-sky-600 rounded-3xl mx-auto mb-4 flex items-center justify-center text-3xl font-black shadow-lg shadow-sky-900/50">
-                    PA
-                </div>
-                <h3 class="font-black text-xl uppercase tracking-widest">Información Personal</h3>
-                <p class="text-sky-400 text-[10px] font-bold uppercase mt-1 tracking-widest">Stylo Dental — Registro Oficial</p>
-            </div>
-
-            <div class="p-8 grid grid-cols-2 gap-6">
-                <div>
-                    <span class="data-label">Nombre(s)</span>
-                    <p id="perfil-nombres" class="data-value uppercase">---</p>
-                </div>
-                <div>
-                    <span class="data-label">Apellido(s)</span>
-                    <p id="perfil-apellidos" class="data-value uppercase">---</p>
-                </div>
-                <div>
-                    <span class="data-label">Tipo de Documento</span>
-                    <p id="perfil-tipoDoc" class="data-value uppercase">---</p>
-                </div>
-                <div>
-                    <span class="data-label">Número de Documento</span>
-                    <p id="perfil-numDoc" class="data-value font-black">---</p>
-                </div>
-                <div>
-                    <span class="data-label">Fecha de Nacimiento</span>
-                    <p id="perfil-nacimiento" class="data-value">---</p>
-                </div>
-                <div>
-                    <span class="data-label">Correo Electrónico</span>
-                    <p id="perfil-correo" class="data-value italic text-sky-700">---</p>
-                </div>
-                <!-- Módulo EPS: EPS y régimen del paciente en el modal de perfil -->
-                <div>
-                    <span class="data-label">EPS Afiliada</span>
-                    <p id="perfil-eps" class="data-value text-emerald-700">—</p>
-                </div>
-                <div>
-                    <span class="data-label">Régimen</span>
-                    <p id="perfil-regimen" class="data-value text-indigo-700">—</p>
-                </div>
-
-                <div class="col-span-2 pt-6 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
-                    <button
-                        onclick="abrirConfiguracion()"
-                        class="flex-1 bg-sky-50 text-sky-700 py-4 rounded-2xl font-black hover:bg-sky-100 transition-all uppercase text-[10px] tracking-widest border border-sky-100">
-                        <i class="fas fa-user-edit mr-2"></i> Actualizar Datos
-                    </button>
-                    <button
-                        onclick="mostrarConfirmacionSimple('¿Desea cerrar sesión?', 'salir')"
-                        class="flex-1 bg-red-50 text-red-600 py-4 rounded-2xl font-black hover:bg-red-100 transition-all uppercase text-[10px] tracking-widest border border-red-100">
-                        <i class="fas fa-sign-out-alt mr-2"></i> Cerrar Sesión
-                    </button>
-                    <button
-                        onclick="cerrarModalPerfil()"
-                        class="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">
-                        Regresar
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL: CONFIGURACIÓN DE CUENTA -->
-    <div id="modalConfig" class="modal-overlay">
-        <div class="modal-content shadow-2xl overflow-y-auto max-h-[90vh]">
-            <div class="bg-gradient-to-r from-sky-600 to-sky-700 p-8 text-center text-white sticky top-0 z-10 rounded-t-[45px]">
-                <h3 class="font-black text-xl uppercase tracking-widest">Configuración de Cuenta</h3>
-                <p class="text-sky-100 text-[10px] font-bold uppercase mt-1 tracking-widest">Seguridad y Datos Personales</p>
-            </div>
-
-            <div class="p-8 space-y-5">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div>
-                        <label class="data-label">Correo Electrónico</label>
-                        <input type="email" id="edit-correo" class="input-dental" placeholder="nuevo@correo.com">
-                    </div>
-                    <div>
-                        <label class="data-label">Teléfono / Celular</label>
-                        <input type="text" id="edit-telefono" class="input-dental" placeholder="300 000 0000">
-                    </div>
-                    <div class="md:col-span-2">
-                        <label class="data-label">Fecha de Nacimiento</label>
-                        <input type="date" id="edit-nacimiento" class="input-dental">
-                    </div>
-                </div>
-
-                <hr class="border-slate-100 my-2">
-                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cambio de Contraseña</p>
-
-                <div>
-                    <label class="data-label">Nueva Contraseña</label>
-                    <input type="password" id="nueva-pass" class="input-dental" placeholder="Mínimo 6 caracteres">
-                </div>
-                <div>
-                    <label class="data-label">Confirmar Contraseña</label>
-                    <input type="password" id="confirmar-pass" class="input-dental" placeholder="Repita la nueva contraseña">
-                </div>
-
-                <div class="flex gap-4 pt-4">
-            <button onclick="cambiarSeccion('config'); toggleProfileDropdown && toggleProfileDropdown();" id="btn-config" class="nav-btn">
-                <i class="fas fa-user-cog w-6 text-xl"></i>
-                <span class="tracking-wide">Mi Perfil</span>
-            </button>                    
-                    
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL: VERIFICACIÓN DE CITA (CANCELAR) -->
+    <!-- MODAL: VERIFICACIÓN DE CITA -->
     <div id="modalCancelarCita" class="modal-overlay">
         <div class="modal-content shadow-2xl">
             <div class="bg-slate-900 p-6 text-center rounded-t-[45px]">
@@ -311,13 +283,11 @@
             <div class="p-8">
                 <div id="detalles-completos" class="grid grid-cols-2 gap-x-6 gap-y-4"></div>
                 <div class="flex gap-4 mt-10 pt-6 border-t border-slate-100">
-                    <button
-                        onclick="cerrarModalCancelar()"
+                    <button onclick="cerrarModalCancelar()"
                         class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">
                         Regresar
                     </button>
-                    <button
-                        onclick="solicitarConfirmacionFinal()"
+                    <button onclick="solicitarConfirmacionFinal()"
                         class="flex-1 bg-red-600 text-white py-4 rounded-2xl font-black hover:bg-red-700 transition-all uppercase text-[10px] tracking-widest shadow-lg shadow-red-100">
                         <i class="fas fa-ban mr-2"></i> Cancelar cita
                     </button>
@@ -326,25 +296,20 @@
         </div>
     </div>
 
-    <!-- MODAL: CONFIRMACIÓN FINAL (CANCELAR CITA) -->
+    <!-- MODAL: CONFIRMACIÓN FINAL -->
     <div id="modalConfirmacionFinal" class="modal-overlay">
         <div class="modal-content p-10 text-center border-t-8 border-red-600">
-            <div class="text-red-500 text-6xl mb-6">
-                <i class="fas fa-exclamation-triangle"></i>
-            </div>
+            <div class="text-red-500 text-6xl mb-6"><i class="fas fa-exclamation-triangle"></i></div>
             <h3 class="text-slate-800 font-black text-2xl mb-3 italic tracking-tighter">¿ESTÁ COMPLETAMENTE SEGURO?</h3>
             <p class="text-slate-500 text-xs mb-8 font-bold uppercase tracking-widest">
-                Esta acción marcará su cita como
-                <span class="text-red-600 font-black">CANCELADA</span> definitivamente.
+                Esta acción marcará su cita como <span class="text-red-600 font-black">CANCELADA</span> definitivamente.
             </p>
             <div class="flex flex-col gap-3">
-                <button
-                    onclick="confirmarAccionCancelado()"
+                <button onclick="confirmarAccionCancelado()"
                     class="w-full bg-red-600 text-white py-4 rounded-2xl font-black hover:bg-red-700 transition-all uppercase text-sm tracking-widest">
                     Sí, cancelar mi cita
                 </button>
-                <button
-                    onclick="cerrarConfirmacionFinal()"
+                <button onclick="cerrarConfirmacionFinal()"
                     class="w-full bg-slate-100 text-slate-500 py-3 rounded-2xl font-bold hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">
                     No, deseo mantenerla
                 </button>
@@ -352,21 +317,17 @@
         </div>
     </div>
 
-    <!-- MODAL: CONFIRMACIÓN SIMPLE (CERRAR SESIÓN / LIMPIAR) -->
+    <!-- MODAL: CONFIRMACIÓN SIMPLE -->
     <div id="modalConfirmarSimple" class="modal-overlay">
-        <div class="modal-content p-10 text-center border-t-8 border-sky-600">
-            <div id="icon-simple" class="text-sky-500 text-6xl mb-6">
-                <i class="fas fa-question-circle"></i>
-            </div>
+        <div class="modal-content p-10 text-center border-t-8 border-sky-600" style="max-width:440px">
+            <div id="icon-simple" class="text-sky-500 text-6xl mb-6"><i class="fas fa-question-circle"></i></div>
             <h3 id="confirm-text-simple" class="text-slate-800 font-black text-xl mb-8 uppercase tracking-tighter italic"></h3>
             <div class="flex gap-4">
-                <button
-                    onclick="ejecutarAccionSimple()"
+                <button onclick="ejecutarAccionSimple()"
                     class="flex-1 bg-sky-600 text-white py-4 rounded-2xl font-black hover:bg-sky-700 transition-all text-xs uppercase tracking-widest">
                     Confirmar
                 </button>
-                <button
-                    onclick="cerrarModalSimple()"
+                <button onclick="cerrarModalSimple()"
                     class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all text-xs uppercase tracking-widest">
                     Cancelar
                 </button>
@@ -377,8 +338,7 @@
     <span id="nombre-usuario" class="hidden" aria-hidden="true"></span>
 
     <script src="{{ url_for('static', filename='js/paciente.js') }}"></script>
-
-    <!-- Script de integración: fecha y sincronía de nombre en header -->
+    <script src="{{ url_for('static', filename='js/paciente_ui.js') }}"></script>
 
 </body>
 </html>

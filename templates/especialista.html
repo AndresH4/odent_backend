@@ -13,9 +13,6 @@
 
     <!-- ================================================================
          SIDEBAR
-         — Botón "Cerrar Sesión" ELIMINADO de aquí (era duplicado).
-           El único punto de salida es el dropdown del perfil (header).
-         — Se conserva: logo, nav, reloj/estado. Sin div border-t al final.
     ================================================================ -->
     <aside class="sidebar text-white flex flex-col w-72 flex-shrink-0 shadow-2xl">
 
@@ -25,7 +22,7 @@
                 <i class="fas fa-tooth text-3xl"></i>
             </div>
             <h2 class="text-3xl font-black italic tracking-tighter text-sky-400">STYLO<span class="text-white">DENTAL</span></h2>
-            <p class="text-[10px] text-slate-500 font-extrabold uppercase tracking-[0.4em] mt-2">Specialist Portal</p>
+            <p class="text-[10px] text-slate-500 font-extrabold uppercase tracking-[0.4em] mt-2">Admin Portal</p>
         </div>
 
         <!-- Navegación -->
@@ -45,24 +42,27 @@
         </nav>
 
         <!-- Reloj y estado -->
-        <div class="clock-widget mx-6 mb-8 text-center">
-            <div id="reloj" class="text-3xl font-black text-slate-700">00:00:00</div>
-            <div id="status-laboral" class="mt-4 flex items-center justify-center bg-slate-900/50 py-3 px-4 rounded-2xl border border-slate-700/50">
-                <span id="status-dot" class="status-dot"></span>
-                <span id="status-text" class="text-[11px] font-black uppercase tracking-widest text-slate-400">Iniciando...</span>
+        <div class="clock-widget mx-6 mb-8 text-center flex-shrink-0">
+            <div id="reloj" class="font-black text-slate-700">00:00:00</div>
+            <div class="mt-4 flex items-center justify-center bg-slate-900/50 py-3 px-4 rounded-2xl border border-slate-700/50">
+                <span class="status-dot dot-active"></span>
+                <span id="status-text" class="text-[11px] font-black uppercase tracking-widest text-slate-400">
+                    turno activo
+                </span>
             </div>
             <div class="mt-4 text-[9px] text-slate-600 font-black italic uppercase tracking-widest">
-                Sincronizado con Stylo Dental
+                Bogotá GMT-5
             </div>
         </div>
 
-        <!-- ════════════════════════════════════════════════════════════
-             BOTÓN "CERRAR SESIÓN" DEL SIDEBAR — ELIMINADO
-             Motivo: duplicaba la acción ya disponible en el dropdown
-             del perfil (header derecho). Un solo punto de salida es
-             mejor UX y evita confusión.
-             El div border-t que lo contenía también se elimina.
-        ════════════════════════════════════════════════════════════ -->
+        <!-- Botón Cerrar Sesión en sidebar -->
+        <div class="px-6 pb-8">
+            <button
+                onclick="mostrarConfirmacionSimple('¿Finalizar turno de especialista?', 'salir')"
+                class="w-full flex items-center justify-center gap-4 p-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] text-red-400 hover:bg-red-500/10 transition-all border border-red-900/40 hover:border-red-500/60">
+                <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+            </button>
+        </div>
 
     </aside>
 
@@ -81,7 +81,7 @@
                 </div>
             </div>
 
-            <!-- Dropdown de perfil — ÚNICO punto de salida de la sesión -->
+            <!-- Dropdown de perfil -->
             <div class="relative">
                 <button
                     id="profile-trigger"
@@ -123,23 +123,6 @@
                             </div>
                         </div>
                     </div>
-
-                    <button
-                        onclick="cambiarSeccion('config'); document.getElementById('profile-dropdown').classList.remove('show');"
-                        class="w-full bg-slate-900 text-white p-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] hover:bg-sky-600 transition-all shadow-xl flex items-center justify-center gap-4">
-                        <i class="fas fa-user-cog"></i> Configurar Cuenta
-                    </button>
-
-                    <!-- ═══════════════════════════════════════════════
-                         ÚNICO BOTÓN DE CERRAR SESIÓN — SE CONSERVA AQUÍ
-                         Llama a mostrarConfirmacionSimple para disparar
-                         el modal de confirmación con el diseño propio.
-                    ═══════════════════════════════════════════════ -->
-                    <button
-                        onclick="mostrarConfirmacionSimple('¿Finalizar turno de especialista?', 'salir')"
-                        class="w-full mt-3 p-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] text-red-500 hover:bg-red-50 transition-all flex items-center justify-center gap-4 border border-red-100">
-                        <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
-                    </button>
                 </div>
             </div>
         </header>
@@ -275,11 +258,11 @@
 
     </main>
 
-    <!-- ================================================================
+<!-- ================================================================
          MODAL: CONSULTA CLÍNICA
     ================================================================ -->
     <div id="modalConsulta" class="modal-overlay">
-        <div class="modal-content">
+        <div class="modal-content" style="max-width:900px;">
             <div class="bg-slate-900 p-12 flex justify-between items-center text-white">
                 <div class="flex items-center gap-8">
                     <div class="w-20 h-20 bg-sky-600 rounded-3xl flex items-center justify-center text-4xl shadow-2xl">
@@ -294,8 +277,64 @@
                     <i class="fas fa-times-circle text-5xl"></i>
                 </button>
             </div>
+
             <div class="p-12">
-                <div class="mb-12 bg-sky-50 p-10 rounded-[2.5rem] border border-sky-100 flex flex-wrap justify-between items-center gap-8">
+
+                <!-- Panel EPS / Aseguramiento -->
+                <div class="mb-10 bg-sky-50 p-8 rounded-[2rem] border border-sky-100">
+                    <p class="text-[10px] font-black text-sky-800 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <i class="fas fa-shield-alt text-sky-600"></i> Aseguramiento EPS
+                    </p>
+                    <div id="panel-eps-paciente">
+                        <div class="flex items-center gap-3 text-slate-400 text-xs font-bold">
+                            <i class="fas fa-spinner fa-spin"></i> Cargando...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Datos clínicos del paciente -->
+                <div class="mb-10 bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+                    <p class="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <i class="fas fa-heartbeat text-red-500"></i> Datos Clínicos del Paciente
+                    </p>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                        <div class="bg-white rounded-2xl p-4 border border-slate-100">
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Género</p>
+                            <p id="modal-genero" class="font-black text-slate-700 text-sm">---</p>
+                        </div>
+                        <div class="bg-white rounded-2xl p-4 border border-slate-100">
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Grupo Sanguíneo</p>
+                            <p id="modal-grupo-sanguineo" class="font-black text-red-600 text-sm">---</p>
+                        </div>
+                        <div class="bg-white rounded-2xl p-4 border border-slate-100 col-span-2">
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Alergias</p>
+                            <p id="modal-alergias" class="font-bold text-amber-700 text-sm">---</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-white rounded-2xl p-4 border border-slate-100">
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Antecedentes</p>
+                            <p id="modal-antecedentes" class="font-bold text-slate-600 text-sm">---</p>
+                        </div>
+                        <div class="bg-white rounded-2xl p-4 border border-slate-100">
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Observaciones</p>
+                            <p id="modal-observaciones" class="font-bold text-slate-600 text-sm">---</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Anamnesis / Formulario de preguntas -->
+                <div class="mb-10 bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+                    <p class="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <i class="fas fa-clipboard-list text-sky-500"></i> Formulario de Anamnesis
+                    </p>
+                    <div id="panel-anamnesis" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <p class="text-xs text-slate-400 font-bold italic col-span-2">Cargando anamnesis...</p>
+                    </div>
+                </div>
+
+                <!-- Expediente + botones -->
+                <div class="mb-10 bg-sky-50 p-10 rounded-[2.5rem] border border-sky-100 flex flex-wrap justify-between items-center gap-8">
                     <div class="flex items-center gap-6">
                         <div class="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-sky-600 shadow-xl border border-sky-50">
                             <i class="fas fa-folder-open text-3xl"></i>
@@ -310,6 +349,8 @@
                         <button onclick="irAOdontograma()" class="bg-white text-emerald-600 border-2 border-emerald-200 px-10 py-5 rounded-2xl font-black text-[11px] hover:bg-emerald-600 hover:text-white transition-all uppercase shadow-md active:scale-95">Odontograma</button>
                     </div>
                 </div>
+
+                <!-- Campos de consulta -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
                     <div class="space-y-5">
                         <label class="block text-[12px] font-black text-slate-500 uppercase tracking-widest ml-2">
@@ -330,6 +371,7 @@
                         <input type="text" id="diag-clinica" class="input-consulta" placeholder="Ej: K02.1 Caries dentina">
                     </div>
                 </div>
+
                 <div class="mt-14 flex justify-end gap-8 border-t border-slate-100 pt-12">
                     <button onclick="cerrarConsulta()" class="px-10 py-5 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-800 transition-colors">Descartar</button>
                     <button onclick="finalizarAtencion()" class="bg-emerald-600 text-white px-20 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.3em] shadow-2xl hover:bg-emerald-700 transition-all active:scale-95">Finalizar Consulta</button>
@@ -386,7 +428,6 @@
 
     <!-- ================================================================
          MODAL: CONFIRMACIÓN SIMPLE (CERRAR SESIÓN)
-         Disparado ÚNICAMENTE desde el dropdown del perfil.
     ================================================================ -->
     <div id="modalConfirmarSimple" class="modal-overlay">
         <div class="modal-content p-10 text-center border-t-8 border-sky-600" style="max-width:440px">
