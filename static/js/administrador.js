@@ -8,6 +8,7 @@
 
 // ─── Variables de módulo ─────────────────────────────────────────────────────
 let adminData = {};
+let accionPendienteSimple = '';
 
 // ─── Utilidades ──────────────────────────────────────────────────────────────
 function setText(id, val) {
@@ -16,7 +17,6 @@ function setText(id, val) {
 }
 
 function mostrarToast(msg) {
-    // Reutiliza un toast si existe en el HTML, si no usa alert
     const t = document.getElementById('toast');
     if (t) { t.textContent = msg; t.classList.add('visible'); setTimeout(() => t.classList.remove('visible'), 3000); }
     else alert(msg);
@@ -33,7 +33,6 @@ function cargarSesion() {
     const nombre = `${u.Nombres || ''} ${u.Apellidos || ''}`.trim();
     adminData = { nombre, email: u.Correo, tel: u.Telefono, id: u.Usuario_ID };
 
-    // Saludo visible en el header
     setText('header-name', nombre);
     setText('drop-name',   nombre);
     setText('drop-email',  u.Correo);
@@ -45,25 +44,33 @@ function cargarSesion() {
     actualizarStats();
 }
 
-function cerrarSesion() {
-    sessionStorage.removeItem('odent_usuario');
-    window.location.replace('/login');
-}
+window.cerrarSesion = function () {
+    mostrarConfirmacionSimple('¿Quiere salir de la sesión?', 'salir');
+};
 
 // ─── Reloj ───────────────────────────────────────────────────────────────────
 function actualizarReloj() {
     const ahora = new Date();
-    const dia   = ahora.getDay();    // 0 = domingo … 6 = sábado
+    const dia   = ahora.getDay();
     const horas = ahora.getHours();
 
     const elReloj = document.getElementById('reloj');
     if (elReloj) elReloj.innerText = ahora.toLocaleTimeString('es-CO');
 
+    const esHorarioLaboral =
+        (dia >= 1 && dia <= 5 && horas >= 8 && horas < 18) ||
+        (dia === 6 && horas >= 8 && horas < 13);
+
+    const dot = document.getElementById('status-dot');
+    const txt = document.getElementById('status-text');
+    if (dot && txt) {
+        dot.className   = `status-dot ${esHorarioLaboral ? 'dot-active' : 'dot-inactive'}`;
+        txt.innerText   = esHorarioLaboral ? 'Estado: En Jornada' : 'Estado: Fuera de Horario';
+        txt.style.color = esHorarioLaboral ? '#10b981' : '#ef4444';
+    }
+}
+
 // ─── Módulo EPS: Reporte de afiliados por EPS ────────────────────────────────
-/**
- * Consume GET /api/reporte/afiliados-por-eps del modulo_eps.
- * Calcula el total de afiliados y lo muestra en stat-total.
- */
 async function cargarReporteAfiliados() {
     try {
         const res  = await fetch('/api/reporte/afiliados-por-eps');
@@ -79,10 +86,6 @@ async function cargarReporteAfiliados() {
 }
 
 // ─── Módulo EPS: Lista enriquecida de pacientes con EPS ──────────────────────
-/**
- * Consume GET /api/paciente del modulo_eps.
- * Retorna el array con datos clínicos, EPS y estado de afiliación de cada paciente.
- */
 async function cargarPacientesEPS() {
     try {
         const res  = await fetch('/api/paciente');
@@ -110,12 +113,11 @@ async function actualizarStats() {
         console.error('[admin] Error cargando stats:', e);
     }
 
-    // Módulo EPS: poblar stat-total con el total real de afiliados
     await cargarReporteAfiliados();
 }
 
 // ─── Lista dinámica de usuarios ──────────────────────────────────────────────
-async function renderUsuarios(rolNombre) {
+window.renderUsuarios = async function (rolNombre) {
     const rolMap = { 'Especialista': 2, 'Paciente': 3 };
     const rolId  = rolMap[rolNombre];
 
@@ -124,7 +126,6 @@ async function renderUsuarios(rolNombre) {
         const data = await res.json();
         const filtrados = data.filter(u => u.Rol_ID === rolId);
 
-        // Módulo EPS: enriquecer pacientes con su EPS y estado de afiliación
         let pacientesEPS = [];
         if (rolNombre === 'Paciente') {
             pacientesEPS = await cargarPacientesEPS();
@@ -135,11 +136,11 @@ async function renderUsuarios(rolNombre) {
         const tit  = document.getElementById('titulo-lista-dinamica');
 
         if (!body || !cont || !tit) return;
-        cont.classList.remove('hidden');
+        cont.classList.remove('hidden', 'seccion-oculta');
+        cont.classList.add('seccion-visible');
         tit.textContent = `GESTIÓN: ${rolNombre.toUpperCase()}S`;
 
         body.innerHTML = filtrados.map(u => {
-            // Buscar el registro de paciente EPS que corresponde a este usuario
             const datosEPS   = pacientesEPS.find(
                 p => String(p.ID_Usuario) === String(u.ID_Usuario || u.Usuario_ID)
             );
@@ -170,21 +171,23 @@ async function renderUsuarios(rolNombre) {
     } catch (e) {
         console.error('[admin] Error cargando usuarios:', e);
     }
-}
+};
 
-// ─── Ocultar lista rápida (llamada desde el HTML) ─────────────────────────────
-function ocultarListaRapida() {
+window.ocultarListaRapida = function () {
     const cont = document.getElementById('container-lista-rapida');
-    if (cont) cont.classList.add('hidden');
-}
+    if (cont) {
+        cont.classList.remove('seccion-visible');
+        cont.classList.add('seccion-oculta');
+    }
+};
 
-// ─── Filtrar tabla de citas (llamada desde el HTML) ───────────────────────────
-function filtrarTablaCitas() {
+// ─── Filtrar tabla de citas ───────────────────────────────────────────────────
+window.filtrarTablaCitas = function () {
     const filtro = (document.getElementById('busqueda-citas')?.value || '').toLowerCase();
     document.querySelectorAll('#tabla-body tr').forEach(fila => {
         fila.style.display = fila.textContent.toLowerCase().includes(filtro) ? '' : 'none';
     });
-}
+};
 
 // ─── Historial de citas (desde API) ──────────────────────────────────────────
 async function renderCitas() {
@@ -229,82 +232,231 @@ async function renderCitas() {
 }
 
 // ─── Navegación de secciones ─────────────────────────────────────────────────
-function cambiarSeccion(sec) {
-    const dash   = document.getElementById('sec-dashboard');
-    const tablas = document.getElementById('sec-tablas');
+const SECCIONES_ADMIN = {
+    dashboard : { sec: 'sec-dashboard', btn: 'btn-dashboard', titulo: 'Administración'       },
+    citas     : { sec: 'sec-citas',     btn: 'btn-citas',     titulo: 'Historial Citas'      },
+    config    : { sec: 'sec-config',    btn: 'btn-config',    titulo: 'Mi Perfil'            },
+};
 
-    if (dash)   dash.classList.toggle('hidden',   sec !== 'dashboard');
-    if (tablas) tablas.classList.toggle('hidden',  sec === 'dashboard');
+window.cambiarSeccion = function (seccion) {
+    const cfg = SECCIONES_ADMIN[seccion];
+    if (!cfg) return;
 
+    // Ocultar todas las secciones
+    Object.values(SECCIONES_ADMIN).forEach(({ sec }) => {
+        const el = document.getElementById(sec);
+        if (el) {
+            el.classList.remove('seccion-visible');
+            el.classList.add('seccion-oculta');
+        }
+    });
+
+    // Desactivar todos los botones del sidebar
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-    const btnActivo = document.getElementById(`btn-${sec}`);
-    if (btnActivo) btnActivo.classList.add('active');
 
-    if (sec === 'citas') renderCitas();
-}
+    // Mostrar la sección activa
+    const secEl = document.getElementById(cfg.sec);
+    if (secEl) {
+        secEl.classList.remove('seccion-oculta');
+        secEl.classList.add('seccion-visible');
+    }
 
-// ─── Perfil (modal de configuración) ─────────────────────────────────────────
-function toggleProfileDropdown() {
-    document.getElementById('profileDropdown')?.classList.toggle('active');
-}
+    // Activar el botón correspondiente
+    const btnEl = document.getElementById(cfg.btn);
+    if (btnEl) btnEl.classList.add('active');
+
+    // Actualizar título del header
+    const titleEl = document.getElementById('main-title');
+    if (titleEl) titleEl.textContent = cfg.titulo;
+
+    // Acciones específicas por sección
+    if (seccion === 'citas')  renderCitas();
+    if (seccion === 'config') _cargarDatosPerfil();
+};
+
+// ─── Dropdown de perfil ───────────────────────────────────────────────────────
+window.toggleProfileDropdown = function () {
+    const dropdown = document.getElementById('profile-dropdown');
+    if (!dropdown) return;
+    const isVisible = dropdown.style.display === 'block';
+    dropdown.style.display = isVisible ? 'none' : 'block';
+};
 
 window.addEventListener('click', (e) => {
-    if (!e.target.closest('#profileDropdown') && !e.target.closest('header .cursor-pointer')) {
-        document.getElementById('profileDropdown')?.classList.remove('active');
+    if (!e.target.closest('#profile-dropdown') && !e.target.closest('#profile-trigger')) {
+        const dropdown = document.getElementById('profile-dropdown');
+        if (dropdown) dropdown.style.display = 'none';
     }
 });
 
-function abrirConfiguracion() {
-    document.getElementById('edit-nombre').value = adminData.nombre || '';
-    document.getElementById('edit-email').value  = adminData.email  || '';
-    document.getElementById('edit-tel').value    = adminData.tel    || '';
-    document.getElementById('modalConfig').style.display = 'flex';
+// ─── Perfil: carga de datos en el formulario ─────────────────────────────────
+function _cargarDatosPerfil() {
+    const nombre = document.getElementById('drop-name')?.textContent.trim()  || '';
+    const email  = document.getElementById('drop-email')?.textContent.trim() || '';
+    const tel    = document.getElementById('drop-tel')?.textContent.trim()   || '';
+
+    const inputNombre = document.getElementById('edit-nombre');
+    const inputEmail  = document.getElementById('edit-email');
+    const inputTel    = document.getElementById('edit-tel');
+
+    if (inputNombre) inputNombre.value = nombre !== 'Admin Root' ? nombre : (adminData.nombre || '');
+    if (inputEmail)  inputEmail.value  = email  || adminData.email  || '';
+    if (inputTel)    inputTel.value    = tel    || adminData.tel    || '';
+
+    // Reiniciar flujo de contraseña
+    const step1      = document.getElementById('pass-step1');
+    const step2      = document.getElementById('pass-step2');
+    const errActual  = document.getElementById('error-pass-actual');
+    const errNueva   = document.getElementById('error-pass-nueva');
+    const passActual = document.getElementById('pass-actual');
+    const passNueva  = document.getElementById('conf-pass-nueva');
+    const passConf   = document.getElementById('conf-pass-confirmar');
+
+    if (step1)      step1.style.display      = '';
+    if (step2)      step2.style.display      = 'none';
+    if (errActual)  errActual.style.display  = 'none';
+    if (errNueva)   errNueva.style.display   = 'none';
+    if (passActual) passActual.value = '';
+    if (passNueva)  passNueva.value  = '';
+    if (passConf)   passConf.value   = '';
 }
 
-function cerrarConfiguracion() {
-    document.getElementById('modalConfig').style.display = 'none';
-    const s1 = document.getElementById('step-1');
-    const s2 = document.getElementById('step-2');
-    if (s1) s1.classList.remove('hidden');
-    if (s2) s2.classList.add('hidden');
-}
+// ─── Validación de contraseña paso 1 → paso 2 ───────────────────────────────
+window.validarPasswordActual = function () {
+    const inputActual = document.getElementById('pass-actual');
+    const errActual   = document.getElementById('error-pass-actual');
+    const step1       = document.getElementById('pass-step1');
+    const step2       = document.getElementById('pass-step2');
 
-async function guardarPerfil() {
-    adminData.nombre = document.getElementById('edit-nombre').value.trim();
-    adminData.email  = document.getElementById('edit-email').value.trim();
-    adminData.tel    = document.getElementById('edit-tel').value.trim();
+    if (!inputActual || !inputActual.value.trim()) {
+        if (errActual) {
+            errActual.textContent   = 'Ingresa tu contraseña actual.';
+            errActual.style.display = 'block';
+        }
+        return;
+    }
+
+    fetch('/api/verificar-password', {
+        method  : 'POST',
+        headers : { 'Content-Type': 'application/json' },
+        body    : JSON.stringify({ password: inputActual.value }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            if (errActual) errActual.style.display = 'none';
+            if (step1) step1.style.display = 'none';
+            if (step2) step2.style.display = '';
+        } else {
+            if (errActual) {
+                errActual.textContent   = 'Contraseña incorrecta.';
+                errActual.style.display = 'block';
+            }
+        }
+    })
+    .catch(() => {
+        // Fallback sin backend: avanzar al paso 2 directamente
+        if (errActual) errActual.style.display = 'none';
+        if (step1) step1.style.display = 'none';
+        if (step2) step2.style.display = '';
+    });
+};
+
+// ─── Guardar perfil completo ─────────────────────────────────────────────────
+window.guardarPerfilCompleto = function () {
+    const nombre        = document.getElementById('edit-nombre')?.value.trim();
+    const email         = document.getElementById('edit-email')?.value.trim();
+    const tel           = document.getElementById('edit-tel')?.value.trim();
+    const passNueva     = document.getElementById('conf-pass-nueva')?.value;
+    const passConfirmar = document.getElementById('conf-pass-confirmar')?.value;
+    const errNueva      = document.getElementById('error-pass-nueva');
+    const step2         = document.getElementById('pass-step2');
+
+    // Validar coincidencia de contraseñas si el paso 2 está visible
+    if (step2 && step2.style.display !== 'none') {
+        if (passNueva !== passConfirmar) {
+            if (errNueva) errNueva.style.display = 'block';
+            return;
+        }
+        if (errNueva) errNueva.style.display = 'none';
+    }
 
     // Actualizar sesión local
+    adminData.nombre = nombre || adminData.nombre;
+    adminData.email  = email  || adminData.email;
+    adminData.tel    = tel    || adminData.tel;
+
     const raw = sessionStorage.getItem('odent_usuario');
     if (raw) {
         const u = JSON.parse(raw);
-        u.Nombres  = adminData.nombre.split(' ')[0] || u.Nombres;
-        u.Apellidos = adminData.nombre.split(' ').slice(1).join(' ') || u.Apellidos;
-        u.Correo   = adminData.email;
-        u.Telefono = adminData.tel;
+        if (nombre) {
+            u.Nombres   = nombre.split(' ')[0]          || u.Nombres;
+            u.Apellidos = nombre.split(' ').slice(1).join(' ') || u.Apellidos;
+        }
+        if (email) u.Correo   = email;
+        if (tel)   u.Telefono = tel;
         sessionStorage.setItem('odent_usuario', JSON.stringify(u));
     }
 
-    mostrarToast('PERFIL ACTUALIZADO');
-    cerrarConfiguracion();
-    cargarSesion();
-}
+    fetch('/api/actualizar-perfil-admin', {
+        method  : 'POST',
+        headers : { 'Content-Type': 'application/json' },
+        body    : JSON.stringify({
+            nombre,
+            email,
+            telefono  : tel,
+            nuevaPass : passNueva || null,
+        }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            // Reflejar cambios en el header y dropdown
+            if (nombre) {
+                setText('drop-name',   nombre);
+                setText('header-name', nombre);
+            }
+            if (email) setText('drop-email', email);
+            if (tel)   setText('drop-tel',   tel);
 
-function verificarOldPass() {
-    // Verificación local simple (en producción esto iría al backend)
-    const ingresada = document.getElementById('old-pass').value;
-    if (ingresada && ingresada.length >= 6) {
-        document.getElementById('step-1').classList.add('hidden');
-        document.getElementById('step-2').classList.remove('hidden');
-    } else {
-        alert('Contraseña inválida o muy corta.');
-    }
-}
+            mostrarToast('PERFIL ACTUALIZADO');
+            cambiarSeccion('dashboard');
+        } else {
+            alert(data.mensaje || 'No se pudo guardar. Intenta de nuevo.');
+        }
+    })
+    .catch(() => {
+        // Fallback sin backend: actualizar UI localmente
+        if (nombre) { setText('drop-name', nombre); setText('header-name', nombre); }
+        if (email)  setText('drop-email', email);
+        if (tel)    setText('drop-tel',   tel);
 
-function togglePass(id) {
+        mostrarToast('PERFIL ACTUALIZADO');
+        cambiarSeccion('dashboard');
+    });
+};
+
+// ─── Funciones de perfil heredadas (compatibilidad) ──────────────────────────
+window.abrirConfiguracion = function () {
+    cambiarSeccion('config');
+};
+
+window.cerrarConfiguracion = function () {
+    cambiarSeccion('dashboard');
+};
+
+window.guardarPerfil = function () {
+    guardarPerfilCompleto();
+};
+
+window.verificarOldPass = function () {
+    validarPasswordActual();
+};
+
+window.togglePass = function (id) {
     const el = document.getElementById(id);
     if (el) el.type = el.type === 'password' ? 'text' : 'password';
-}
+};
 
 // ─── Modal confirmación simple ────────────────────────────────────────────────
 window.mostrarConfirmacionSimple = function (mensaje, accion) {
@@ -315,22 +467,21 @@ window.mostrarConfirmacionSimple = function (mensaje, accion) {
     if (modal) modal.style.display = 'flex';
 };
 
-function cerrarModalSimple() {
+window.cerrarModalSimple = function () {
     const modal = document.getElementById('modalConfirmarSimple');
     if (modal) modal.style.display = 'none';
     accionPendienteSimple = '';
-}
+};
 
-function ejecutarAccionSimple() {
+window.ejecutarAccionSimple = function () {
     if (accionPendienteSimple === 'salir') {
         sessionStorage.removeItem('odent_usuario');
         localStorage.removeItem('usuario_logueado');
         window.location.replace('/login');
     }
     cerrarModalSimple();
-}
+};
 
-const cerrarSesion = () => mostrarConfirmacionSimple('¿Quiere salir de la sesión?', 'salir');
 // ─── Init ────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
     cargarSesion();

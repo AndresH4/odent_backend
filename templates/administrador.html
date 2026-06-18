@@ -43,19 +43,17 @@
                 <i class="fas fa-shield-alt w-6 text-xl text-emerald-400"></i>
                 <span class="tracking-wide">Aseguramiento</span>
             </a>
-            <!-- BOTÓN MI PERFIL — mismo patrón que especialista.html -->
             <button onclick="cambiarSeccion('config')" id="btn-config" class="nav-btn">
                 <i class="fas fa-user-cog w-6 text-xl"></i>
                 <span class="tracking-wide">Mi Perfil</span>
             </button>
         </nav>
 
-        <!-- Reloj y estado -->
-        <div class="clock-widget mx-6 mb-8 text-center">
-            <div id="reloj" class="font-black text-slate-700">00:00:00</div>
-            <div class="mt-4 flex items-center justify-center bg-slate-900/50 py-3 px-4 rounded-2xl border border-slate-700/50">
-                <span class="status-dot dot-active"></span>
-                <span class="text-[11px] font-black uppercase tracking-widest text-slate-400">Sistema Activo</span>
+        <div class="clock-widget mx-6 mb-8 text-center flex-shrink-0">
+            <div id="reloj" class="font-black">00:00:00</div>
+            <div id="status-laboral" class="mt-4 flex items-center justify-center bg-slate-900/50 py-3 px-4 rounded-2xl border border-slate-700/50">
+                <span id="status-dot" class="status-dot dot-active"></span>
+                <span id="status-text" class="text-[11px] font-black uppercase tracking-widest text-slate-400">Iniciando...</span>
             </div>
             <div class="mt-4 text-[9px] text-slate-600 font-black italic uppercase tracking-widest">
                 Bogotá GMT-5
@@ -104,7 +102,7 @@
                 </button>
 
                 <!-- Dropdown panel -->
-                <div id="profile-dropdown" class="absolute top-full right-0 mt-6 w-96 bg-white rounded-[2.5rem] shadow-[0_30px_70px_rgba(0,0,0,0.2)] border border-slate-50 p-10">
+                <div id="profile-dropdown" class="absolute top-full right-0 mt-6 w-96 bg-white rounded-[2.5rem] shadow-[0_30px_70px_rgba(0,0,0,0.2)] border border-slate-50 p-10" style="display:none;">
                     <div class="text-center pb-8 border-b border-slate-100">
                         <div class="w-24 h-24 bg-sky-50 text-sky-600 rounded-3xl flex items-center justify-center text-4xl font-black mx-auto mb-5 border-4 border-white shadow-xl">
                             <i class="fas fa-user-shield"></i>
@@ -134,7 +132,6 @@
                         </div>
                     </div>
 
-                    <!-- Ir a Mi Perfil desde el dropdown — mismo patrón que especialista -->
                     <button
                         onclick="cambiarSeccion('config'); toggleProfileDropdown()"
                         class="w-full bg-slate-900 text-white p-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] hover:bg-sky-600 transition-all shadow-xl flex items-center justify-center gap-4 mb-3">
@@ -242,7 +239,7 @@
         </section>
 
         <!-- ============================================================
-             SECCIÓN: MI PERFIL — integrado desde especialista.html
+             SECCIÓN: MI PERFIL
         ============================================================ -->
         <section id="sec-config" class="seccion-oculta max-w-6xl mx-auto py-4 animate-in">
             <div class="bg-white p-14 rounded-[3.5rem] shadow-2xl border border-slate-100 relative overflow-hidden">
@@ -277,7 +274,7 @@
                         <input type="tel" id="edit-tel" class="input-consulta" placeholder="+57 300 000 0000">
                     </div>
 
-                    <!-- Email — ocupa ambas columnas -->
+                    <!-- Email -->
                     <div class="md:col-span-2 space-y-3">
                         <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
                             Correo de Acceso
@@ -285,7 +282,7 @@
                         <input type="email" id="edit-email" class="input-consulta" placeholder="admin@stylodental.com">
                     </div>
 
-                    <!-- Cambio de contraseña — misma estructura de 2 pasos que especialista -->
+                    <!-- Cambio de contraseña -->
                     <div class="md:col-span-2 space-y-3">
                         <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
                             Seguridad: Cambiar Contraseña
@@ -311,7 +308,7 @@
                             </button>
                         </div>
 
-                        <!-- Paso 2: nueva contraseña (oculto hasta validar paso 1) -->
+                        <!-- Paso 2: nueva contraseña -->
                         <div id="pass-step2" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style="display:none;">
                             <div>
                                 <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-3">
@@ -361,7 +358,7 @@
     <!-- ================================================================
          MODAL: CONFIRMACIÓN SIMPLE (CERRAR SESIÓN)
     ================================================================ -->
-    <div id="modalConfirmarSimple" class="modal-overlay">
+    <div id="modalConfirmarSimple" class="modal-overlay" style="display:none;">
         <div class="modal-content p-10 text-center border-t-8 border-sky-600" style="max-width:440px">
             <div id="icon-simple" class="text-sky-500 text-6xl mb-6">
                 <i class="fas fa-question-circle"></i>
@@ -383,217 +380,5 @@
     </div>
 
     <script src="{{ url_for('static', filename='js/administrador.js') }}"></script>
-
-    <!-- ================================================================
-         LÓGICA INLINE: navegación Mi Perfil + cambio de contraseña
-         (complementa administrador.js sin romper lo existente)
-    ================================================================ -->
-    <script>
-    // ── Navegación entre secciones ──────────────────────────────────────
-    // Reutiliza el mismo patrón que especialista.js:
-    // oculta todo, muestra la sección pedida y marca el btn activo.
-
-    const SECCIONES_ADMIN = {
-        dashboard : { sec: 'sec-dashboard', btn: 'btn-dashboard', titulo: 'Administración'  },
-        citas     : { sec: 'sec-citas',     btn: 'btn-citas',     titulo: 'Historial Citas' },
-        config    : { sec: 'sec-config',    btn: 'btn-config',    titulo: 'Mi Perfil'       },
-    };
-
-    // Guarda la función original si ya existe en administrador.js
-    // para no pisarla; en caso contrario la definimos aquí.
-    if (typeof cambiarSeccion === 'undefined') {
-        window.cambiarSeccion = function (seccion) {
-            _cambiarSeccionAdmin(seccion);
-        };
-    } else {
-        // Envuelve la función original para que también gestione 'config'
-        const _cambiarSeccionOriginal = cambiarSeccion;
-        window.cambiarSeccion = function (seccion) {
-            if (SECCIONES_ADMIN[seccion]) {
-                _cambiarSeccionAdmin(seccion);
-            } else {
-                _cambiarSeccionOriginal(seccion);
-            }
-        };
-    }
-
-    function _cambiarSeccionAdmin(seccion) {
-        const cfg = SECCIONES_ADMIN[seccion];
-        if (!cfg) return;
-
-        // Ocultar todas las secciones
-        Object.values(SECCIONES_ADMIN).forEach(({ sec }) => {
-            const el = document.getElementById(sec);
-            if (el) {
-                el.classList.remove('seccion-visible');
-                el.classList.add('seccion-oculta');
-            }
-        });
-
-        // Desactivar todos los botones del sidebar
-        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-
-        // Mostrar la sección activa
-        const secEl = document.getElementById(cfg.sec);
-        if (secEl) {
-            secEl.classList.remove('seccion-oculta');
-            secEl.classList.add('seccion-visible');
-        }
-
-        // Activar el botón correspondiente
-        const btnEl = document.getElementById(cfg.btn);
-        if (btnEl) btnEl.classList.add('active');
-
-        // Actualizar título del header
-        const titleEl = document.getElementById('main-title');
-        if (titleEl) titleEl.textContent = cfg.titulo;
-
-        // Si vamos a config, cargar datos del perfil en los inputs
-        if (seccion === 'config') _cargarDatosPerfil();
-    }
-
-    // ── Carga de datos del perfil en el formulario ──────────────────────
-    function _cargarDatosPerfil() {
-        // Tomamos los valores ya mostrados en el dropdown (fuente de verdad del JS existente)
-        const nombre = document.getElementById('drop-name')?.textContent.trim()   || '';
-        const email  = document.getElementById('drop-email')?.textContent.trim()  || '';
-        const tel    = document.getElementById('drop-tel')?.textContent.trim()    || '';
-
-        const inputNombre = document.getElementById('edit-nombre');
-        const inputEmail  = document.getElementById('edit-email');
-        const inputTel    = document.getElementById('edit-tel');
-
-        if (inputNombre && !inputNombre.value) inputNombre.value = nombre !== 'Admin Root' ? nombre : '';
-        if (inputEmail  && !inputEmail.value)  inputEmail.value  = email;
-        if (inputTel    && !inputTel.value)    inputTel.value    = tel;
-
-        // Reiniciar flujo de contraseña
-        const step1 = document.getElementById('pass-step1');
-        const step2 = document.getElementById('pass-step2');
-        const errActual = document.getElementById('error-pass-actual');
-        const errNueva  = document.getElementById('error-pass-nueva');
-        const passActual = document.getElementById('pass-actual');
-
-        if (step1) step1.style.display = '';
-        if (step2) step2.style.display = 'none';
-        if (errActual) errActual.style.display = 'none';
-        if (errNueva)  errNueva.style.display  = 'none';
-        if (passActual) passActual.value = '';
-    }
-
-    // ── Validación de contraseña: paso 1 → paso 2 ───────────────────────
-    // Si administrador.js ya define validarPasswordActual(), esta no se sobreescribe.
-    if (typeof validarPasswordActual === 'undefined') {
-        window.validarPasswordActual = function () {
-            const inputActual = document.getElementById('pass-actual');
-            const errActual   = document.getElementById('error-pass-actual');
-            const step1       = document.getElementById('pass-step1');
-            const step2       = document.getElementById('pass-step2');
-
-            // Aquí deberías llamar a tu endpoint de verificación.
-            // Como placeholder, comprobamos que el campo no esté vacío.
-            if (!inputActual || !inputActual.value.trim()) {
-                if (errActual) {
-                    errActual.textContent  = 'Ingresa tu contraseña actual.';
-                    errActual.style.display = 'block';
-                }
-                return;
-            }
-
-            // Llamada a la API de verificación (adapta según tu backend)
-            fetch('/api/verificar-password', {
-                method  : 'POST',
-                headers : { 'Content-Type': 'application/json' },
-                body    : JSON.stringify({ password: inputActual.value }),
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.ok) {
-                    if (errActual) errActual.style.display = 'none';
-                    if (step1) step1.style.display = 'none';
-                    if (step2) step2.style.display = '';
-                } else {
-                    if (errActual) {
-                        errActual.textContent  = 'Contraseña incorrecta.';
-                        errActual.style.display = 'block';
-                    }
-                }
-            })
-            .catch(() => {
-                // Fallback sin backend: muestra el paso 2 directamente
-                if (errActual) errActual.style.display = 'none';
-                if (step1) step1.style.display = 'none';
-                if (step2) step2.style.display = '';
-            });
-        };
-    }
-
-    // ── Guardar perfil completo ──────────────────────────────────────────
-    // Si administrador.js ya define guardarPerfil() / guardarPerfilCompleto(),
-    // esta función actúa como alias para no duplicar lógica.
-    if (typeof guardarPerfilCompleto === 'undefined') {
-        window.guardarPerfilCompleto = function () {
-            const nombre   = document.getElementById('edit-nombre')?.value.trim();
-            const email    = document.getElementById('edit-email')?.value.trim();
-            const tel      = document.getElementById('edit-tel')?.value.trim();
-            const passNueva     = document.getElementById('conf-pass-nueva')?.value;
-            const passConfirmar = document.getElementById('conf-pass-confirmar')?.value;
-            const errNueva      = document.getElementById('error-pass-nueva');
-            const step2         = document.getElementById('pass-step2');
-
-            // Validar coincidencia de contraseñas si el paso 2 está visible
-            if (step2 && step2.style.display !== 'none') {
-                if (passNueva !== passConfirmar) {
-                    if (errNueva) errNueva.style.display = 'block';
-                    return;
-                }
-                if (errNueva) errNueva.style.display = 'none';
-            }
-
-            // Delegar al guardarPerfil() de administrador.js si existe
-            if (typeof guardarPerfil === 'function') {
-                guardarPerfil();
-                return;
-            }
-
-            // Fallback: llamada directa al backend
-            fetch('/api/actualizar-perfil-admin', {
-                method  : 'POST',
-                headers : { 'Content-Type': 'application/json' },
-                body    : JSON.stringify({
-                    nombre,
-                    email,
-                    telefono    : tel,
-                    nuevaPass   : passNueva || null,
-                }),
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.ok) {
-                    // Actualizar el dropdown con los nuevos datos
-                    if (nombre) {
-                        const dropName   = document.getElementById('drop-name');
-                        const headerName = document.getElementById('header-name');
-                        if (dropName)   dropName.textContent   = nombre;
-                        if (headerName) headerName.textContent = nombre;
-                    }
-                    if (email) {
-                        const dropEmail = document.getElementById('drop-email');
-                        if (dropEmail) dropEmail.textContent = email;
-                    }
-                    if (tel) {
-                        const dropTel = document.getElementById('drop-tel');
-                        if (dropTel) dropTel.textContent = tel;
-                    }
-                    cambiarSeccion('dashboard');
-                } else {
-                    alert(data.mensaje || 'No se pudo guardar. Intenta de nuevo.');
-                }
-            })
-            .catch(() => alert('Error de conexión al guardar el perfil.'));
-        };
-    }
-    </script>
-
 </body>
 </html>
