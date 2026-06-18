@@ -46,18 +46,13 @@ window.onclick = (e) => {
 /* =====================================================================
    RELOJ Y ESTADO LABORAL
    ===================================================================== */
-
-const actualizarRelojYEstado = () => {
+function actualizarReloj() {
     const ahora = new Date();
-    const horas = ahora.getHours();
     const dia   = ahora.getDay();
-    const relojElem = document.getElementById('reloj');
+    const horas = ahora.getHours();
 
-    if (relojElem) {
-        relojElem.innerText = ahora.toLocaleTimeString('es-CO', {
-            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-        });
-    }
+    const el = document.getElementById('reloj');
+    if (el) el.innerText = ahora.toLocaleTimeString('es-CO');
 
     const esHorarioLaboral =
         (dia >= 1 && dia <= 5 && horas >= 8 && horas < 18) ||
@@ -65,13 +60,21 @@ const actualizarRelojYEstado = () => {
 
     const dot = document.getElementById('status-dot');
     const txt = document.getElementById('status-text');
-
     if (dot && txt) {
-        dot.className   = `status-dot ${esHorarioLaboral ? 'dot-active' : 'dot-inactive'}`;
-        txt.innerText   = esHorarioLaboral ? 'Estado: En Jornada' : 'Estado: Fuera de Horario';
+        dot.className = `status-dot ${esHorarioLaboral ? 'dot-active' : 'dot-inactive'}`;
+        txt.innerText = esHorarioLaboral ? 'Estado: En Jornada' : 'Estado: Fuera de Horario';
         txt.style.color = esHorarioLaboral ? '#10b981' : '#ef4444';
     }
-};
+}
+
+actualizarReloj();
+setInterval(actualizarReloj, 1000);
+
+// Ejecutar una vez al cargar
+actualizarReloj();
+
+// Repetir cada 1000ms (1 segundo)
+setInterval(actualizarReloj, 1000);
 
 /* =====================================================================
    SESIÓN

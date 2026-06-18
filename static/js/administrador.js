@@ -53,11 +53,11 @@ function cerrarSesion() {
 // ─── Reloj ───────────────────────────────────────────────────────────────────
 function actualizarReloj() {
     const ahora = new Date();
-    setText('reloj', ahora.toLocaleTimeString('es-CO'));
-    setText('fecha-actual', ahora.toLocaleDateString('es-ES', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-    }));
-}
+    const dia   = ahora.getDay();    // 0 = domingo … 6 = sábado
+    const horas = ahora.getHours();
+
+    const elReloj = document.getElementById('reloj');
+    if (elReloj) elReloj.innerText = ahora.toLocaleTimeString('es-CO');
 
 // ─── Módulo EPS: Reporte de afiliados por EPS ────────────────────────────────
 /**
@@ -307,15 +307,30 @@ function togglePass(id) {
 }
 
 // ─── Modal confirmación simple ────────────────────────────────────────────────
+window.mostrarConfirmacionSimple = function (mensaje, accion) {
+    accionPendienteSimple = accion;
+    const modal = document.getElementById('modalConfirmarSimple');
+    const texto = document.getElementById('confirm-text-simple');
+    if (texto) texto.textContent = mensaje;
+    if (modal) modal.style.display = 'flex';
+};
+
 function cerrarModalSimple() {
-    const m = document.getElementById('modalConfirmarSimple');
-    if (m) m.style.display = 'none';
+    const modal = document.getElementById('modalConfirmarSimple');
+    if (modal) modal.style.display = 'none';
+    accionPendienteSimple = '';
 }
 
 function ejecutarAccionSimple() {
+    if (accionPendienteSimple === 'salir') {
+        sessionStorage.removeItem('odent_usuario');
+        localStorage.removeItem('usuario_logueado');
+        window.location.replace('/login');
+    }
     cerrarModalSimple();
 }
 
+const cerrarSesion = () => mostrarConfirmacionSimple('¿Quiere salir de la sesión?', 'salir');
 // ─── Init ────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
     cargarSesion();
