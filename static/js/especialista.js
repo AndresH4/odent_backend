@@ -1,16 +1,5 @@
 /**
- * especialista.js — Stylo Dental Pro v2.6 [CAMBIO DE CONTRASEÑA SEGURO]
- * =====================================================================
- * Cambios respecto a v2.5:
- *  - validarPasswordActual() y guardarPerfilCompleto() ya NO leen ni
- *    comparan contraseñas contra localStorage/'usuarios_dental'.
- *  - validarPasswordActual() ahora llama a POST /usuarios/verificar-password
- *    para validar la contraseña actual contra el hash real en la BD.
- *  - guardarPerfilCompleto() ahora llama a POST /usuarios/cambiar-password
- *    cuando el usuario completó el paso 2, delegando el hashing y la
- *    persistencia exclusivamente al backend.
- *  - La sesión activa ahora se identifica por Usuario_ID (sessionStorage
- *    'odent_usuario'), no por contraseñas en claro.
+ * especialista.js — Stylo Dental Pro v2.7 [INTEGRACIÓN BACKEND EPS + PACIENTE]
  */
 
 'use strict';
@@ -20,7 +9,7 @@ let historialTotal    = [];
 let seccionActiva     = 'agenda';
 
 /* =====================================================================
-   UTILIDAD: mostrar/ocultar secciones SIN usar 'hidden' de Tailwind
+   UTILIDAD: mostrar/ocultar secciones
    ===================================================================== */
 
 function mostrarSeccion(id) {
@@ -78,8 +67,8 @@ const actualizarRelojYEstado = () => {
     const txt = document.getElementById('status-text');
 
     if (dot && txt) {
-        dot.className  = `status-dot ${esHorarioLaboral ? 'dot-active' : 'dot-inactive'}`;
-        txt.innerText  = esHorarioLaboral ? 'Estado: En Jornada' : 'Estado: Fuera de Horario';
+        dot.className   = `status-dot ${esHorarioLaboral ? 'dot-active' : 'dot-inactive'}`;
+        txt.innerText   = esHorarioLaboral ? 'Estado: En Jornada' : 'Estado: Fuera de Horario';
         txt.style.color = esHorarioLaboral ? '#10b981' : '#ef4444';
     }
 };
@@ -88,13 +77,11 @@ const actualizarRelojYEstado = () => {
    SESIÓN
    ===================================================================== */
 
-let usuarioSesionActual = null; // referencia en memoria al usuario logueado (incluye Usuario_ID)
+let usuarioSesionActual = null;
 
 const cargarInfoSesion = () => {
     const raw  = sessionStorage.getItem('odent_usuario');
     const user = raw ? JSON.parse(raw) : null;
-
-    // Fallback a localStorage por compatibilidad con el flujo anterior
     const correoLogueado = localStorage.getItem('usuario_logueado');
     const dbUsuarios      = JSON.parse(localStorage.getItem('usuarios_dental')) || {};
     const userLegacy      = dbUsuarios[correoLogueado];
@@ -215,6 +202,142 @@ const cargarDatosEspecialista = () => {
 };
 
 /* =====================================================================
+   CARGA DE DATOS CLÍNICOS DEL PACIENTE DESDE BACKEND (EPS + CLÍNICO)
+   ===================================================================== */
+
+const cargarPerfilClinicoPaciente = async (numDoc) => {
+    // Panel de EPS en el modal de consulta
+    const panelEPS = document.getElementById('panel-eps-paciente');
+    if (panelEPS) {
+        panelEPS.innerHTML = `
+            <div class="flex items-center gap-3 text-slate-400 text-xs font-bold">
+                <i class="fas fa-spinner fa-spin"></i> Cargando datos de aseguramiento...
+            </div>`;
+    }
+
+    try {
+        // 1. Buscar paciente por documento en el backend
+        const respPac = await fetch('/eps/paciente', { method: 'GET' });
+        let pacienteBackend = null;
+        let pacienteId = null;
+
+        if (respPac.ok) {
+            const dataPac = await respPac.json();
+            pacienteBackend = (dataPac.data || []).find(
+                p => String(p.Correo).toLowerCase().includes(numDoc.toLowerCase()) ||
+                     String(p.ID_Usuario) === String(numDoc) ||
+                     (p.Nombre_Completo && p.Nombre_Completo.toUpperCase().includes(numDoc.toUpperCase()))
+            );
+            if (pacienteBackend) pacienteId = pacienteBackend.ID_Paciente;
+        }
+
+        // 2. Buscar afiliación EPS por numDoc como búsqueda aproximada
+        const respAfil = await fetch('/eps/afiliacion', { method: 'GET' });
+        let afiliacion = null;
+
+        if (respAfil.ok) {
+            const dataAfil = await respAfil.json();
+            // Intentar match por nombre o por usuario_id si el paciente fue encontrado
+            if (pacienteBackend) {
+                afiliacion = (dataAfil.data || []).find(
+                    a => String(a.ID_Usuario) === String(pacienteBackend.ID_Usuario)
+                );
+            }
+        }
+
+        // 3. Renderizar panel EPS
+        if (panelEPS) {
+            if (afiliacion) {
+                panelEPS.innerHTML = `
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="bg-white rounded-2xl p-4 border border-sky-100">
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">EPS</p>
+                            <p class="font-black text-sky-700 text-sm">${afiliacion.Nombre_EPS || '---'}</p>
+                        </div>
+                        <div class="bg-white rounded-2xl p-4 border border-sky-100">
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Régimen</p>
+                            <p class="font-black text-slate-700 text-sm">${afiliacion.Regimen || '---'}</p>
+                        </div>
+                        <div class="bg-white rounded-2xl p-4 border border-sky-100">
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">N° Afiliado</p>
+                            <p class="font-black text-slate-700 text-sm">${afiliacion.Numero_Afiliado || '---'}</p>
+                        </div>
+                        <div class="bg-white rounded-2xl p-4 border border-sky-100">
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Estado</p>
+                            <p class="font-black ${afiliacion.Estado === 'Activo' ? 'text-emerald-600' : 'text-amber-600'} text-sm">${afiliacion.Estado || '---'}</p>
+                        </div>
+                    </div>`;
+            } else {
+                panelEPS.innerHTML = `
+                    <div class="flex items-center gap-3 text-slate-400 text-xs font-bold italic">
+                        <i class="fas fa-info-circle text-slate-300"></i> Sin afiliación EPS registrada en el sistema.
+                    </div>`;
+            }
+        }
+
+        // 4. Rellenar datos clínicos si existen
+        if (pacienteBackend) {
+            const camposClinicos = {
+                'modal-genero':          pacienteBackend.Genero          || '---',
+                'modal-grupo-sanguineo': pacienteBackend.Grupo_Sanguineo || '---',
+                'modal-alergias':        pacienteBackend.Alergias        || 'Ninguna registrada',
+                'modal-antecedentes':    pacienteBackend.Antecedentes    || 'Ninguno registrado',
+                'modal-observaciones':   pacienteBackend.Observaciones   || '---',
+            };
+            Object.entries(camposClinicos).forEach(([id, val]) => {
+                const el = document.getElementById(id);
+                if (el) el.innerText = val;
+            });
+        }
+
+        // 5. Cargar respuestas del formulario clínico si hay ID de paciente
+        if (pacienteId) {
+            await cargarRespuestasFormulario(pacienteId);
+        }
+
+    } catch (err) {
+        console.error('[Especialista] Error al cargar perfil clínico:', err);
+        if (panelEPS) {
+            panelEPS.innerHTML = `
+                <div class="flex items-center gap-3 text-red-400 text-xs font-bold">
+                    <i class="fas fa-exclamation-circle"></i> Error al cargar datos de aseguramiento.
+                </div>`;
+        }
+    }
+};
+
+/* =====================================================================
+   CARGA DE RESPUESTAS DEL FORMULARIO CLÍNICO (ANAMNESIS)
+   ===================================================================== */
+
+const cargarRespuestasFormulario = async (pacienteId) => {
+    const contenedor = document.getElementById('panel-anamnesis');
+    if (!contenedor) return;
+
+    try {
+        const resp = await fetch(`/eps/reporte/respuestas-paciente/${pacienteId}`, { method: 'GET' });
+        if (!resp.ok) {
+            contenedor.innerHTML = '';
+            return;
+        }
+        const data = await resp.json();
+        if (!data.ok || !data.data || data.data.length === 0) {
+            contenedor.innerHTML = `<p class="text-xs text-slate-400 font-bold italic">Sin formulario de anamnesis registrado.</p>`;
+            return;
+        }
+
+        contenedor.innerHTML = data.data.map(item => `
+            <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">${item.Texto_Pregunta || ''}</p>
+                <p class="font-bold text-slate-700 text-sm">${item.Texto_Respuesta || '---'}</p>
+            </div>
+        `).join('');
+    } catch (err) {
+        console.warn('[Anamnesis] Error al cargar respuestas:', err);
+    }
+};
+
+/* =====================================================================
    NAVEGACIÓN ENTRE SECCIONES
    ===================================================================== */
 
@@ -283,7 +406,17 @@ const abrirModuloConsulta = (indice) => {
         }
     });
 
+    // Limpiar datos clínicos previos
+    const camposClinicos = ['modal-genero', 'modal-grupo-sanguineo', 'modal-alergias', 'modal-antecedentes', 'modal-observaciones'];
+    camposClinicos.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = '---';
+    });
+
     document.getElementById('modalConsulta').style.display = 'flex';
+
+    // Cargar perfil clínico y EPS del paciente desde el backend
+    cargarPerfilClinicoPaciente(cita.numDoc);
 };
 
 const finalizarAtencion = () => {
@@ -368,15 +501,6 @@ const filtrarTabla = () => {
 
 /* =====================================================================
    PERFIL — CAMBIO DE CONTRASEÑA EN DOS PASOS (SEGURO, VÍA BACKEND)
-   =====================================================================
-   - validarPasswordActual(): llama a POST /usuarios/verificar-password.
-     El backend compara el hash real (werkzeug check_password_hash);
-     el frontend NUNCA tiene ni compara la contraseña almacenada.
-   - guardarPerfilCompleto(): si el paso 2 está activo, valida que
-     coincidan nueva/confirmar y longitud mínima en el cliente (UX),
-     y delega la validación final + hashing + persistencia a
-     POST /usuarios/cambiar-password. El backend vuelve a exigir la
-     contraseña actual antes de actualizar (defensa en profundidad).
    ===================================================================== */
 
 const obtenerUsuarioIdSesion = () => {
@@ -401,10 +525,10 @@ const resetFormularioPassword = () => {
 };
 
 const validarPasswordActual = async () => {
-    const usuarioId    = obtenerUsuarioIdSesion();
-    const inputActual  = document.getElementById('pass-actual');
-    const errorActual  = document.getElementById('error-pass-actual');
-    const step2        = document.getElementById('pass-step2');
+    const usuarioId   = obtenerUsuarioIdSesion();
+    const inputActual = document.getElementById('pass-actual');
+    const errorActual = document.getElementById('error-pass-actual');
+    const step2       = document.getElementById('pass-step2');
 
     if (!usuarioId) {
         errorActual.innerText     = 'No se pudo identificar la sesión actual. Vuelve a iniciar sesión.';
@@ -448,16 +572,16 @@ const validarPasswordActual = async () => {
 };
 
 const guardarPerfilCompleto = async () => {
-    const usuarioId   = obtenerUsuarioIdSesion();
-    const step2       = document.getElementById('pass-step2');
-    const errorNueva  = document.getElementById('error-pass-nueva');
+    const usuarioId  = obtenerUsuarioIdSesion();
+    const step2      = document.getElementById('pass-step2');
+    const errorNueva = document.getElementById('error-pass-nueva');
 
     const cambioPasswordSolicitado = step2 && step2.style.display === 'grid';
 
     if (cambioPasswordSolicitado) {
-        const contrasenaActual    = document.getElementById('pass-actual').value;
-        const passNueva           = document.getElementById('conf-pass-nueva').value;
-        const passConfirmar       = document.getElementById('conf-pass-confirmar').value;
+        const contrasenaActual = document.getElementById('pass-actual').value;
+        const passNueva        = document.getElementById('conf-pass-nueva').value;
+        const passConfirmar    = document.getElementById('conf-pass-confirmar').value;
 
         if (passNueva || passConfirmar) {
             if (passNueva !== passConfirmar) {
@@ -501,13 +625,9 @@ const guardarPerfilCompleto = async () => {
         }
     }
 
-    // Actualización del resto de datos del perfil (nombre, especialidad, etc.)
-    // Esta parte sigue usando localStorage solo para los datos no sensibles
-    // de visualización en este portal; la contraseña ya fue gestionada
-    // exclusivamente por el backend arriba.
     const correoActual = localStorage.getItem('usuario_logueado');
-    const database      = JSON.parse(localStorage.getItem('usuarios_dental')) || {};
-    const nuevoCorreo   = document.getElementById('conf-email').value.trim();
+    const database     = JSON.parse(localStorage.getItem('usuarios_dental')) || {};
+    const nuevoCorreo  = document.getElementById('conf-email').value.trim();
 
     if (database[correoActual]) {
         const nombreFull = document.getElementById('conf-nombre').value.trim();
@@ -520,8 +640,6 @@ const guardarPerfilCompleto = async () => {
         userRef.celular      = document.getElementById('conf-tel').value;
         userRef.correo       = nuevoCorreo;
 
-        // El campo password en localStorage queda obsoleto/no usado para
-        // autenticación real; se conserva solo por compatibilidad de UI legacy.
         if (nuevoCorreo !== correoActual) {
             database[nuevoCorreo] = userRef;
             delete database[correoActual];
@@ -529,6 +647,18 @@ const guardarPerfilCompleto = async () => {
         }
 
         localStorage.setItem('usuarios_dental', JSON.stringify(database));
+    }
+
+    // Actualizar sessionStorage con nuevos datos
+    if (usuarioSesionActual) {
+        const nombreFull = document.getElementById('conf-nombre').value.trim();
+        const partes = nombreFull.split(' ');
+        usuarioSesionActual.Nombres    = partes[0] || usuarioSesionActual.Nombres;
+        usuarioSesionActual.Apellidos  = partes.slice(1).join(' ') || usuarioSesionActual.Apellidos;
+        usuarioSesionActual.Correo     = nuevoCorreo;
+        usuarioSesionActual.Telefono   = document.getElementById('conf-tel').value;
+        usuarioSesionActual.Especialidad = document.getElementById('esp-1').value;
+        sessionStorage.setItem('odent_usuario', JSON.stringify(usuarioSesionActual));
     }
 
     alert('✨ Perfil actualizado correctamente.');
