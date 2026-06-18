@@ -10,37 +10,42 @@ puntuacion_bp = Blueprint('puntuacion', __name__)
 @puntuacion_bp.route('/puntuacion/crear', methods=['POST'])
 def crear_puntuacion():
     datos = request.get_json()
-    
+
     # Extraemos solo los campos que pide tu base de datos real
     especialista_id = datos.get('Especialista_ID')
     respuesta_id = datos.get('Respuesta_ID')
-    
+
     if not all([especialista_id, respuesta_id]):
         return jsonify({"ok": False, "error": "Faltan datos obligatorios (Especialista_ID, Respuesta_ID)"}), 400
-        
+
     conexion = None
+    cursor = None
     try:
         conexion = get_db_connection()
+        # Retiramos dictionary=True
         cursor = conexion.cursor()
-        
-        # Insertamos en el nombre correcto de la tabla y con sus columnas reales
+
+        # Cambiamos los %s por signos de interrogación (?)
         cursor.execute(
             """
-            INSERT INTO puntuacion_especialista (Especialista_ID, Respuesta_ID) 
+            INSERT INTO puntuacion_especialista (Especialista_ID, Respuesta_ID)
             VALUES (?, ?)
             """,
             (especialista_id, respuesta_id)
         )
         conexion.commit()
-        
+
         return jsonify({
-            "ok": True, 
+            "ok": True,
             "mensaje": "Puntuación vinculada al especialista correctamente"
         }), 201
-        
+
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 400
     finally:
+        # Cierre seguro del cursor y la conexión
+        if cursor:
+            cursor.close()
         if conexion:
             conexion.close()
 
@@ -51,14 +56,16 @@ def crear_puntuacion():
 @puntuacion_bp.route('/puntuacion/especialista/<int:especialista_id>', methods=['GET'])
 def obtener_puntuaciones_especialista(especialista_id):
     conexion = None
+    cursor = None
     try:
         conexion = get_db_connection()
+        # Retiramos dictionary=True
         cursor = conexion.cursor()
-        
-        # Consulta avanzada: Navegamos por tus relaciones para traer los datos completos
+
+        # Restauramos la concatenación con || y el marcador ? para SQLite
         cursor.execute(
             """
-            SELECT 
+            SELECT
                 pe.Puntuacion_ID,
                 rr.Respuesta AS Puntaje,
                 pr.Texto_Pregunta,
@@ -74,14 +81,19 @@ def obtener_puntuaciones_especialista(especialista_id):
             """,
             (especialista_id,)
         )
-        
+
         filas = cursor.fetchall()
+        
+        # Convertimos los objetos Row de SQLite a diccionarios
         lista_puntuaciones = [dict(fila) for fila in filas]
-        
+
         return jsonify({"ok": True, "puntuaciones": lista_puntuaciones}), 200
-        
+
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
     finally:
+        # Cierre seguro del cursor y la conexión
+        if cursor:
+            cursor.close()
         if conexion:
             conexion.close()

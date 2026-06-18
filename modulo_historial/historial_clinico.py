@@ -10,41 +10,41 @@ historial_bp = Blueprint('historial', __name__)
 @historial_bp.route('/historial/crear', methods=['POST'])
 def crear_historial():
     datos = request.get_json()
-    
-    # Extraemos solo el dato que pide tu BD
     cita_id = datos.get('Cita_ID')
-    
-    # Validación simple
+
     if not cita_id:
         return jsonify({"ok": False, "error": "Falta el campo obligatorio (Cita_ID)"}), 400
-        
+
     conexion = None
+    cursor = None
     try:
         conexion = get_db_connection()
+        # SQLite no usa dictionary=True aquí, la conversión se hace en db.py o al final
         cursor = conexion.cursor()
-        
-        # Insertamos en la tabla historial_clinico (solo requiere Cita_ID)
+
+        # Usamos (?) propio de SQLite en lugar de %s
         cursor.execute(
             """
-            INSERT INTO historial_clinico (Cita_ID) 
+            INSERT INTO historial_clinico (Cita_ID)
             VALUES (?)
             """,
             (cita_id,)
         )
         conexion.commit()
-        
-        # Obtenemos el ID del historial que se acaba de crear automáticamente
+
         nuevo_id = cursor.lastrowid
-        
+
         return jsonify({
-            "ok": True, 
+            "ok": True,
             "mensaje": "Historial clínico creado con éxito",
             "Historial_ID": nuevo_id
         }), 201
-        
+
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 400
     finally:
+        if cursor:
+            cursor.close()
         if conexion:
             conexion.close()
 
@@ -55,18 +55,19 @@ def crear_historial():
 @historial_bp.route('/historial/paciente/<int:paciente_id>', methods=['GET'])
 def obtener_historial_paciente(paciente_id):
     conexion = None
+    cursor = None
     try:
         conexion = get_db_connection()
         cursor = conexion.cursor()
-        
-        # Consulta corregida: Solo pedimos las columnas que SÍ existen en la BD
+
+        # Usamos (?) para variables y (||) para concatenar textos en SQLite
         cursor.execute(
             """
-            SELECT 
+            SELECT
                 h.Historial_ID,
                 c.Cita_ID,
                 c.Motivo_Consulta,
-                (u_esp.Nombres || ' ' || u_esp.Apellidos) AS Especialist_Nombre
+                (u_esp.Nombres || ' ' || u_esp.Apellidos) AS Especialista_Nombre
             FROM historial_clinico h
             INNER JOIN cita c ON h.Cita_ID = c.Cita_ID
             INNER JOIN agenda a ON c.Agenda_ID = a.Agenda_ID
@@ -77,14 +78,19 @@ def obtener_historial_paciente(paciente_id):
             """,
             (paciente_id,)
         )
-        
+
         filas = cursor.fetchall()
+        
+        # Como SQLite devuelve objetos tipo "Row", los convertimos a diccionarios
+        # para que Flask los pueda transformar a JSON sin errores.
         lista_historial = [dict(fila) for fila in filas]
-        
+
         return jsonify({"ok": True, "historiales": lista_historial}), 200
-        
+
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
     finally:
+        if cursor:
+            cursor.close()
         if conexion:
             conexion.close()
