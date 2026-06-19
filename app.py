@@ -180,9 +180,9 @@ def perfil_paciente():
  
 SMTP_HOST     = "smtp.gmail.com"
 SMTP_PORT     = 587
-SMTP_USER     = "penaloza.lorenviviana@gmail.com"
-SMTP_PASSWORD = "dexn ttlk grto siwp"
-SMTP_FROM     = "Clínica <penaloza.lorenviviana@gmail.com>"
+SMTP_USER     = "andresparragiovanny1926@gmail.com"
+SMTP_PASSWORD = "scca hjdy tswq dnjw"
+SMTP_FROM     = "Clínica <andresparragiovanny1926@gmail.com>"
  
 codigos_temporales = {}   # { correo: codigo }
  

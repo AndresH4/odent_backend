@@ -170,6 +170,66 @@ def get_especialistas():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# CREAR USUARIO  —  POST /api/usuarios
+# Crea el usuario y, si Rol_ID = 2 (Especialista), crea también su registro
+# en `especialista` incluyendo Tarjeta_Profesional (4-10 caracteres).
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/usuarios', methods=['POST'])
+def crear_usuario():
+    datos = request.get_json(silent=True) or {}
+
+    nombres          = (datos.get('Nombres') or '').strip()
+    apellidos        = (datos.get('Apellidos') or '').strip()
+    numero_documento = (datos.get('NumeroDocumento') or '').strip()
+    correo           = (datos.get('Correo') or '').strip()
+    telefono         = (datos.get('Telefono') or '').strip()
+    contrasena       = datos.get('Contrasena')
+    rol_id           = datos.get('Rol_ID')
+    estado_id        = datos.get('Estado_ID', 1)
+    fecha_nacimiento = datos.get('FechaNacimiento')
+
+    tarjeta_profesional = (datos.get('Tarjeta_Profesional') or '').strip()
+
+    if not all([nombres, apellidos, numero_documento, correo, contrasena, rol_id]):
+        return _json_error('Nombres, Apellidos, NumeroDocumento, Correo, Contrasena y Rol_ID son obligatorios.')
+
+    rol_id = int(rol_id)
+
+    if rol_id == 2:
+        if len(tarjeta_profesional) < 4 or len(tarjeta_profesional) > 10:
+            return _json_error('Tarjeta_Profesional debe tener entre 4 y 10 caracteres.')
+
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+
+        cur.execute("""
+            INSERT INTO usuarios
+                (Nombres, Apellidos, NumeroDocumento, Correo, Telefono,
+                 Contrasena, Rol_ID, Estado_ID, FechaNacimiento)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (nombres, apellidos, numero_documento, correo, telefono,
+              contrasena, rol_id, estado_id, fecha_nacimiento))
+
+        usuario_id = cur.lastrowid
+
+        if rol_id == 2:
+            cur.execute("""
+                INSERT INTO especialista (Usuario_ID, Tarjeta_Profesional)
+                VALUES (?, ?)
+            """, (usuario_id, tarjeta_profesional))
+
+        con.commit()
+        return _json_ok({"ok": True, "Usuario_ID": usuario_id}, 201)
+
+    except Exception as exc:
+        if con: con.rollback()
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+# ─────────────────────────────────────────────────────────────────────────────
 # AGENDA  —  GET /api/agenda?especialista_id=&fecha=
 # ─────────────────────────────────────────────────────────────────────────────
 
