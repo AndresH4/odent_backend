@@ -26,7 +26,7 @@
                 <i class="fas fa-home w-6 text-xl"></i>
                 <span class="tracking-wide">Panel de Control</span>
             </button>
-            <button onclick="window.open('agendar.html', '_blank')" class="nav-btn">
+            <button onclick="window.open('/agendar', '_blank')" class="nav-btn">
                 <i class="fas fa-calendar-plus w-6 text-xl"></i>
                 <span class="tracking-wide">Agendar Cita</span>
             </button>
@@ -46,15 +46,11 @@
                 <span id="status-dot" class="status-dot dot-active"></span>
                 <span id="status-text" class="text-[11px] font-black uppercase tracking-widest text-slate-400">Iniciando...</span>
             </div>
-            <div class="mt-4 text-[9px] text-slate-600 font-black italic uppercase tracking-widest">
-                Bogotá GMT-5
-            </div>
+            <div class="mt-4 text-[9px] text-slate-600 font-black italic uppercase tracking-widest">Bogotá GMT-5</div>
         </div>
 
-        <!-- Botón Cerrar Sesión en sidebar -->
         <div class="px-6 pb-8">
-            <button
-                onclick="mostrarConfirmacionSimple('¿Desea cerrar sesión?', 'salir')"
+            <button onclick="mostrarConfirmacionSimple('¿Desea cerrar sesión?', 'salir')"
                 class="w-full flex items-center justify-center gap-4 p-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] text-red-400 hover:bg-red-500/10 transition-all border border-red-900/40 hover:border-red-500/60">
                 <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
             </button>
@@ -74,9 +70,7 @@
             </div>
 
             <div class="relative">
-                <button
-                    id="profile-trigger"
-                    onclick="toggleProfileDropdown()"
+                <button id="profile-trigger" onclick="toggleProfileDropdown()"
                     class="flex items-center gap-6 bg-white p-5 pr-12 rounded-[2rem] shadow-xl border border-slate-100 cursor-pointer hover:border-sky-500 transition-all active:scale-95 group z-50">
                     <div id="avatar-letras"
                          class="w-14 h-14 bg-gradient-to-br from-sky-600 to-sky-800 rounded-2xl flex items-center justify-center text-white text-2xl font-black shadow-2xl shadow-sky-600/30 uppercase group-hover:rotate-6 transition-transform">P</div>
@@ -112,7 +106,7 @@
                             </div>
                             <div>
                                 <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">EPS / Aseguramiento</p>
-                                <p id="eps-menu" class="text-sm font-bold text-slate-700"></p>
+                                <p id="eps-menu" class="text-sm font-bold text-slate-700">Cargando...</p>
                             </div>
                         </div>
                     </div>
@@ -130,6 +124,16 @@
             </div>
         </header>
 
+        <!-- Nodos de datos ocultos (retrocompatibilidad) -->
+        <span id="perfil-nombres"     class="hidden" aria-hidden="true"></span>
+        <span id="perfil-apellidos"   class="hidden" aria-hidden="true"></span>
+        <span id="perfil-correo"      class="hidden" aria-hidden="true"></span>
+        <span id="perfil-numDoc"      class="hidden" aria-hidden="true"></span>
+        <span id="perfil-telefono"    class="hidden" aria-hidden="true"></span>
+        <span id="perfil-nacimiento"  class="hidden" aria-hidden="true"></span>
+        <span id="perfil-eps"         class="hidden" aria-hidden="true"></span>
+        <span id="nombre-usuario"     class="hidden" aria-hidden="true"></span>
+
         <!-- VISTA: INICIO -->
         <div id="vista-inicio">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 animate-in">
@@ -139,9 +143,7 @@
                             <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">Citas Activas</p>
                             <h3 id="count-citas" class="text-4xl font-black text-slate-800">0</h3>
                         </div>
-                        <div class="text-sky-500 text-4xl opacity-15">
-                            <i class="fas fa-calendar-check"></i>
-                        </div>
+                        <div class="text-sky-500 text-4xl opacity-15"><i class="fas fa-calendar-check"></i></div>
                     </div>
                 </div>
             </div>
@@ -197,7 +199,7 @@
                                 <th class="p-5">Especialidad</th>
                                 <th class="p-5">Médico / Servicio</th>
                                 <th class="p-5">Estado Histórico</th>
-                                <th class="p-5 text-center">Detalles</th>
+                                <th class="p-5 text-center">Motivo</th>
                             </tr>
                         </thead>
                         <tbody id="tabla-historial-completo" class="text-sm text-slate-600 divide-y divide-slate-100"></tbody>
@@ -210,9 +212,7 @@
         <div id="vista-config" class="hidden">
             <div class="max-w-6xl mx-auto py-4 animate-in">
                 <div class="bg-white p-14 rounded-[3.5rem] shadow-2xl border border-slate-100 relative overflow-hidden">
-                    <div class="absolute top-0 right-0 p-10 opacity-5 text-9xl">
-                        <i class="fas fa-user-circle"></i>
-                    </div>
+                    <div class="absolute top-0 right-0 p-10 opacity-5 text-9xl"><i class="fas fa-user-circle"></i></div>
                     <h2 class="text-2xl font-black text-slate-800 mb-12 uppercase flex items-center gap-5">
                         <span class="w-14 h-14 bg-sky-600 text-white rounded-2xl flex items-center justify-center shadow-xl">
                             <i class="fas fa-id-card"></i>
@@ -273,8 +273,8 @@
 
     </main>
 
-    <!-- MODAL: VERIFICACIÓN DE CITA -->
-    <div id="modalCancelarCita" class="modal-overlay">
+    <!-- MODAL: CANCELAR CITA -->
+    <div id="modalCancelarCita" class="modal-overlay" style="display:none;">
         <div class="modal-content shadow-2xl">
             <div class="bg-slate-900 p-6 text-center rounded-t-[45px]">
                 <p class="text-slate-500 text-[9px] font-black uppercase tracking-widest mb-1">Gestión</p>
@@ -297,7 +297,7 @@
     </div>
 
     <!-- MODAL: CONFIRMACIÓN FINAL -->
-    <div id="modalConfirmacionFinal" class="modal-overlay">
+    <div id="modalConfirmacionFinal" class="modal-overlay" style="display:none;">
         <div class="modal-content p-10 text-center border-t-8 border-red-600">
             <div class="text-red-500 text-6xl mb-6"><i class="fas fa-exclamation-triangle"></i></div>
             <h3 class="text-slate-800 font-black text-2xl mb-3 italic tracking-tighter">¿ESTÁ COMPLETAMENTE SEGURO?</h3>
@@ -318,7 +318,7 @@
     </div>
 
     <!-- MODAL: CONFIRMACIÓN SIMPLE -->
-    <div id="modalConfirmarSimple" class="modal-overlay">
+    <div id="modalConfirmarSimple" class="modal-overlay" style="display:none;">
         <div class="modal-content p-10 text-center border-t-8 border-sky-600" style="max-width:440px">
             <div id="icon-simple" class="text-sky-500 text-6xl mb-6"><i class="fas fa-question-circle"></i></div>
             <h3 id="confirm-text-simple" class="text-slate-800 font-black text-xl mb-8 uppercase tracking-tighter italic"></h3>
@@ -335,10 +335,7 @@
         </div>
     </div>
 
-    <span id="nombre-usuario" class="hidden" aria-hidden="true"></span>
-
+    <!-- Un solo script — paciente_ui.js eliminado -->
     <script src="{{ url_for('static', filename='js/paciente.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/paciente_ui.js') }}"></script>
-
 </body>
 </html>

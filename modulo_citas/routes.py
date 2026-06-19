@@ -4,10 +4,22 @@ modulo_citas/routes.py — Stylo Dental
 Endpoints REST para:
   • /api/citas            — listar y crear citas
   • /api/citas/<id>       — detalle, actualizar estado y cancelar
-  • /api/agenda           — slots disponibles (por especialista / fecha)
+  • /api/agenda           — slots disponibles (GET) y creación de slots (POST)
   • /api/especialistas    — lista de especialistas con su especialidad
   • /api/multas           — listar y actualizar multas
   • /api/paciente/<id>/citas — citas de un paciente específico
+  • /api/paciente/<id>/multa-activa — verificar multa pendiente
+  • /api/paciente/por-usuario/<uid> — resolver Paciente_ID desde Usuario_ID
+  • /api/especialista/<id>/citas — citas asignadas a un especialista
+  • /api/usuarios         — lista de usuarios (para búsqueda en agendar)
+  • /api/historial-clinico — registrar evolución clínica desde especialista
+  • /api/respuesta        — registrar respuesta de ranking (Cita_ID explícito)
+  • /api/verificar-password — verificar contraseña del paciente
+  • /api/actualizar-perfil-paciente — actualizar datos del paciente
+
+Registro en app.py:
+    from modulo_citas.routes import citas_bp
+    app.register_blueprint(citas_bp, url_prefix='/api')
 """
 
 from flask import Blueprint, request, jsonify
@@ -21,7 +33,6 @@ citas_bp = Blueprint('citas_bp', __name__)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _rows_to_list(cursor):
-    """Convierte los resultados de un cursor en lista de dicts."""
     return [dict(row) for row in cursor.fetchall()]
 
 
@@ -34,15 +45,76 @@ def _json_error(mensaje, code=400):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# USUARIOS  —  GET /api/usuarios
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/usuarios', methods=['GET'])
+def get_usuarios():
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+        cur.execute("""
+            SELECT
+                u.Usuario_ID,
+                u.Nombres,
+                u.Apellidos,
+                u.NumeroDocumento,
+                u.Correo,
+                u.Telefono,
+                u.Estado_ID,
+                u.Rol_ID,
+                u.FechaNacimiento
+            FROM usuarios u
+            ORDER BY u.Apellidos
+        """)
+        return _json_ok(_rows_to_list(cur))
+    except Exception as exc:
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PACIENTE POR USUARIO  —  GET /api/paciente/por-usuario/<usuario_id>
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/paciente/por-usuario/<int:usuario_id>', methods=['GET'])
+def get_paciente_por_usuario(usuario_id):
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+        cur.execute("""
+            SELECT
+                p.Paciente_ID,
+                p.Usuario_ID,
+                u.Nombres,
+                u.Apellidos,
+                u.NumeroDocumento,
+                u.Correo,
+                u.Telefono,
+                u.FechaNacimiento
+            FROM paciente p
+            JOIN usuarios u ON u.Usuario_ID = p.Usuario_ID
+            WHERE p.Usuario_ID = ?
+        """, (usuario_id,))
+        row = cur.fetchone()
+        if not row:
+            return _json_error('Paciente no encontrado para ese usuario.', 404)
+        return _json_ok(dict(row))
+    except Exception as exc:
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ESPECIALISTAS  —  GET /api/especialistas
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/especialistas', methods=['GET'])
 def get_especialistas():
-    """
-    Devuelve todos los especialistas con nombre completo y especialidad.
-    Útil para el selector de agendar.html.
-    """
     con = None
     try:
         con = get_db_connection()
@@ -53,7 +125,7 @@ def get_especialistas():
                 u.Nombres || ' ' || u.Apellidos   AS NombreCompleto,
                 GROUP_CONCAT(esp.Nombre_Especialidad, ', ') AS Especialidades,
                 e.Tarjeta_Profesional
-            FROM especialistas e
+            FROM especialista e
             JOIN usuarios u        ON u.Usuario_ID      = e.Usuario_ID
             JOIN especialista_especialidad ee ON ee.Especialista_ID = e.Especialista_ID
             JOIN especialidad esp  ON esp.Especialidad_ID = ee.Especialidad_ID
@@ -74,10 +146,6 @@ def get_especialistas():
 
 @citas_bp.route('/agenda', methods=['GET'])
 def get_agenda():
-    """
-    Devuelve los slots de agenda disponibles.
-    Parámetros opcionales:  especialista_id, fecha
-    """
     esp_id = request.args.get('especialista_id')
     fecha  = request.args.get('fecha')
 
@@ -94,15 +162,15 @@ def get_agenda():
                 esp.Nombre_Especialidad,
                 a.Fecha,
                 a.Hora_Inicio,
-                a.Hora_Fin,
+                a.Hora_Final                     AS Hora_Fin,
                 ea.Nombre_Estado                 AS EstadoAgenda
             FROM agenda a
-            JOIN especialistas e   ON e.Especialista_ID = a.Especialista_ID
-            JOIN usuarios u       ON u.Usuario_ID      = e.Usuario_ID
+            JOIN especialista e    ON e.Especialista_ID = a.Especialista_ID
+            JOIN usuarios u        ON u.Usuario_ID      = e.Usuario_ID
             JOIN especialista_especialidad ee ON ee.Especialista_ID = e.Especialista_ID
-            JOIN especialidad esp ON esp.Especialidad_ID = ee.Especialidad_ID
-            JOIN estado_agenda ea ON ea.Estado_ID = a.Estado_ID
-            WHERE a.Estado_ID = 1          -- solo 'Disponible'
+            JOIN especialidad esp  ON esp.Especialidad_ID = ee.Especialidad_ID
+            JOIN estado_agenda ea  ON ea.EstadoAgenda_ID = a.EstadoAgenda_ID
+            WHERE a.EstadoAgenda_ID = 1
         """
         params = []
 
@@ -123,16 +191,67 @@ def get_agenda():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# CREAR SLOT DE AGENDA  —  POST /api/agenda
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/agenda', methods=['POST'])
+def crear_agenda():
+    datos       = request.get_json(silent=True) or {}
+    esp_id      = datos.get('Especialista_ID')
+    fecha       = datos.get('Fecha')
+    hora_inicio = datos.get('Hora_Inicio')
+    hora_fin    = datos.get('Hora_Fin')
+    estado_id   = datos.get('Estado_ID', 1)
+
+    if not all([esp_id, fecha, hora_inicio, hora_fin]):
+        return _json_error('Especialista_ID, Fecha, Hora_Inicio y Hora_Fin son obligatorios.')
+
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+
+        cur.execute(
+            "SELECT Especialista_ID FROM especialista WHERE Especialista_ID = ?",
+            (esp_id,)
+        )
+        if not cur.fetchone():
+            return _json_error('Especialista no encontrado.', 404)
+
+        cur.execute("""
+            SELECT Agenda_ID FROM agenda
+            WHERE Especialista_ID = ?
+              AND Fecha       = ?
+              AND Hora_Inicio = ?
+              AND EstadoAgenda_ID = 1
+        """, (esp_id, fecha, hora_inicio))
+        existente = cur.fetchone()
+        if existente:
+            return _json_ok({"ok": True, "Agenda_ID": existente['Agenda_ID']}, 200)
+
+        cur.execute("""
+            INSERT INTO agenda (Especialista_ID, Fecha, Hora_Inicio, Hora_Final, EstadoAgenda_ID)
+            VALUES (?, ?, ?, ?, ?)
+        """, (esp_id, fecha, hora_inicio, hora_fin, estado_id))
+
+        agenda_id = cur.lastrowid
+        con.commit()
+        return _json_ok({"ok": True, "Agenda_ID": agenda_id}, 201)
+
+    except Exception as exc:
+        if con: con.rollback()
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # CITAS  —  GET /api/citas   |   POST /api/citas
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas', methods=['GET'])
 def get_citas():
-    """
-    Lista todas las citas con datos completos del paciente, especialista y agenda.
-    Query param opcional:  paciente_id, especialista_id
-    """
-    paciente_id   = request.args.get('paciente_id')
+    paciente_id     = request.args.get('paciente_id')
     especialista_id = request.args.get('especialista_id')
 
     con = None
@@ -143,17 +262,15 @@ def get_citas():
             SELECT
                 c.Cita_ID,
                 c.Motivo_Consulta,
-                -- Paciente
                 p.Paciente_ID,
                 up.Nombres || ' ' || up.Apellidos  AS NombrePaciente,
                 up.NumeroDocumento,
                 up.Telefono                        AS TelefonoPaciente,
                 up.Correo                          AS CorreoPaciente,
-                -- Agenda / Especialistas
                 a.Agenda_ID,
                 a.Fecha,
                 a.Hora_Inicio,
-                a.Hora_Fin,
+                a.Hora_Final                       AS Hora_Fin,
                 ea.Nombre_Estado                   AS EstadoAgenda,
                 e.Especialista_ID,
                 ue.Nombres || ' ' || ue.Apellidos  AS NombreEspecialista,
@@ -162,8 +279,8 @@ def get_citas():
             JOIN paciente p   ON p.Paciente_ID     = c.Paciente_ID
             JOIN usuarios up  ON up.Usuario_ID     = p.Usuario_ID
             JOIN agenda a     ON a.Agenda_ID       = c.Agenda_ID
-            JOIN estado_agenda ea ON ea.Estado_ID = a.Estado_ID
-            JOIN especialistas e   ON e.Especialista_ID  = a.Especialista_ID
+            JOIN estado_agenda ea ON ea.EstadoAgenda_ID = a.EstadoAgenda_ID
+            JOIN especialista e   ON e.Especialista_ID  = a.Especialista_ID
             JOIN usuarios ue  ON ue.Usuario_ID     = e.Usuario_ID
             LEFT JOIN especialista_especialidad ee ON ee.Especialista_ID = e.Especialista_ID
             LEFT JOIN especialidad esp ON esp.Especialidad_ID = ee.Especialidad_ID
@@ -188,19 +305,10 @@ def get_citas():
 
 @citas_bp.route('/citas', methods=['POST'])
 def crear_cita():
-    """
-    Crea una nueva cita.
-    Body JSON: { Paciente_ID, Agenda_ID, Motivo_Consulta }
-
-    Reglas de negocio:
-      - El paciente no puede tener otra cita activa (estado Disponible/Ocupado).
-      - El slot de agenda debe estar Disponible.
-      - Al crear la cita, el slot pasa a 'Ocupado'.
-    """
-    datos = request.get_json(silent=True) or {}
-    paciente_id    = datos.get('Paciente_ID')
-    agenda_id      = datos.get('Agenda_ID')
-    motivo         = (datos.get('Motivo_Consulta') or '').strip()
+    datos       = request.get_json(silent=True) or {}
+    paciente_id = datos.get('Paciente_ID')
+    agenda_id   = datos.get('Agenda_ID')
+    motivo      = (datos.get('Motivo_Consulta') or '').strip()
 
     if not all([paciente_id, agenda_id, motivo]):
         return _json_error('Paciente_ID, Agenda_ID y Motivo_Consulta son obligatorios.')
@@ -210,37 +318,33 @@ def crear_cita():
         con = get_db_connection()
         cur = con.cursor()
 
-        # ── 1. Verificar que el slot exista y esté disponible ────────────────
         cur.execute(
-            "SELECT Estado_ID FROM agenda WHERE Agenda_ID = ?", (agenda_id,)
+            "SELECT EstadoAgenda_ID FROM agenda WHERE Agenda_ID = ?", (agenda_id,)
         )
         slot = cur.fetchone()
         if not slot:
             return _json_error('El slot de agenda no existe.', 404)
-        if slot['Estado_ID'] != 1:
+        if slot['EstadoAgenda_ID'] != 1:
             return _json_error('Ese horario ya no está disponible.')
 
-        # ── 2. Verificar que el paciente no tenga cita activa ────────────────
         cur.execute("""
             SELECT c.Cita_ID
             FROM cita c
             JOIN agenda a ON a.Agenda_ID = c.Agenda_ID
             WHERE c.Paciente_ID = ?
-              AND a.Estado_ID IN (1, 2)   -- Disponible u Ocupado
+              AND a.EstadoAgenda_ID IN (1, 2)
         """, (paciente_id,))
         if cur.fetchone():
             return _json_error('El paciente ya tiene una cita activa pendiente.')
 
-        # ── 3. Insertar la cita ───────────────────────────────────────────────
         cur.execute(
             "INSERT INTO cita (Paciente_ID, Agenda_ID, Motivo_Consulta) VALUES (?, ?, ?)",
             (paciente_id, agenda_id, motivo)
         )
         cita_id = cur.lastrowid
 
-        # ── 4. Marcar el slot como 'Ocupado' (Estado_ID = 2) ───────────
         cur.execute(
-            "UPDATE agenda SET Estado_ID = 2 WHERE Agenda_ID = ?", (agenda_id,)
+            "UPDATE agenda SET EstadoAgenda_ID = 2 WHERE Agenda_ID = ?", (agenda_id,)
         )
 
         con.commit()
@@ -254,7 +358,7 @@ def crear_cita():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CITA INDIVIDUAL  —  GET|PUT|DELETE /api/citas/<id>
+# CITA INDIVIDUAL  —  GET /api/citas/<id>
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>', methods=['GET'])
@@ -269,16 +373,17 @@ def get_cita(cita_id):
                 p.Paciente_ID,
                 up.Nombres || ' ' || up.Apellidos AS NombrePaciente,
                 up.NumeroDocumento, up.Correo,
-                a.Fecha, a.Hora_Inicio, a.Hora_Fin,
-                ea.Nombre_Estado AS EstadoAgenda,
+                a.Fecha, a.Hora_Inicio,
+                a.Hora_Final                      AS Hora_Fin,
+                ea.Nombre_Estado                  AS EstadoAgenda,
                 ue.Nombres || ' ' || ue.Apellidos AS NombreEspecialista
             FROM cita c
-            JOIN paciente p   ON p.Paciente_ID = c.Paciente_ID
-            JOIN usuarios up  ON up.Usuario_ID = p.Usuario_ID
-            JOIN agenda a     ON a.Agenda_ID   = c.Agenda_ID
-            JOIN estado_agenda ea ON ea.Estado_ID = a.Estado_ID
-            JOIN especialistas e ON e.Especialista_ID = a.Especialista_ID
-            JOIN usuarios ue ON ue.Usuario_ID = e.Usuario_ID
+            JOIN paciente p    ON p.Paciente_ID  = c.Paciente_ID
+            JOIN usuarios up   ON up.Usuario_ID  = p.Usuario_ID
+            JOIN agenda a      ON a.Agenda_ID    = c.Agenda_ID
+            JOIN estado_agenda ea ON ea.EstadoAgenda_ID = a.EstadoAgenda_ID
+            JOIN especialista e   ON e.Especialista_ID  = a.Especialista_ID
+            JOIN usuarios ue   ON ue.Usuario_ID  = e.Usuario_ID
             WHERE c.Cita_ID = ?
         """, (cita_id,))
         row = cur.fetchone()
@@ -291,19 +396,17 @@ def get_cita(cita_id):
         if con: con.close()
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CANCELAR CITA  —  PUT /api/citas/<id>/cancelar
+# ─────────────────────────────────────────────────────────────────────────────
+
 @citas_bp.route('/citas/<int:cita_id>/cancelar', methods=['PUT'])
 def cancelar_cita(cita_id):
-    """
-    Cancela una cita:
-      - Libera el slot de agenda (Estado_ID = 3 'Cancelado').
-      - Crea una multa en estado 'Pendiente' (EstadoMulta_ID = 1).
-    """
     con = None
     try:
         con = get_db_connection()
         cur = con.cursor()
 
-        # Obtener el Agenda_ID de la cita
         cur.execute("SELECT Agenda_ID FROM cita WHERE Cita_ID = ?", (cita_id,))
         row = cur.fetchone()
         if not row:
@@ -311,12 +414,9 @@ def cancelar_cita(cita_id):
 
         agenda_id = row['Agenda_ID']
 
-        # Marcar agenda como Cancelada (ID = 3)
         cur.execute(
-            "UPDATE agenda SET Estado_ID = 3 WHERE Agenda_ID = ?", (agenda_id,)
+            "UPDATE agenda SET EstadoAgenda_ID = 3 WHERE Agenda_ID = ?", (agenda_id,)
         )
-
-        # Crear multa pendiente (EstadoMulta_ID = 1)
         cur.execute(
             "INSERT INTO multa (Cita_ID, EstadoMulta_ID) VALUES (?, 1)", (cita_id,)
         )
@@ -337,10 +437,6 @@ def cancelar_cita(cita_id):
 
 @citas_bp.route('/paciente/<int:paciente_id>/citas', methods=['GET'])
 def get_citas_paciente(paciente_id):
-    """
-    Devuelve todas las citas de un paciente con estado de agenda y multa.
-    Consumido por paciente.js.
-    """
     con = None
     try:
         con = get_db_connection()
@@ -351,16 +447,20 @@ def get_citas_paciente(paciente_id):
                 c.Motivo_Consulta,
                 a.Fecha,
                 a.Hora_Inicio,
-                a.Hora_Fin,
-                ea.Nombre_Estado              AS EstadoAgenda,
+                a.Hora_Final                      AS Hora_Fin,
+                ea.Nombre_Estado                  AS EstadoAgenda,
                 ue.Nombres || ' ' || ue.Apellidos AS NombreEspecialista,
                 esp.Nombre_Especialidad,
+                up.Nombres || ' ' || up.Apellidos AS NombrePaciente,
+                up.NumeroDocumento,
                 COALESCE(em.Nombre_Estado, 'Sin multa') AS EstadoMulta
             FROM cita c
-            JOIN agenda a     ON a.Agenda_ID   = c.Agenda_ID
-            JOIN estado_agenda ea ON ea.Estado_ID = a.Estado_ID
-            JOIN especialistas e ON e.Especialista_ID = a.Especialista_ID
-            JOIN usuarios ue ON ue.Usuario_ID = e.Usuario_ID
+            JOIN agenda a      ON a.Agenda_ID    = c.Agenda_ID
+            JOIN estado_agenda ea ON ea.EstadoAgenda_ID = a.EstadoAgenda_ID
+            JOIN especialista e   ON e.Especialista_ID  = a.Especialista_ID
+            JOIN usuarios ue   ON ue.Usuario_ID  = e.Usuario_ID
+            JOIN paciente p    ON p.Paciente_ID  = c.Paciente_ID
+            JOIN usuarios up   ON up.Usuario_ID  = p.Usuario_ID
             LEFT JOIN especialista_especialidad ee ON ee.Especialista_ID = e.Especialista_ID
             LEFT JOIN especialidad esp ON esp.Especialidad_ID = ee.Especialidad_ID
             LEFT JOIN multa m  ON m.Cita_ID  = c.Cita_ID
@@ -381,10 +481,6 @@ def get_citas_paciente(paciente_id):
 
 @citas_bp.route('/especialista/<int:especialista_id>/citas', methods=['GET'])
 def get_citas_especialista(especialista_id):
-    """
-    Devuelve las citas asignadas a un especialista.
-    Consumido por especialista.js.
-    """
     con = None
     try:
         con = get_db_connection()
@@ -395,21 +491,21 @@ def get_citas_especialista(especialista_id):
                 c.Motivo_Consulta,
                 a.Fecha,
                 a.Hora_Inicio,
-                a.Hora_Fin,
-                ea.Nombre_Estado              AS EstadoAgenda,
+                a.Hora_Final                      AS Hora_Fin,
+                ea.Nombre_Estado                  AS EstadoAgenda,
                 up.Nombres || ' ' || up.Apellidos AS NombrePaciente,
                 up.NumeroDocumento,
-                up.Telefono                   AS TelefonoPaciente,
+                up.Telefono                       AS TelefonoPaciente,
                 esp.Nombre_Especialidad,
                 COALESCE(em.Nombre_Estado, 'Sin multa') AS EstadoMulta
             FROM cita c
-            JOIN agenda a    ON a.Agenda_ID   = c.Agenda_ID
-            JOIN estado_agenda ea ON ea.Estado_ID = a.Estado_ID
-            JOIN paciente p  ON p.Paciente_ID = c.Paciente_ID
-            JOIN usuarios up ON up.Usuario_ID = p.Usuario_ID
+            JOIN agenda a    ON a.Agenda_ID    = c.Agenda_ID
+            JOIN estado_agenda ea ON ea.EstadoAgenda_ID = a.EstadoAgenda_ID
+            JOIN paciente p  ON p.Paciente_ID  = c.Paciente_ID
+            JOIN usuarios up ON up.Usuario_ID  = p.Usuario_ID
             LEFT JOIN especialista_especialidad ee ON ee.Especialista_ID = a.Especialista_ID
             LEFT JOIN especialidad esp ON esp.Especialidad_ID = ee.Especialidad_ID
-            LEFT JOIN multa m ON m.Cita_ID = c.Cita_ID
+            LEFT JOIN multa m  ON m.Cita_ID = c.Cita_ID
             LEFT JOIN estado_multa em ON em.EstadoMulta_ID = m.EstadoMulta_ID
             WHERE a.Especialista_ID = ?
             ORDER BY a.Fecha, a.Hora_Inicio
@@ -435,16 +531,16 @@ def get_multas():
             SELECT
                 m.Multa_ID,
                 m.Cita_ID,
-                em.Nombre_Estado            AS EstadoMulta,
+                em.Nombre_Estado                  AS EstadoMulta,
                 up.Nombres || ' ' || up.Apellidos AS NombrePaciente,
                 a.Fecha,
                 a.Hora_Inicio
             FROM multa m
             JOIN estado_multa em ON em.EstadoMulta_ID = m.EstadoMulta_ID
-            JOIN cita c   ON c.Cita_ID    = m.Cita_ID
+            JOIN cita c    ON c.Cita_ID    = m.Cita_ID
             JOIN paciente p ON p.Paciente_ID = c.Paciente_ID
             JOIN usuarios up ON up.Usuario_ID = p.Usuario_ID
-            JOIN agenda a ON a.Agenda_ID = c.Agenda_ID
+            JOIN agenda a  ON a.Agenda_ID  = c.Agenda_ID
             ORDER BY m.Multa_ID DESC
         """)
         return _json_ok(_rows_to_list(cur))
@@ -475,15 +571,11 @@ def pagar_multa(multa_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# VERIFICAR MULTA DE UN PACIENTE  —  GET /api/paciente/<id>/multa-activa
+# VERIFICAR MULTA ACTIVA  —  GET /api/paciente/<id>/multa-activa
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/paciente/<int:paciente_id>/multa-activa', methods=['GET'])
 def multa_activa(paciente_id):
-    """
-    Devuelve si el paciente tiene alguna multa pendiente.
-    agendar.html lo usa para mostrar la alerta de multa antes de confirmar.
-    """
     con = None
     try:
         con = get_db_connection()
@@ -498,6 +590,270 @@ def multa_activa(paciente_id):
         row = cur.fetchone()
         return _json_ok({"tiene_multa": row is not None})
     except Exception as exc:
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HISTORIAL CLÍNICO  —  POST /api/historial-clinico
+# Body JSON: { Cita_ID, Evolucion, Diagnostico, Tratamiento }
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/historial-clinico', methods=['POST'])
+def crear_historial_clinico():
+    datos       = request.get_json(silent=True) or {}
+    cita_id     = datos.get('Cita_ID')
+    evolucion   = (datos.get('Evolucion')   or '').strip()
+    diagnostico = (datos.get('Diagnostico') or '').strip()
+    tratamiento = (datos.get('Tratamiento') or '').strip()
+
+    if not cita_id:
+        return _json_error('Cita_ID es obligatorio.')
+
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+
+        cur.execute("SELECT Cita_ID FROM cita WHERE Cita_ID = ?", (cita_id,))
+        if not cur.fetchone():
+            return _json_error('Cita no encontrada.', 404)
+
+        cur.execute(
+            "SELECT Historial_ID FROM historial_clinico WHERE Cita_ID = ?", (cita_id,)
+        )
+        existing = cur.fetchone()
+
+        if existing:
+            historial_id = existing['Historial_ID']
+        else:
+            cur.execute(
+                "INSERT INTO historial_clinico (Cita_ID) VALUES (?)", (cita_id,)
+            )
+            historial_id = cur.lastrowid
+
+        if diagnostico:
+            cur.execute(
+                "SELECT Diagnostico_ID FROM diagnostico WHERE Nombre_Diagnostico = ?",
+                (diagnostico,)
+            )
+            diag_row = cur.fetchone()
+            if not diag_row:
+                cur.execute(
+                    "INSERT INTO diagnostico (Nombre_Diagnostico) VALUES (?)", (diagnostico,)
+                )
+                diagnostico_id = cur.lastrowid
+            else:
+                diagnostico_id = diag_row['Diagnostico_ID']
+
+            cur.execute("""
+                INSERT OR IGNORE INTO historial_diagnostico (Historial_ID, Diagnostico_ID)
+                VALUES (?, ?)
+            """, (historial_id, diagnostico_id))
+
+        if tratamiento or evolucion:
+            descripcion = f"{evolucion}\n---\n{tratamiento}".strip() if (evolucion and tratamiento) else (evolucion or tratamiento)
+            cur.execute(
+                "INSERT INTO tratamiento (Historial_ID, Descripcion) VALUES (?, ?)",
+                (historial_id, descripcion)
+            )
+
+        con.commit()
+        return _json_ok({"ok": True, "Historial_ID": historial_id}, 201)
+
+    except Exception as exc:
+        if con: con.rollback()
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RANKING — RESPUESTA  —  POST /api/respuesta
+# Body JSON: { ID_Pregunta, ID_Paciente, Texto_Respuesta, Cita_ID }
+# Cita_ID explícito: requerido desde paciente.js._enviarRanking()
+# Delega validación numérica y persistencia a tabla_respuesta.py via SQL directo
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/respuesta', methods=['POST'])
+def crear_respuesta_ranking():
+    datos           = request.get_json(silent=True) or {}
+    pregunta_id     = datos.get('ID_Pregunta')
+    paciente_id     = datos.get('ID_Paciente')
+    texto_respuesta = datos.get('Texto_Respuesta')
+    cita_id         = datos.get('Cita_ID')  # Cita_ID explícito desde frontend
+
+    if not all([pregunta_id, paciente_id, texto_respuesta]):
+        return _json_error('ID_Pregunta, ID_Paciente y Texto_Respuesta son obligatorios.')
+
+    try:
+        valor_int = int(texto_respuesta)
+        if valor_int < 1 or valor_int > 5:
+            return _json_error('Texto_Respuesta debe ser un número entre 1 y 5.')
+    except (ValueError, TypeError):
+        return _json_error(f'Texto_Respuesta debe ser un número entero, recibido: {texto_respuesta!r}')
+
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+
+        # Usar Cita_ID explícito del frontend (requerido por arquitectura)
+        if cita_id:
+            cur.execute("SELECT Cita_ID FROM cita WHERE Cita_ID = ?", (cita_id,))
+            if not cur.fetchone():
+                return _json_error(f'Cita_ID {cita_id} no encontrada.', 404)
+            cita_id_final = cita_id
+        else:
+            # Fallback solo si no viene Cita_ID (no debería ocurrir desde paciente.js)
+            cur.execute("""
+                SELECT c.Cita_ID
+                FROM cita c
+                WHERE c.Paciente_ID = ?
+                ORDER BY c.Cita_ID DESC
+                LIMIT 1
+            """, (paciente_id,))
+            fila = cur.fetchone()
+            if not fila:
+                return _json_error(f'No se encontró ninguna cita para el paciente ID {paciente_id}.', 404)
+            cita_id_final = fila['Cita_ID']
+
+        # Verificar que la cita pertenezca al paciente
+        cur.execute(
+            "SELECT Paciente_ID FROM cita WHERE Cita_ID = ?", (cita_id_final,)
+        )
+        cita_row = cur.fetchone()
+        if not cita_row or str(cita_row['Paciente_ID']) != str(paciente_id):
+            return _json_error('La cita no pertenece a este paciente.', 403)
+
+        # Evitar duplicados (mismo cita + misma pregunta)
+        cur.execute("""
+            SELECT Respuesta_ID FROM respuesta_ranking
+            WHERE Cita_ID = ? AND Preguntas_ID = ?
+        """, (cita_id_final, pregunta_id))
+        if cur.fetchone():
+            return _json_error('Ya existe una respuesta para esta pregunta en esta cita.')
+
+        # Insertar en respuesta_ranking — misma tabla que usa tabla_respuesta.py
+        cur.execute("""
+            INSERT INTO respuesta_ranking (Cita_ID, Preguntas_ID, Respuesta)
+            VALUES (?, ?, ?)
+        """, (cita_id_final, pregunta_id, valor_int))
+
+        respuesta_id = cur.lastrowid
+
+        # Registrar en puntuacion_especialista
+        cur.execute("""
+            SELECT a.Especialista_ID
+            FROM cita c
+            JOIN agenda a ON a.Agenda_ID = c.Agenda_ID
+            WHERE c.Cita_ID = ?
+        """, (cita_id_final,))
+        esp_row = cur.fetchone()
+        if esp_row:
+            cur.execute("""
+                INSERT INTO puntuacion_especialista (Especialista_ID, Respuesta_ID)
+                VALUES (?, ?)
+            """, (esp_row['Especialista_ID'], respuesta_id))
+
+        con.commit()
+        return _json_ok({"ok": True, "Respuesta_ID": respuesta_id}, 201)
+
+    except Exception as exc:
+        if con: con.rollback()
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# VERIFICAR CONTRASEÑA  —  POST /api/verificar-password
+# Body JSON: { usuario_id, password }
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/verificar-password', methods=['POST'])
+def verificar_password():
+    datos      = request.get_json(silent=True) or {}
+    usuario_id = datos.get('usuario_id')
+    password   = datos.get('password')
+
+    if not usuario_id or not password:
+        return _json_error('usuario_id y password son obligatorios.')
+
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+        cur.execute(
+            "SELECT Usuario_ID FROM usuarios WHERE Usuario_ID = ? AND Contrasena = ?",
+            (usuario_id, password)
+        )
+        row = cur.fetchone()
+        if row:
+            return _json_ok({"ok": True})
+        return _json_ok({"ok": False, "error": "Contraseña incorrecta."})
+    except Exception as exc:
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ACTUALIZAR PERFIL PACIENTE  —  POST /api/actualizar-perfil-paciente
+# Body JSON: { usuario_id, correo, telefono, nacimiento, nuevaPass }
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/actualizar-perfil-paciente', methods=['POST'])
+def actualizar_perfil_paciente():
+    datos      = request.get_json(silent=True) or {}
+    usuario_id = datos.get('usuario_id')
+    correo     = datos.get('correo')
+    telefono   = datos.get('telefono')
+    nacimiento = datos.get('nacimiento')
+    nueva_pass = datos.get('nuevaPass')
+
+    if not usuario_id:
+        return _json_error('usuario_id es obligatorio.')
+
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+
+        campos  = []
+        valores = []
+
+        if correo:
+            campos.append("Correo = ?")
+            valores.append(correo)
+        if telefono:
+            campos.append("Telefono = ?")
+            valores.append(telefono)
+        if nacimiento:
+            campos.append("FechaNacimiento = ?")
+            valores.append(nacimiento)
+        if nueva_pass:
+            campos.append("Contrasena = ?")
+            valores.append(nueva_pass)
+
+        if not campos:
+            return _json_error('No hay campos para actualizar.')
+
+        valores.append(usuario_id)
+        cur.execute(
+            f"UPDATE usuarios SET {', '.join(campos)} WHERE Usuario_ID = ?",
+            tuple(valores)
+        )
+
+        if cur.rowcount == 0:
+            return _json_error('Usuario no encontrado.', 404)
+
+        con.commit()
+        return _json_ok({"ok": True, "mensaje": "Perfil actualizado correctamente."})
+
+    except Exception as exc:
+        if con: con.rollback()
         return _json_error(str(exc), 500)
     finally:
         if con: con.close()

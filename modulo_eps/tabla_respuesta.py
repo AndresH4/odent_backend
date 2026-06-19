@@ -11,6 +11,17 @@
 #     Respuesta    INT NOT NULL   ← valor numérico 1-5
 #   )
 #
+# INTEGRACIÓN:
+#   - POST /api/respuesta es manejado por modulo_citas/routes.py (citas_bp)
+#     que recibe Cita_ID explícito desde paciente.js._enviarRanking() e
+#     inserta directamente en respuesta_ranking con SQL nativo.
+#   - Este módulo expone funciones Python para consultas administrativas
+#     usadas por modulo_eps/routes.py (eps_bp):
+#       GET /api/respuesta                              → obtener_respuestas()
+#       GET /api/respuesta/<id>                         → obtener_respuesta_por_id()
+#       GET /api/reporte/respuestas-paciente/<id>       → obtener_respuestas_por_paciente()
+#       GET /api/reporte/ranking-especialistas          → obtener_ranking_especialistas()
+#
 # Cadena de JOINs para llegar al especialista calificado:
 #   respuesta_ranking
 #     → cita          (Cita_ID)
@@ -29,6 +40,8 @@ from db import get_db_connection
 
 # ---------------------------------------------------------------------------
 # CREAR RESPUESTA
+# Usado solo como fallback desde modulo_eps/routes.py (gestión administrativa).
+# El flujo principal usa modulo_citas/routes.py con Cita_ID explícito.
 # ---------------------------------------------------------------------------
 def crear_respuesta(pregunta_id, paciente_id, texto_respuesta):
     """
@@ -94,10 +107,6 @@ def obtener_respuestas():
     """
     Retorna todas las respuestas con datos del especialista calificado
     y del paciente calificante.
-    Claves del dict de salida:
-      ID_Respuesta, Texto_Respuesta, ID_Pregunta, Texto_Pregunta,
-      Orden_Pregunta, ID_Especialista, Nombre_Especialista,
-      ID_Paciente, Nombre_Paciente
     """
     conexion = None
     cursor   = None
@@ -119,11 +128,9 @@ def obtener_respuestas():
             FROM respuesta_ranking  rr
             INNER JOIN preguntas_ranking  pr ON rr.Preguntas_ID  = pr.Preguntas_ID
             INNER JOIN cita               c  ON rr.Cita_ID       = c.Cita_ID
-            -- Especialista calificado (a través de la agenda de la cita)
             INNER JOIN agenda             ag ON c.Agenda_ID      = ag.Agenda_ID
             INNER JOIN especialista       e  ON ag.Especialista_ID = e.Especialista_ID
             INNER JOIN usuarios           ue ON e.Usuario_ID     = ue.Usuario_ID
-            -- Paciente calificante
             INNER JOIN paciente           p  ON c.Paciente_ID   = p.Paciente_ID
             INNER JOIN usuarios           up ON p.Usuario_ID    = up.Usuario_ID
             ORDER BY e.Especialista_ID ASC, rr.Preguntas_ID ASC
@@ -194,16 +201,10 @@ def obtener_respuesta_por_id(respuesta_id):
 
 # ---------------------------------------------------------------------------
 # RANKING CONSOLIDADO POR ESPECIALISTA
-# Nuevo método que agrega el promedio de calificaciones por especialista,
-# incluyendo su primera especialidad registrada.
 # ---------------------------------------------------------------------------
 def obtener_ranking_especialistas():
     """
     Retorna el ranking de especialistas ordenado por promedio descendente.
-    Cada registro incluye:
-      ID_Especialista, Nombre_Especialista, Especialidad,
-      Promedio (float, 1 decimal), Total_Evaluaciones (int)
-    Solo incluye especialistas que hayan recibido al menos una evaluación.
     """
     conexion = None
     cursor   = None
@@ -223,7 +224,6 @@ def obtener_ranking_especialistas():
             INNER JOIN agenda             ag ON c.Agenda_ID        = ag.Agenda_ID
             INNER JOIN especialista       e  ON ag.Especialista_ID = e.Especialista_ID
             INNER JOIN usuarios           ue ON e.Usuario_ID       = ue.Usuario_ID
-            -- Primera especialidad del especialista (MIN para consistencia)
             LEFT JOIN (
                 SELECT ee.Especialista_ID, MIN(esp2.Nombre_Especialidad) AS Nombre_Especialidad
                 FROM especialista_especialidad ee
@@ -239,7 +239,6 @@ def obtener_ranking_especialistas():
         resultado = []
         for fila in filas:
             row = dict(zip(columnas, fila))
-            # Asegurar tipos correctos para la serialización JSON
             row['Promedio']           = float(row['Promedio']) if row['Promedio'] is not None else 0.0
             row['Total_Evaluaciones'] = int(row['Total_Evaluaciones'])
             resultado.append(row)
@@ -255,6 +254,8 @@ def obtener_ranking_especialistas():
 
 # ---------------------------------------------------------------------------
 # RESPUESTAS POR PACIENTE (reporte de formulario completo)
+# Consumido por especialista.js.cargarRespuestasFormulario()
+# via GET /api/reporte/respuestas-paciente/<paciente_id>
 # ---------------------------------------------------------------------------
 def obtener_respuestas_por_paciente(paciente_id):
     """
@@ -309,7 +310,6 @@ def obtener_respuestas_por_paciente(paciente_id):
 def actualizar_respuesta(respuesta_id, texto_respuesta):
     """
     Actualiza el valor de una respuesta existente.
-    Retorna True si se modificó, False si no se encontró.
     """
     try:
         valor_int = int(texto_respuesta)
@@ -346,7 +346,6 @@ def actualizar_respuesta(respuesta_id, texto_respuesta):
 def eliminar_respuesta(respuesta_id):
     """
     Elimina una respuesta por su Respuesta_ID.
-    Retorna True si se eliminó, False si no existía.
     """
     conexion = None
     cursor   = None

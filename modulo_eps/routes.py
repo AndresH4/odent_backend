@@ -1,5 +1,18 @@
 # =============================================================================
 # modulo_eps/routes.py
+#
+# Registro en app.py:
+#   from modulo_eps.routes import eps_bp
+#   app.register_blueprint(eps_bp, url_prefix='/api')
+#
+# Esto expone:
+#   GET  /api/afiliacion                           ← cargarAfiliacionEPS() en paciente.js
+#   GET  /api/afiliacion                           ← cargarPerfilClinicoPaciente() en especialista.js
+#   GET  /api/paciente                             ← cargarPacientesEPS() en administrador.js
+#   GET  /api/pregunta                             ← _abrirRanking() en paciente.js
+#   GET  /api/reporte/afiliados-por-eps            ← cargarReporteAfiliados() en administrador.js
+#   GET  /api/reporte/respuestas-paciente/<id>     ← cargarRespuestasFormulario() en especialista.js
+#   GET  /api/reporte/ranking-especialistas        ← ranking dashboard
 # =============================================================================
 
 from flask import Blueprint, jsonify, request
@@ -178,10 +191,6 @@ def listar_eps():
 
 @eps_bp.route('/eps/por-regimen/<int:regimen_id>', methods=['GET'])
 def listar_eps_por_regimen(regimen_id):
-    """
-    Retorna las EPS filtradas por Regimen_ID.
-    Usado por los cascading dropdowns del frontend.
-    """
     try:
         datos = obtener_eps_por_regimen(regimen_id)
         return jsonify({"ok": True, "data": datos}), 200
@@ -265,6 +274,9 @@ def borrar_eps(eps_id):
 
 # =============================================================================
 # AFILIACIÓN
+# Consumido por:
+#   - paciente.js._cargarAfiliacionEPS()  → GET /api/afiliacion
+#   - especialista.js.cargarPerfilClinicoPaciente() → GET /api/afiliacion
 # =============================================================================
 
 @eps_bp.route('/afiliacion', methods=['GET'])
@@ -358,7 +370,10 @@ def borrar_afiliacion(afiliacion_id):
 
 
 # =============================================================================
-# PACIENTE
+# PACIENTE (modulo_eps)
+# Consumido por:
+#   - administrador.js.cargarPacientesEPS() → GET /api/paciente
+#   - administrador.js.renderUsuarios()     → GET /api/paciente
 # =============================================================================
 
 @eps_bp.route('/paciente', methods=['GET'])
@@ -446,6 +461,8 @@ def borrar_paciente(paciente_id):
 
 # =============================================================================
 # TABLA PREGUNTA
+# Consumido por:
+#   - paciente.js._abrirRanking() → GET /api/pregunta
 # =============================================================================
 
 @eps_bp.route('/pregunta', methods=['GET'])
@@ -523,7 +540,10 @@ def borrar_pregunta(pregunta_id):
 
 
 # =============================================================================
-# TABLA RESPUESTA
+# TABLA RESPUESTA (modulo_eps)
+# NOTA: El endpoint POST /api/respuesta es manejado por modulo_citas/routes.py
+# para garantizar el Cita_ID explícito desde el frontend.
+# Estos endpoints son para gestión administrativa de respuestas.
 # =============================================================================
 
 @eps_bp.route('/respuesta', methods=['GET'])
@@ -531,29 +551,6 @@ def listar_respuestas():
     try:
         datos = obtener_respuestas()
         return jsonify({"ok": True, "data": datos}), 200
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-@eps_bp.route('/respuesta', methods=['POST'])
-def nueva_respuesta():
-    body = request.get_json()
-    if not body:
-        return jsonify({"ok": False, "error": "Cuerpo JSON requerido"}), 400
-
-    pregunta_id     = body.get('ID_Pregunta')
-    paciente_id     = body.get('ID_Paciente')
-    texto_respuesta = body.get('Texto_Respuesta')
-
-    if not all([pregunta_id, paciente_id, texto_respuesta]):
-        return jsonify({
-            "ok": False,
-            "error": "Los campos ID_Pregunta, ID_Paciente y Texto_Respuesta son requeridos"
-        }), 400
-
-    try:
-        nuevo_id = crear_respuesta(pregunta_id, paciente_id, texto_respuesta)
-        return jsonify({"ok": True, "data": {"ID_Respuesta": nuevo_id}}), 201
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -601,6 +598,9 @@ def borrar_respuesta(respuesta_id):
 
 # =============================================================================
 # REPORTES ESPECIALES
+# Consumido por:
+#   - administrador.js.cargarReporteAfiliados() → GET /api/reporte/afiliados-por-eps
+#   - especialista.js.cargarRespuestasFormulario() → GET /api/reporte/respuestas-paciente/<id>
 # =============================================================================
 
 @eps_bp.route('/reporte/afiliados-por-eps', methods=['GET'])
