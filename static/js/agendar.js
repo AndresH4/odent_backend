@@ -7,6 +7,7 @@ let slotSeleccionado   = null;
 let pacienteIdAgendar  = null;
 let especialistasData  = [];
 let fechaISOAgendar    = '';
+let _sesionPacienteAgendar = null;
 
 const HORAS_DEFAULT = [
     '07:00:00', '07:30:00', '08:00:00', '08:30:00', '09:00:00', '09:30:00',
@@ -34,8 +35,6 @@ function validarEmail(email) {
     return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(String(email).toLowerCase());
 }
 
-// CORRECCIÓN: window.close() no funciona si la página no fue abierta por JS.
-// Se usa history.back() para volver a la página anterior (paciente.html).
 function cerrarVentanaYVolver() {
     if (document.referrer) {
         history.back();
@@ -57,6 +56,117 @@ function resetearFormulario() {
     agendaDisponible  = [];
 }
 
+// ─── Autocompletar datos del paciente logueado ────────────────────────────────
+async function autocompletarDatosPaciente() {
+    const raw = sessionStorage.getItem('odent_usuario');
+    if (!raw) {
+        window.location.replace('/login');
+        return;
+    }
+
+    let sesion;
+    try {
+        sesion = JSON.parse(raw);
+    } catch (e) {
+        window.location.replace('/login');
+        return;
+    }
+
+    if (!sesion || sesion.Rol_ID !== 3) {
+        window.location.replace('/login');
+        return;
+    }
+
+    _sesionPacienteAgendar = sesion;
+
+    // Rellenar campos de texto con datos de sesión (precarga inmediata)
+    _setFieldValue('nombre',    sesion.Nombres    || '');
+    _setFieldValue('apellido',  sesion.Apellidos  || '');
+    _setFieldValue('telefono',  sesion.Telefono   || '');
+    _setFieldValue('correo',    sesion.Correo     || '');
+    _setFieldValue('num-doc',   sesion.NumeroDocumento || '');
+
+    // Los campos quedan editables: el paciente puede modificar los datos
+    // autocompletados antes de confirmar el agendamiento.
+
+    // Obtener Paciente_ID
+    try {
+        const resPac = await fetch(`/api/paciente/por-usuario/${sesion.Usuario_ID}`);
+        if (resPac.ok) {
+            const pac = await resPac.json();
+            pacienteIdAgendar = pac.Paciente_ID;
+        }
+    } catch (e) {
+        console.warn('[agendar] No se pudo obtener Paciente_ID:', e);
+    }
+
+    // Obtener tipo de documento, asignar valores reales y autoseleccionar
+    try {
+        const resTipos = await fetch('/api/tipos_documento');
+        if (resTipos.ok) {
+            const tipos = await resTipos.json();
+            const selectTipoDoc = document.getElementById('tipo-doc');
+
+            // Asignar el TipoDoc_ID real como value de cada opción (por coincidencia
+            // de texto), para que al editar/enviar el formulario se use el ID correcto.
+            if (selectTipoDoc) {
+                for (let i = 0; i < selectTipoDoc.options.length; i++) {
+                    const opt = selectTipoDoc.options[i];
+                    if (!opt.value && opt.text) {
+                        const matchOpt = tipos.find(t =>
+                            (t.Nombre_Tipo_Documento || '').toLowerCase().split(' ')[0] === opt.text.toLowerCase().split(' ')[0]
+                        );
+                        if (matchOpt) opt.value = matchOpt.TipoDoc_ID;
+                    }
+                }
+            }
+
+            const tipoDoc = tipos.find(t => String(t.TipoDoc_ID) === String(sesion.TipoDoc_ID));
+            if (selectTipoDoc && tipoDoc) {
+                // Buscar la opción que coincida (por texto aproximado)
+                const nombreTipo = tipoDoc.Nombre_Tipo_Documento || '';
+                let encontrado = false;
+                for (let i = 0; i < selectTipoDoc.options.length; i++) {
+                    if (selectTipoDoc.options[i].text.toLowerCase().includes(nombreTipo.toLowerCase().split(' ')[0])) {
+                        selectTipoDoc.selectedIndex = i;
+                        encontrado = true;
+                        break;
+                    }
+                }
+                if (!encontrado && selectTipoDoc.options.length > 1) {
+                    selectTipoDoc.selectedIndex = 1;
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('[agendar] No se pudo cargar tipo de documento:', e);
+        // Seleccionar primera opción disponible como fallback
+        const selectTipoDoc = document.getElementById('tipo-doc');
+        if (selectTipoDoc && selectTipoDoc.options.length > 1) {
+            selectTipoDoc.selectedIndex = 1;
+        }
+    }
+}
+
+function _setFieldValue(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+}
+
+function _bloquearCampo(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.setAttribute('readonly', true);
+    el.style.backgroundColor = '#f1f5f9';
+    el.style.color = '#64748b';
+    el.style.cursor = 'not-allowed';
+    if (el.tagName === 'SELECT') {
+        el.setAttribute('disabled', true);
+        // Para selects disabled, creamos un input hidden para que el valor se envíe
+        el.style.pointerEvents = 'none';
+    }
+}
+
 // ─── Campo Fecha ─────────────────────────────────────────────────────────────
 function inicializarCampoFechaAgendar() {
     const inputTexto    = document.getElementById('fecha');
@@ -64,6 +174,10 @@ function inicializarCampoFechaAgendar() {
     const btnCalendario = document.getElementById('datePickerBtnAgendar');
 
     if (!inputTexto || !inputNativo || !btnCalendario) return;
+
+    // Establecer fecha mínima como hoy
+    const hoy = new Date().toISOString().split('T')[0];
+    inputNativo.min = hoy;
 
     inputTexto.addEventListener('focus', () => {
         inputTexto.placeholder = 'DD/MM/AAAA';
@@ -84,6 +198,25 @@ function inicializarCampoFechaAgendar() {
         inputTexto.value = formatted;
         if (raw.length === 8) {
             const isoDate = `${raw.slice(4, 8)}-${raw.slice(2, 4)}-${raw.slice(0, 2)}`;
+
+            // Validar que la fecha no sea anterior a hoy
+            const errFecha = document.getElementById('err-fecha');
+            if (!_validarFechaNoAnterior(isoDate)) {
+                if (errFecha) {
+                    errFecha.innerText = '⚠ No se puede agendar una cita con fecha anterior a la actual.';
+                    errFecha.style.display = 'block';
+                }
+                mostrarError(inputTexto, null);
+                inputNativo.value = '';
+                fechaISOAgendar = '';
+                // Limpiar horas
+                const horaSelect = document.getElementById('hora');
+                if (horaSelect) horaSelect.innerHTML = '<option value="" disabled selected>Seleccione la hora disponible</option>';
+                return;
+            } else {
+                ocultarError(inputTexto, errFecha);
+            }
+
             inputNativo.value = isoDate;
             fechaISOAgendar   = isoDate;
             cargarAgenda();
@@ -100,11 +233,53 @@ function inicializarCampoFechaAgendar() {
     inputNativo.addEventListener('change', () => {
         const val = inputNativo.value;
         if (!val) return;
+
+        // Validar que la fecha no sea anterior a hoy
+        const errFecha = document.getElementById('err-fecha');
+        const inputTexto2 = document.getElementById('fecha');
+        if (!_validarFechaNoAnterior(val)) {
+            if (errFecha) {
+                errFecha.innerText = '⚠ No se puede agendar una cita con fecha anterior a la actual.';
+                errFecha.style.display = 'block';
+            }
+            mostrarError(inputTexto2, null);
+            inputNativo.value = '';
+            fechaISOAgendar = '';
+            const horaSelect = document.getElementById('hora');
+            if (horaSelect) horaSelect.innerHTML = '<option value="" disabled selected>Seleccione la hora disponible</option>';
+            return;
+        } else {
+            ocultarError(inputTexto2, errFecha);
+        }
+
         const [yyyy, mm, dd] = val.split('-');
         inputTexto.value = `${dd}/${mm}/${yyyy}`;
         fechaISOAgendar  = val;
         cargarAgenda();
     });
+}
+
+// ─── Validación de fecha no anterior a hoy ────────────────────────────────────
+function _validarFechaNoAnterior(isoDate) {
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const fecha = new Date(isoDate + 'T00:00:00');
+    return fecha >= hoy;
+}
+
+// ─── Validación de hora mínima (3 horas después si es hoy) ───────────────────
+function _horaEsValida(horaStr, fechaISO) {
+    const hoy = new Date().toISOString().split('T')[0];
+    if (fechaISO !== hoy) return true; // Si no es hoy, todas las horas son válidas
+
+    const ahora = new Date();
+    const [h, m] = horaStr.split(':').map(Number);
+    const horaSlot = new Date();
+    horaSlot.setHours(h, m, 0, 0);
+
+    // Mínimo 3 horas después de la hora actual
+    const limiteMs = ahora.getTime() + (3 * 60 * 60 * 1000);
+    return horaSlot.getTime() >= limiteMs;
 }
 
 function leerFechaISO() {
@@ -145,7 +320,16 @@ function poblarHorasFallback(especialidad, fecha) {
         return;
     }
 
-    agendaDisponible = HORAS_DEFAULT.map((hora, idx) => {
+    // Filtrar horas según validación de fecha/hora
+    const horasFiltradas = HORAS_DEFAULT.filter(hora => _horaEsValida(hora, fecha));
+
+    if (horasFiltradas.length === 0) {
+        horaSelect.innerHTML = '<option value="" disabled selected>No hay horarios disponibles para hoy (mínimo 3 horas de anticipación)</option>';
+        agendaDisponible = [];
+        return;
+    }
+
+    agendaDisponible = horasFiltradas.map((hora, idx) => {
         const esp = especialistasConEsp[idx % especialistasConEsp.length];
         return {
             Agenda_ID:           null,
@@ -211,6 +395,12 @@ async function cargarAgenda() {
     agendaDisponible = [];
     if (!especialidad) return;
 
+    // Validar fecha antes de cargar
+    if (fecha && !_validarFechaNoAnterior(fecha)) {
+        horaSelect.innerHTML = '<option value="" disabled selected>Fecha no válida</option>';
+        return;
+    }
+
     try {
         const params = new URLSearchParams();
         if (fecha) params.append('fecha', fecha);
@@ -218,7 +408,10 @@ async function cargarAgenda() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
-        const slotsFiltrados = data.filter(slot => slot.Nombre_Especialidad === especialidad);
+        const slotsFiltrados = data
+            .filter(slot => slot.Nombre_Especialidad === especialidad)
+            .filter(slot => _horaEsValida(slot.Hora_Inicio, fecha));
+
         if (slotsFiltrados.length === 0) { poblarHorasFallback(especialidad, fecha); return; }
 
         agendaDisponible = slotsFiltrados;
@@ -285,6 +478,50 @@ async function _verificarMultaActiva(pacId) {
     }
 }
 
+// ─── POST /api/actualizar-perfil-paciente — sincronizar datos editados ────────
+async function _sincronizarDatosPaciente() {
+    const nombres   = document.getElementById('nombre')?.value.trim()    || '';
+    const apellidos = document.getElementById('apellido')?.value.trim() || '';
+    const documento = document.getElementById('num-doc')?.value.trim()  || '';
+    const telefono  = document.getElementById('telefono')?.value.trim() || '';
+    const correo    = document.getElementById('correo')?.value.trim()  || '';
+    const tipoDocEl = document.getElementById('tipo-doc');
+    const tipoDocId = tipoDocEl ? tipoDocEl.value : '';
+
+    if (!_sesionPacienteAgendar || !_sesionPacienteAgendar.Usuario_ID) return;
+
+    try {
+        const res = await fetch('/api/actualizar-perfil-paciente', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+                usuario_id:        _sesionPacienteAgendar.Usuario_ID,
+                nombres,
+                apellidos,
+                documento,
+                telefono,
+                correo,
+                tipo_documento_id: tipoDocId
+            })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (data.ok) {
+                // Mantener la sesión local congruente con lo guardado en BD
+                _sesionPacienteAgendar.Nombres         = nombres;
+                _sesionPacienteAgendar.Apellidos       = apellidos;
+                _sesionPacienteAgendar.NumeroDocumento = documento;
+                _sesionPacienteAgendar.Telefono        = telefono;
+                _sesionPacienteAgendar.Correo          = correo;
+                _sesionPacienteAgendar.TipoDoc_ID       = tipoDocId;
+                sessionStorage.setItem('odent_usuario', JSON.stringify(_sesionPacienteAgendar));
+            }
+        }
+    } catch (e) {
+        console.warn('[agendar] No se pudo sincronizar datos del paciente:', e);
+    }
+}
+
 // ─── Validar y abrir modal de verificación ────────────────────────────────────
 async function validarYAgendar() {
     const campos   = ['nombre', 'apellido', 'tipo-doc', 'num-doc', 'telefono', 'correo', 'servicio', 'fecha', 'hora'];
@@ -294,7 +531,17 @@ async function validarYAgendar() {
     campos.forEach(id => {
         const input = document.getElementById(id);
         const errEl = document.getElementById('err-' + id);
-        let rawVal  = (id === 'fecha') ? leerFechaISO() : input?.value;
+
+        // Para el select tipo-doc que puede estar disabled, leer el value igualmente
+        let rawVal;
+        if (id === 'fecha') {
+            rawVal = leerFechaISO();
+        } else if (id === 'tipo-doc') {
+            rawVal = input?.value;
+        } else {
+            rawVal = input?.value;
+        }
+
         let esInval = !rawVal || !String(rawVal).trim();
 
         if (errEl) errEl.innerText = '⚠ Este campo es obligatorio.';
@@ -311,6 +558,14 @@ async function validarYAgendar() {
             if (errEl) errEl.innerText = '⚠ Ingrese un correo válido.';
             esInval = true;
         }
+        // Validar fecha no anterior a hoy
+        if (!esInval && id === 'fecha') {
+            const fechaISO = leerFechaISO();
+            if (!_validarFechaNoAnterior(fechaISO)) {
+                if (errEl) errEl.innerText = '⚠ No se puede agendar una cita con fecha anterior a la actual.';
+                esInval = true;
+            }
+        }
 
         if (esInval) { mostrarError(input, errEl); valido = false; }
         else          ocultarError(input, errEl);
@@ -321,32 +576,39 @@ async function validarYAgendar() {
     seleccionarSlot();
     if (!slotSeleccionado) { alert('Seleccione un horario disponible.'); return; }
 
-    // GET /api/usuarios — buscar paciente por número de documento
-    const numDoc = document.getElementById('num-doc').value.trim();
+    // Validación adicional de hora (mínimo 3 horas si es hoy)
+    const fechaSeleccionada = leerFechaISO();
+    if (!_horaEsValida(slotSeleccionado.Hora_Inicio, fechaSeleccionada)) {
+        alert('La hora seleccionada debe ser al menos 3 horas posterior a la hora actual para citas del día de hoy.');
+        return;
+    }
+
+    if (!_sesionPacienteAgendar || !_sesionPacienteAgendar.Usuario_ID) {
+        alert('Sesión no válida. Por favor inicie sesión nuevamente.');
+        window.location.replace('/login');
+        return;
+    }
+
+    // ── VERIFICACIÓN SEGURA: identificar al paciente directamente desde el
+    // endpoint /api/paciente/por-usuario (fuente única y confiable que ya
+    // resuelve Paciente_ID a partir de la sesión activa) ───────────────────
     try {
-        const res   = await fetch('/api/usuarios');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const usu   = await res.json();
-        const match = (Array.isArray(usu) ? usu : []).find(
-            u => u.NumeroDocumento === numDoc && u.Rol_ID === 3
-        );
-
-        if (!match) {
-            alert('No se encontró un paciente registrado con ese número de documento.\nPor favor regístrese primero.');
+        const resPac = await fetch(`/api/paciente/por-usuario/${_sesionPacienteAgendar.Usuario_ID}`);
+        if (!resPac.ok) {
+            alert('No se encontró el paciente en el sistema. Por favor contacte soporte.');
             return;
         }
-
-        // GET /api/paciente/por-usuario/<uid>
-        const resPac = await fetch(`/api/paciente/por-usuario/${match.Usuario_ID}`);
-        if (resPac.ok) {
-            const pac     = await resPac.json();
-            pacienteIdAgendar = pac.Paciente_ID;
-        } else {
-            alert('Error obteniendo datos del paciente.');
+        const pac = await resPac.json();
+        if (!pac || !pac.Paciente_ID) {
+            alert('No se encontró el paciente en el sistema. Por favor contacte soporte.');
             return;
         }
+        pacienteIdAgendar = pac.Paciente_ID;
 
-        // GET /api/paciente/<id>/multa-activa — verificar multa antes de permitir agendar
+        // Sincronizar con la BD los datos del formulario (autocompletados o editados)
+        await _sincronizarDatosPaciente();
+
+        // Verificar multa activa
         const tieneMulta = await _verificarMultaActiva(pacienteIdAgendar);
 
         const alerta = document.getElementById('alertaMulta');
@@ -369,26 +631,32 @@ async function validarYAgendar() {
         return;
     }
 
-    // Mostrar resumen en modal
+    // Mostrar resumen en modal usando datos de sesión ya sincronizados con la BD
     const fecha   = leerFechaISO();
-    const numDoc2 = document.getElementById('num-doc').value.trim();
     const resumen = document.getElementById('resumen');
     if (resumen) {
+        const nombres   = _sesionPacienteAgendar.Nombres   || '';
+        const apellidos = _sesionPacienteAgendar.Apellidos  || '';
+        const numDoc    = _sesionPacienteAgendar.NumeroDocumento || '';
+        const telefono  = _sesionPacienteAgendar.Telefono   || '';
+        const tipoDocEl = document.getElementById('tipo-doc');
+        const tipoDocTexto = tipoDocEl ? (tipoDocEl.options[tipoDocEl.selectedIndex]?.text || tipoDocEl.value) : '';
+
         resumen.innerHTML = `
             <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">
                 <span style="font-size:10px;font-weight:700;color:#0284c7;text-transform:uppercase;display:block;margin-bottom:4px;">Paciente</span>
                 <p style="font-size:14px;color:#1e293b;font-weight:600;margin:0;text-transform:uppercase;">
-                    ${document.getElementById('nombre').value} ${document.getElementById('apellido').value}
+                    ${nombres} ${apellidos}
                 </p>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">
                     <span style="font-size:10px;font-weight:700;color:#0284c7;text-transform:uppercase;display:block;margin-bottom:4px;">Documento</span>
-                    <p style="font-size:13px;color:#1e293b;margin:0;">${document.getElementById('tipo-doc').value}: ${numDoc2}</p>
+                    <p style="font-size:13px;color:#1e293b;margin:0;">${tipoDocTexto}: ${numDoc}</p>
                 </div>
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">
                     <span style="font-size:10px;font-weight:700;color:#0284c7;text-transform:uppercase;display:block;margin-bottom:4px;">Teléfono</span>
-                    <p style="font-size:13px;color:#1e293b;margin:0;">${document.getElementById('telefono').value}</p>
+                    <p style="font-size:13px;color:#1e293b;margin:0;">${telefono}</p>
                 </div>
             </div>
             <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 14px;">
@@ -408,6 +676,20 @@ async function validarYAgendar() {
 async function finalizarTodo() {
     if (!slotSeleccionado || !pacienteIdAgendar) {
         alert('Datos incompletos. Vuelva a intentarlo.');
+        return;
+    }
+
+    // Validación doble de fecha y hora antes de confirmar
+    const fechaFinal = leerFechaISO();
+    if (!fechaFinal || !_validarFechaNoAnterior(fechaFinal)) {
+        cerrarModal();
+        alert('La fecha seleccionada no es válida. No se puede agendar con fecha anterior a la actual.');
+        return;
+    }
+
+    if (!_horaEsValida(slotSeleccionado.Hora_Inicio, fechaFinal)) {
+        cerrarModal();
+        alert('La hora seleccionada ya no es válida (debe ser al menos 3 horas posterior a la hora actual para citas de hoy).');
         return;
     }
 
@@ -437,7 +719,7 @@ async function finalizarTodo() {
         }
     }
 
-    // POST /api/citas
+    // POST /api/citas — el backend valida Paciente_ID, Agenda_ID y fecha/hora
     try {
         const res  = await fetch('/api/citas', {
             method:  'POST',
@@ -470,6 +752,7 @@ function cerrarExitoYLimpiar() { document.getElementById('modalExito').style.dis
 // ─── Init ─────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
     inicializarCampoFechaAgendar();
+    autocompletarDatosPaciente();
     cargarEspecialistas();
     document.getElementById('servicio')?.addEventListener('change', cargarAgenda);
     document.getElementById('hora')?.addEventListener('change', seleccionarSlot);

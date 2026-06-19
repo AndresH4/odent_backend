@@ -24,6 +24,7 @@ Registro en app.py:
 
 from flask import Blueprint, request, jsonify
 from db import get_db_connection
+from datetime import date, datetime, timedelta
 
 citas_bp = Blueprint('citas_bp', __name__)
 
@@ -42,6 +43,34 @@ def _json_ok(data, code=200):
 
 def _json_error(mensaje, code=400):
     return jsonify({"ok": False, "error": mensaje}), code
+
+
+def _validar_fecha_no_anterior(fecha_str):
+    """Valida que la fecha ISO (YYYY-MM-DD) no sea anterior a hoy."""
+    try:
+        fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        return fecha >= date.today()
+    except (ValueError, TypeError):
+        return False
+
+
+def _validar_hora_minimo_tres_horas(hora_str, fecha_str):
+    """
+    Si la fecha es hoy, valida que la hora sea al menos 3 horas posterior
+    a la hora actual. Si es una fecha futura, siempre es válida.
+    """
+    try:
+        fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        if fecha != date.today():
+            return True  # Fecha futura: todas las horas son válidas
+
+        hora = datetime.strptime(hora_str[:5], '%H:%M').time()
+        ahora = datetime.now()
+        limite = ahora + timedelta(hours=3)
+        slot_dt = datetime.combine(date.today(), hora)
+        return slot_dt >= limite
+    except (ValueError, TypeError):
+        return False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -206,6 +235,16 @@ def crear_agenda():
     if not all([esp_id, fecha, hora_inicio, hora_fin]):
         return _json_error('Especialista_ID, Fecha, Hora_Inicio y Hora_Fin son obligatorios.')
 
+    # ── Validación de fecha no anterior a hoy ─────────────────────────────────
+    if not _validar_fecha_no_anterior(fecha):
+        return _json_error('No se puede crear un slot con fecha anterior a la actual.')
+
+    # ── Validación de hora mínima 3 horas si es hoy ──────────────────────────
+    if not _validar_hora_minimo_tres_horas(hora_inicio, fecha):
+        return _json_error(
+            'Para citas del día de hoy, la hora debe ser al menos 3 horas posterior a la hora actual.'
+        )
+
     con = None
     try:
         con = get_db_connection()
@@ -318,8 +357,21 @@ def crear_cita():
         con = get_db_connection()
         cur = con.cursor()
 
+        # ── Verificar que el paciente existe en BD (evita datos falsos) ───────
         cur.execute(
-            "SELECT EstadoAgenda_ID FROM agenda WHERE Agenda_ID = ?", (agenda_id,)
+            "SELECT p.Paciente_ID, u.Rol_ID FROM paciente p JOIN usuarios u ON u.Usuario_ID = p.Usuario_ID WHERE p.Paciente_ID = ?",
+            (paciente_id,)
+        )
+        paciente_row = cur.fetchone()
+        if not paciente_row:
+            return _json_error('El paciente no existe en el sistema.', 404)
+        if paciente_row['Rol_ID'] != 3:
+            return _json_error('El usuario no tiene rol de paciente.', 403)
+
+        # ── Verificar slot de agenda ──────────────────────────────────────────
+        cur.execute(
+            "SELECT EstadoAgenda_ID, Fecha, Hora_Inicio FROM agenda WHERE Agenda_ID = ?",
+            (agenda_id,)
         )
         slot = cur.fetchone()
         if not slot:
@@ -327,6 +379,19 @@ def crear_cita():
         if slot['EstadoAgenda_ID'] != 1:
             return _json_error('Ese horario ya no está disponible.')
 
+        # ── Validar fecha no anterior a hoy (verificación backend) ────────────
+        fecha_agenda = slot['Fecha']
+        if not _validar_fecha_no_anterior(fecha_agenda):
+            return _json_error('No se puede agendar una cita con fecha anterior a la actual.')
+
+        # ── Validar hora mínima 3 horas si es hoy (verificación backend) ──────
+        hora_inicio = slot['Hora_Inicio']
+        if not _validar_hora_minimo_tres_horas(hora_inicio, fecha_agenda):
+            return _json_error(
+                'Para citas del día de hoy, la hora debe ser al menos 3 horas posterior a la hora actual.'
+            )
+
+        # ── Verificar que el paciente no tenga ya una cita activa ─────────────
         cur.execute("""
             SELECT c.Cita_ID
             FROM cita c
@@ -672,8 +737,6 @@ def crear_historial_clinico():
 # ─────────────────────────────────────────────────────────────────────────────
 # RANKING — RESPUESTA  —  POST /api/respuesta
 # Body JSON: { ID_Pregunta, ID_Paciente, Texto_Respuesta, Cita_ID }
-# Cita_ID explícito: requerido desde paciente.js._enviarRanking()
-# Delega validación numérica y persistencia a tabla_respuesta.py via SQL directo
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/respuesta', methods=['POST'])
@@ -682,7 +745,7 @@ def crear_respuesta_ranking():
     pregunta_id     = datos.get('ID_Pregunta')
     paciente_id     = datos.get('ID_Paciente')
     texto_respuesta = datos.get('Texto_Respuesta')
-    cita_id         = datos.get('Cita_ID')  # Cita_ID explícito desde frontend
+    cita_id         = datos.get('Cita_ID')
 
     if not all([pregunta_id, paciente_id, texto_respuesta]):
         return _json_error('ID_Pregunta, ID_Paciente y Texto_Respuesta son obligatorios.')
@@ -699,14 +762,12 @@ def crear_respuesta_ranking():
         con = get_db_connection()
         cur = con.cursor()
 
-        # Usar Cita_ID explícito del frontend (requerido por arquitectura)
         if cita_id:
             cur.execute("SELECT Cita_ID FROM cita WHERE Cita_ID = ?", (cita_id,))
             if not cur.fetchone():
                 return _json_error(f'Cita_ID {cita_id} no encontrada.', 404)
             cita_id_final = cita_id
         else:
-            # Fallback solo si no viene Cita_ID (no debería ocurrir desde paciente.js)
             cur.execute("""
                 SELECT c.Cita_ID
                 FROM cita c
@@ -719,7 +780,6 @@ def crear_respuesta_ranking():
                 return _json_error(f'No se encontró ninguna cita para el paciente ID {paciente_id}.', 404)
             cita_id_final = fila['Cita_ID']
 
-        # Verificar que la cita pertenezca al paciente
         cur.execute(
             "SELECT Paciente_ID FROM cita WHERE Cita_ID = ?", (cita_id_final,)
         )
@@ -727,7 +787,6 @@ def crear_respuesta_ranking():
         if not cita_row or str(cita_row['Paciente_ID']) != str(paciente_id):
             return _json_error('La cita no pertenece a este paciente.', 403)
 
-        # Evitar duplicados (mismo cita + misma pregunta)
         cur.execute("""
             SELECT Respuesta_ID FROM respuesta_ranking
             WHERE Cita_ID = ? AND Preguntas_ID = ?
@@ -735,7 +794,6 @@ def crear_respuesta_ranking():
         if cur.fetchone():
             return _json_error('Ya existe una respuesta para esta pregunta en esta cita.')
 
-        # Insertar en respuesta_ranking — misma tabla que usa tabla_respuesta.py
         cur.execute("""
             INSERT INTO respuesta_ranking (Cita_ID, Preguntas_ID, Respuesta)
             VALUES (?, ?, ?)
@@ -743,7 +801,6 @@ def crear_respuesta_ranking():
 
         respuesta_id = cur.lastrowid
 
-        # Registrar en puntuacion_especialista
         cur.execute("""
             SELECT a.Especialista_ID
             FROM cita c
@@ -801,17 +858,22 @@ def verificar_password():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ACTUALIZAR PERFIL PACIENTE  —  POST /api/actualizar-perfil-paciente
-# Body JSON: { usuario_id, correo, telefono, nacimiento, nuevaPass }
+# Body JSON: { usuario_id, nombres, apellidos, documento, tipo_documento_id,
+#              correo, telefono, nacimiento, nuevaPass }
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/actualizar-perfil-paciente', methods=['POST'])
 def actualizar_perfil_paciente():
-    datos      = request.get_json(silent=True) or {}
-    usuario_id = datos.get('usuario_id')
-    correo     = datos.get('correo')
-    telefono   = datos.get('telefono')
-    nacimiento = datos.get('nacimiento')
-    nueva_pass = datos.get('nuevaPass')
+    datos             = request.get_json(silent=True) or {}
+    usuario_id        = datos.get('usuario_id')
+    correo            = datos.get('correo')
+    telefono          = datos.get('telefono')
+    nacimiento        = datos.get('nacimiento')
+    nueva_pass        = datos.get('nuevaPass')
+    nombres           = datos.get('nombres')
+    apellidos         = datos.get('apellidos')
+    documento         = datos.get('documento')
+    tipo_documento_id = datos.get('tipo_documento_id')
 
     if not usuario_id:
         return _json_error('usuario_id es obligatorio.')
@@ -824,6 +886,19 @@ def actualizar_perfil_paciente():
         campos  = []
         valores = []
 
+        # ── Datos de identidad del paciente (ahora editables desde el formulario) ──
+        if nombres:
+            campos.append("Nombres = ?")
+            valores.append(nombres)
+        if apellidos:
+            campos.append("Apellidos = ?")
+            valores.append(apellidos)
+        if documento:
+            campos.append("NumeroDocumento = ?")
+            valores.append(documento)
+        if tipo_documento_id:
+            campos.append("TipoDoc_ID = ?")
+            valores.append(tipo_documento_id)
         if correo:
             campos.append("Correo = ?")
             valores.append(correo)
