@@ -214,6 +214,7 @@ def vista_especialista():
 def vista_paciente():
     return render_template('paciente.html')
  
+@app.route('/agendar')
 @app.route('/agendar.html')
 def vista_agendar():
     return render_template('agendar.html')

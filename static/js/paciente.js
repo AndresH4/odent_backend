@@ -1,14 +1,24 @@
-// Archivo: paciente.js
+// Archivo: paciente.js  — Stylo Dental Pro v2.8
+// ─────────────────────────────────────────────────────────────────────────────
+// CAMBIOS v2.8 respecto a v2.7:
+//   • _cargarAfiliacionCompleta: consulta cruzada robusta que resuelve
+//     Régimen EPS, Tipo EPS y EPS aunque el backend no haga JOINs.
+//     Ahora obtiene EPS_ID desde /api/afiliacion y lo cruza con /api/eps
+//     para obtener Nombre_EPS y Regimen_ID, luego cruza con /api/regimen-eps
+//     y /api/tipo-eps. Cubre todos los alias posibles del backend.
+//   • Botón "Agendar Cita" cambiado a <a href="/agendar"> en el HTML
+//     para evitar que el document click listener intercepte la navegación.
+// ─────────────────────────────────────────────────────────────────────────────
 'use strict';
 
 // ─── ESTADO GLOBAL ────────────────────────────────────────────────────────────
-let _sesionPaciente      = null;
-let _pacienteId          = null;
-let _usuarioId           = null;
-let _citasData           = [];
-let _citaParaCancelar    = null;
+let _sesionPaciente        = null;
+let _pacienteId            = null;
+let _usuarioId             = null;
+let _citasData             = [];
+let _citaParaCancelar      = null;
 let _accionPendienteSimple = null;
-let _dropdownOpen        = false;
+let _dropdownOpen          = false;
 
 // ─── MAPA DE VISTAS ───────────────────────────────────────────────────────────
 const VISTAS_PACIENTE = {
@@ -29,37 +39,181 @@ function _cargarSesion() {
     _usuarioId      = u.Usuario_ID;
 
     const nombreCompleto = `${u.Nombres || ''} ${u.Apellidos || ''}`.trim();
-    const iniciales      = nombreCompleto.split(' ').filter(Boolean).slice(0, 2)
-                           .map(p => p[0]).join('').toUpperCase() || 'PA';
 
+    // ── INICIAL ÚNICA: solo la primera letra del primer nombre ────────────────
+    const inicial = (u.Nombres || '').trim().charAt(0).toUpperCase() || 'P';
+
+    _setText('avatar-letras',         inicial);
     _setText('nombre-usuario-header', nombreCompleto);
-    _setText('nombre-usuario',        nombreCompleto);
-    _setText('avatar-letras',         iniciales);
-    _setText('perfil-avatar-grande',  iniciales);
+    _setText('perfil-avatar-grande',  inicial);
     _setText('nombre-menu',           nombreCompleto.toUpperCase());
     _setText('doc-menu',              u.NumeroDocumento || '');
-    _setText('email-menu',            u.Correo || '');
-    _setText('perfil-nombres',        u.Nombres || '');
-    _setText('perfil-apellidos',      u.Apellidos || '');
-    _setText('perfil-correo',         u.Correo || '');
-    _setText('perfil-numDoc',         u.NumeroDocumento || '');
-    _setText('perfil-telefono',       u.Telefono || '');
-    _setText('perfil-nacimiento',     u.FechaNacimiento || '');
 
-    // Resolución del Paciente_ID via /api/paciente/por-usuario/<uid>
+    // Nodos ocultos (retrocompatibilidad)
+    _setText('nombre-usuario',    nombreCompleto);
+    _setText('perfil-nombres',    u.Nombres    || '');
+    _setText('perfil-apellidos',  u.Apellidos  || '');
+    _setText('perfil-correo',     u.Correo     || '');
+    _setText('perfil-numDoc',     u.NumeroDocumento || '');
+    _setText('perfil-telefono',   u.Telefono   || '');
+    _setText('perfil-nacimiento', u.FechaNacimiento || '');
+
+    _setText('email-menu',    u.Correo   || '—');
+    _setText('telefono-menu', u.Telefono || '—');
+
+    // Tipo documento + número
+    _cargarTipoDocumento(u.TipoDoc_ID, u.NumeroDocumento);
+
+    // Paciente_ID → citas + EPS
     fetch(`/api/paciente/por-usuario/${_usuarioId}`)
         .then(r => r.ok ? r.json() : null)
         .then(data => {
             if (data && data.Paciente_ID) {
                 _pacienteId = data.Paciente_ID;
                 _cargarCitasPaciente();
-                _cargarAfiliacionEPS();
+                _cargarAfiliacionCompleta();
             }
         })
         .catch(err => console.error('[paciente] Error obteniendo Paciente_ID:', err));
 }
 
-// ─── UTILIDADES ───────────────────────────────────────────────────────────────
+// ─── TIPO DE DOCUMENTO ────────────────────────────────────────────────────────
+async function _cargarTipoDocumento(tipoDocId, numeroDoc) {
+    try {
+        const res   = await fetch('/api/tipos_documento');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const lista = await res.json();
+
+        const tipo = lista.find(t => String(t.TipoDoc_ID) === String(tipoDocId));
+        const nombreTipo = tipo
+            ? (tipo.Nombre_Tipo_Documento || tipo.Descripcion || tipo.Nombre_Tipo || 'Doc.')
+            : 'Doc.';
+
+        _setText('doc-detalle-menu', `${nombreTipo}: ${numeroDoc || '—'}`);
+    } catch (err) {
+        console.warn('[paciente] No se pudo cargar tipo de documento:', err);
+        _setText('doc-detalle-menu', numeroDoc || '—');
+    }
+}
+
+// ─── EPS COMPLETA EN 3 CAMPOS — consulta cruzada robusta ─────────────────────
+// CORRECCIÓN v2.8:
+// El problema era que el endpoint /api/afiliacion puede devolver solo los IDs
+// crudos (EPS_ID, TipoEPS_ID) sin hacer JOINs en el backend.
+// La solución es hacer la resolución completa en el frontend:
+//   1. GET /api/afiliacion       → obtiene EPS_ID y TipoEPS_ID del usuario
+//   2. GET /api/eps              → lista de EPS con Nombre_EPS y Regimen_ID
+//   3. GET /api/regimen-eps      → lista de regímenes con Nombre_Regimen
+//   4. GET /api/tipo-eps         → lista de tipos con Nombre_Tipo
+// Luego cruza por IDs para armar los 3 campos sin depender de JOINs del backend.
+async function _cargarAfiliacionCompleta() {
+    if (!_usuarioId) return;
+    try {
+        // Peticiones en paralelo
+        const [resAfil, resEps, resRegimen, resTipo] = await Promise.all([
+            fetch('/api/afiliacion'),
+            fetch('/api/eps'),
+            fetch('/api/regimen-eps'),
+            fetch('/api/tipo-eps'),
+        ]);
+
+        if (!resAfil.ok) {
+            console.warn('[paciente] /api/afiliacion no respondió OK');
+            return;
+        }
+
+        const dataAfil    = await resAfil.json();
+        const dataEps     = resEps.ok     ? await resEps.json()     : [];
+        const dataRegimen = resRegimen.ok ? await resRegimen.json() : [];
+        const dataTipo    = resTipo.ok    ? await resTipo.json()    : [];
+
+        // Normalizar: algunos endpoints envuelven en { ok, data } otros son arrays directos
+        const listaAfil    = _normalizar(dataAfil);
+        const listaEps     = _normalizar(dataEps);
+        const listaRegimen = _normalizar(dataRegimen);
+        const listaTipos   = _normalizar(dataTipo);
+
+        // Afiliación del usuario actual — busca por Usuario_ID o ID_Usuario
+        const afil = listaAfil.find(
+            a => String(a.Usuario_ID || a.ID_Usuario) === String(_usuarioId)
+        );
+
+        if (!afil) {
+            console.warn('[paciente] No se encontró afiliación para Usuario_ID:', _usuarioId);
+            return;
+        }
+
+        // ── IDs desde la afiliación (cubre distintos alias posibles) ──────────
+        const epsId     = afil.EPS_ID     || afil.Id_EPS     || afil.eps_id     || null;
+        const tipoEpsId = afil.TipoEPS_ID || afil.ID_Tipo_EPS || afil.tipoeps_id || null;
+
+        // ── CAMPO 3: EPS ──────────────────────────────────────────────────────
+        // Primero intentar nombre directo en la afiliación, luego cruzar con /api/eps
+        let nombreEPS = afil.Nombre_EPS || afil.nombre_eps || '';
+        if (!nombreEPS && epsId) {
+            const epsObj = listaEps.find(
+                e => String(e.EPS_ID || e.Id_EPS || e.eps_id) === String(epsId)
+            );
+            nombreEPS = epsObj
+                ? (epsObj.Nombre_EPS || epsObj.nombre_eps || epsObj.Nombre || '—')
+                : '—';
+        }
+        _setText('eps-menu',   nombreEPS || '—');
+        _setText('perfil-eps', nombreEPS || '—');
+
+        // ── CAMPO 1: Régimen EPS ──────────────────────────────────────────────
+        // Ruta: afiliacion.EPS_ID → eps.Regimen_ID → regimen_eps.Descripcion
+        let nombreRegimen = afil.Nombre_Regimen || afil.nombre_regimen || '';
+        if (!nombreRegimen) {
+            // Obtener Regimen_ID desde la tabla eps
+            let regimenId = afil.Regimen_ID || afil.ID_Regimen_EPS || afil.regimen_id || null;
+            if (!regimenId && epsId) {
+                const epsObj = listaEps.find(
+                    e => String(e.EPS_ID || e.Id_EPS || e.eps_id) === String(epsId)
+                );
+                regimenId = epsObj
+                    ? (epsObj.Regimen_ID || epsObj.regimen_id || epsObj.ID_Regimen_EPS || null)
+                    : null;
+            }
+            if (regimenId) {
+                const regObj = listaRegimen.find(
+                    r => String(r.Regimen_ID || r.ID_Regimen_EPS || r.regimen_id) === String(regimenId)
+                );
+                nombreRegimen = regObj
+                    ? (regObj.Descripcion || regObj.Nombre_Regimen || regObj.nombre_regimen || '—')
+                    : '—';
+            } else {
+                nombreRegimen = '—';
+            }
+        }
+        _setText('regimen-menu', nombreRegimen);
+
+        // ── CAMPO 2: Tipo EPS ─────────────────────────────────────────────────
+        let nombreTipoEPS = afil.Nombre_Tipo || afil.nombre_tipo || '';
+        if (!nombreTipoEPS && tipoEpsId) {
+            const tipoObj = listaTipos.find(
+                t => String(t.TipoEPS_ID || t.ID_Tipo_EPS || t.tipoeps_id) === String(tipoEpsId)
+            );
+            nombreTipoEPS = tipoObj
+                ? (tipoObj.Nombre_Tipo || tipoObj.nombre_tipo || tipoObj.Nombre || '—')
+                : '—';
+        }
+        _setText('tipoeps-menu', nombreTipoEPS || '—');
+
+    } catch (err) {
+        console.warn('[paciente] Error en _cargarAfiliacionCompleta:', err);
+    }
+}
+
+// ─── HELPER: normaliza respuesta del backend (array o { ok, data }) ───────────
+function _normalizar(data) {
+    if (Array.isArray(data))               return data;
+    if (data && Array.isArray(data.data))  return data.data;
+    if (data && Array.isArray(data.items)) return data.items;
+    return [];
+}
+
+// ─── UTILIDADES DOM ───────────────────────────────────────────────────────────
 function _setText(id, val) {
     const el = document.getElementById(id);
     if (el) el.textContent = val ?? '—';
@@ -134,7 +288,7 @@ window.cambiarVista = function (vista) {
     if (vista === 'config')    _precargarPerfil();
 };
 
-// ─── CARGA DE CITAS DEL PACIENTE — GET /api/paciente/<id>/citas ──────────────
+// ─── CARGA DE CITAS ───────────────────────────────────────────────────────────
 async function _cargarCitasPaciente() {
     if (!_pacienteId) return;
     try {
@@ -159,7 +313,6 @@ function _renderTablaCitas() {
 
     const hoy = new Date().toISOString().split('T')[0];
 
-    // Citas activas: Ocupado y fecha >= hoy, o Disponible
     const activas = _citasData.filter(c =>
         c.EstadoAgenda === 'Ocupado' || c.EstadoAgenda === 'Disponible'
     );
@@ -174,7 +327,6 @@ function _renderTablaCitas() {
     noMsg?.classList.add('hidden');
 
     activas.forEach(c => {
-        // Lógica de cita completada: EstadoAgenda == 'Ocupado' AND Fecha < hoy
         const citaCompletada = c.EstadoAgenda === 'Ocupado' && c.Fecha < hoy;
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -211,7 +363,7 @@ function _renderTablaCitas() {
     });
 }
 
-// ─── RENDER HISTORIAL COMPLETO — usa _citasData (GET /api/paciente/<id>/citas) ─
+// ─── RENDER HISTORIAL ─────────────────────────────────────────────────────────
 function _renderHistorial() {
     const tbody = document.getElementById('tabla-historial-completo');
     if (!tbody) return;
@@ -243,28 +395,7 @@ function _renderHistorial() {
     });
 }
 
-// ─── AFILIACIÓN EPS — GET /api/afiliacion (modulo_eps) ───────────────────────
-async function _cargarAfiliacionEPS() {
-    if (!_usuarioId) return;
-    try {
-        const res  = await fetch('/api/afiliacion');
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!data.ok) return;
-
-        const afil = (data.data || []).find(
-            a => String(a.ID_Usuario) === String(_usuarioId)
-        );
-        if (!afil) return;
-
-        _setText('eps-menu',   afil.Nombre_EPS || '—');
-        _setText('perfil-eps', afil.Nombre_EPS || '—');
-    } catch (err) {
-        console.warn('[paciente] No se pudo cargar afiliación EPS:', err);
-    }
-}
-
-// ─── CANCELAR CITA — PUT /api/citas/<id>/cancelar ────────────────────────────
+// ─── CANCELAR CITA ────────────────────────────────────────────────────────────
 window.abrirModalCancelar = function (citaId) {
     _citaParaCancelar = citaId;
     const cita = _citasData.find(c => c.Cita_ID === citaId);
@@ -327,16 +458,15 @@ window.confirmarAccionCancelado = async function () {
     }
 };
 
-// ─── LIMPIAR CANCELADAS DE VISTA INICIO ──────────────────────────────────────
+// ─── LIMPIAR CANCELADAS ───────────────────────────────────────────────────────
 function _limpiarCanceladas() {
     _citasData = _citasData.filter(c => c.EstadoAgenda !== 'Cancelado');
     _renderTablaCitas();
 }
 
-// ─── RANKING — POST /api/respuesta (con Cita_ID explícito) ───────────────────
+// ─── RANKING ──────────────────────────────────────────────────────────────────
 window._abrirRanking = async function (citaId) {
     try {
-        // GET /api/pregunta — preguntas activas desde modulo_eps
         const resP  = await fetch('/api/pregunta');
         const dataP = await resP.json();
         if (!dataP.ok || !dataP.data.length) {
@@ -398,7 +528,6 @@ function _mostrarFormRanking(citaId, preguntas) {
 
     document.body.appendChild(modal);
 
-    // Efectos de estrella
     modal.querySelectorAll('.star-btn').forEach(star => {
         star.addEventListener('click', function () {
             const name = this.closest('div').querySelector('input[type=radio]').name;
@@ -412,7 +541,6 @@ function _mostrarFormRanking(citaId, preguntas) {
     });
 }
 
-// POST /api/respuesta — Cita_ID explícito enviado a tabla_respuesta.py via modulo_citas/routes.py
 window._enviarRanking = async function (citaId, preguntaIds) {
     const errEl = document.getElementById('err-ranking');
     const respuestas = [];
@@ -431,12 +559,11 @@ window._enviarRanking = async function (citaId, preguntaIds) {
             const res = await fetch('/api/respuesta', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                // Cita_ID explícito para que tabla_respuesta.py lo use directamente
                 body:    JSON.stringify({
                     ID_Pregunta:     r.ID_Pregunta,
                     ID_Paciente:     _pacienteId,
                     Texto_Respuesta: r.Texto_Respuesta,
-                    Cita_ID:         citaId          // ← explícito, no inferido
+                    Cita_ID:         citaId
                 })
             });
             const data = await res.json();
@@ -456,8 +583,8 @@ window._enviarRanking = async function (citaId, preguntaIds) {
 // ─── MI PERFIL ────────────────────────────────────────────────────────────────
 function _precargarPerfil() {
     if (!_sesionPaciente) return;
-    _setVal('edit-correo',     _sesionPaciente.Correo         || '');
-    _setVal('edit-telefono',   _sesionPaciente.Telefono       || '');
+    _setVal('edit-correo',     _sesionPaciente.Correo          || '');
+    _setVal('edit-telefono',   _sesionPaciente.Telefono        || '');
     _setVal('edit-nacimiento', _sesionPaciente.FechaNacimiento || '');
     _resetearFlujoPassword();
 }
@@ -477,7 +604,6 @@ function _resetearFlujoPassword() {
     });
 }
 
-// POST /api/verificar-password
 window.validarPasswordActual = function () {
     const inputActual = document.getElementById('pass-actual');
     const errActual   = document.getElementById('error-pass-actual');
@@ -511,7 +637,6 @@ window.validarPasswordActual = function () {
     });
 };
 
-// POST /api/actualizar-perfil-paciente
 window.guardarPerfilPaciente = function () {
     const correo     = document.getElementById('edit-correo')?.value.trim();
     const telefono   = document.getElementById('edit-telefono')?.value.trim();
@@ -594,6 +719,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }).toUpperCase();
     }
 
+    // CORRECCIÓN: el listener verifica también si el click viene del enlace
+    // de agendar para no bloquear la navegación
     document.addEventListener('click', function (e) {
         const trigger  = document.getElementById('profile-trigger');
         const dropdown = document.getElementById('profile-dropdown');

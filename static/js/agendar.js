@@ -34,7 +34,15 @@ function validarEmail(email) {
     return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(String(email).toLowerCase());
 }
 
-function cerrarVentanaYVolver() { window.close(); }
+// CORRECCIÓN: window.close() no funciona si la página no fue abierta por JS.
+// Se usa history.back() para volver a la página anterior (paciente.html).
+function cerrarVentanaYVolver() {
+    if (document.referrer) {
+        history.back();
+    } else {
+        window.location.href = '/paciente.html';
+    }
+}
 
 function resetearFormulario() {
     ['nombre', 'apellido', 'tipo-doc', 'num-doc', 'telefono', 'correo', 'servicio', 'fecha', 'hora'].forEach(id => {

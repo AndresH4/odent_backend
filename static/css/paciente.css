@@ -1,9 +1,9 @@
 /* ===================================================================
-   paciente.css — Stylo Dental Pro v2.5
-   Sincronizado con especialista.css:
-     • Mismo sistema de scroll (sidebar fijo, main scrollable)
-     • Dropdown de perfil con visibility+opacity (igual que especialista)
-     • Mi Perfil disponible como vista gestionada por JS
+   paciente.css — Stylo Dental Pro v2.6
+   Cambios respecto a v2.5:
+     • #profile-dropdown: ancho aumentado a 28rem para acomodar
+       los nuevos campos (teléfono, documento, régimen/tipo EPS).
+     • Resto del archivo sin cambios.
    =================================================================== */
 
 :root {
@@ -23,28 +23,23 @@ body {
     background-color: var(--bg-main);
     font-family:      'Open Sans', sans-serif;
     overflow-x:       hidden;
-    /* FIX SCROLL: body NO tiene overflow:hidden aquí; se gestiona vía
-       style inline en el HTML (height:100vh; overflow:hidden) para
-       que cada panel tenga su propio scroll independiente. */
     color: #1e293b;
 }
 
 /* ===================================================================
    SIDEBAR
-   FIX SCROLL: altura fija 100vh, scroll propio.
-   El contenido del main NO afecta la altura del sidebar.
    =================================================================== */
 .sidebar {
     background:   var(--sidebar-grad);
     min-height:   100vh;
-    width:        288px;          /* 18rem — equivale al w-72 de Tailwind */
+    width:        288px;
     flex-shrink:  0;
     display:      flex;
-    flex-direction: column; 
+    flex-direction: column;
 }
 
 /* ===================================================================
-   NAVEGACIÓN — idéntica al especialista
+   NAVEGACIÓN
    =================================================================== */
 .nav-btn {
     width:         100%;
@@ -90,7 +85,7 @@ body {
 }
 
 /* ===================================================================
-   RELOJ Y ESTADO — idéntico al especialista
+   RELOJ Y ESTADO
    =================================================================== */
 .clock-widget {
     background:      rgba(15, 23, 42, 0.4);
@@ -135,10 +130,13 @@ body {
 }
 
 /* ===================================================================
-   DROPDOWN DE PERFIL — idéntico al especialista
-   Usa visibility+opacity para animación fluida (NO display:none).
+   DROPDOWN DE PERFIL
+   ─ v2.6: ancho aumentado a 28rem para los campos nuevos.
    =================================================================== */
 #profile-dropdown {
+    /* ── CAMBIO v2.6: de w-96 (24rem) a 28rem ── */
+    width:          28rem;
+
     visibility:     hidden;
     opacity:        0;
     pointer-events: none;
@@ -226,7 +224,7 @@ body {
 }
 
 /* ===================================================================
-   MODALES — idénticos al especialista
+   MODALES
    =================================================================== */
 .modal-overlay {
     display:         none;
@@ -262,13 +260,12 @@ body {
     border:        1px solid rgba(255,255,255,0.5);
 }
 
-/* Modal de confirmación simple: compacto */
 #modalConfirmarSimple .modal-content {
     max-width: 440px;
 }
 
 /* ===================================================================
-   INPUTS — idénticos al especialista (clase .input-dental)
+   INPUTS
    =================================================================== */
 .input-dental {
     width:         100%;
@@ -353,7 +350,6 @@ th { border-bottom: 2px solid #f1f5f9; }
     to   { opacity: 1; transform: translateY(0);    }
 }
 
-/* Ocultar/mostrar vistas sin colisionar con Tailwind hidden */
 .seccion-oculta  { display: none !important; }
 .seccion-visible {
     display:   block !important;

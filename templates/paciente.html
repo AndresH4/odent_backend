@@ -26,7 +26,9 @@
                 <i class="fas fa-home w-6 text-xl"></i>
                 <span class="tracking-wide">Panel de Control</span>
             </button>
-            <button onclick="window.open('/agendar', '_blank')" class="nav-btn">
+            <!-- CORRECCIÓN v2: stopPropagation impide que el listener del documento
+                 interfiera; location.assign garantiza navegación en la misma pestaña -->
+            <button onclick="event.stopPropagation(); window.location.assign('/agendar');" class="nav-btn">
                 <i class="fas fa-calendar-plus w-6 text-xl"></i>
                 <span class="tracking-wide">Agendar Cita</span>
             </button>
@@ -82,49 +84,92 @@
                 </button>
 
                 <div id="profile-dropdown"
-                     class="absolute top-full right-0 mt-6 w-96 bg-white rounded-[2.5rem] shadow-[0_30px_70px_rgba(0,0,0,0.2)] border border-slate-50 p-10">
+                     class="absolute top-full right-0 mt-6 w-[28rem] bg-white rounded-[2.5rem] shadow-[0_30px_70px_rgba(0,0,0,0.2)] border border-slate-50 p-10">
+
+                    <!-- Cabecera -->
                     <div class="text-center pb-8 border-b border-slate-100">
                         <div id="perfil-avatar-grande"
-                             class="w-24 h-24 bg-sky-50 text-sky-600 rounded-3xl flex items-center justify-center text-4xl font-black uppercase mx-auto mb-5 border-4 border-white shadow-xl">PA</div>
+                             class="w-24 h-24 bg-sky-50 text-sky-600 rounded-3xl flex items-center justify-center text-4xl font-black uppercase mx-auto mb-5 border-4 border-white shadow-xl">P</div>
                         <h4 id="nombre-menu" class="font-black text-slate-800 text-xl tracking-tight"></h4>
                         <span id="doc-menu"
                               class="inline-block mt-3 px-6 py-2 bg-sky-100 text-sky-700 rounded-full text-[11px] font-black uppercase tracking-[0.2em]"></span>
                     </div>
-                    <div class="py-8 space-y-6">
+
+                    <!-- Campos de datos -->
+                    <div class="py-8 space-y-5">
+
+                        <!-- Correo -->
                         <div class="flex items-center gap-5">
-                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100 flex-shrink-0">
                                 <i class="fas fa-envelope text-lg"></i>
                             </div>
-                            <div>
+                            <div class="min-w-0">
                                 <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Correo Electrónico</p>
-                                <p id="email-menu" class="text-sm font-bold text-slate-700"></p>
+                                <p id="email-menu" class="text-sm font-bold text-slate-700 truncate"></p>
                             </div>
                         </div>
+
+                        <!-- Teléfono -->
                         <div class="flex items-center gap-5">
-                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100 flex-shrink-0">
+                                <i class="fas fa-phone text-lg"></i>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Teléfono</p>
+                                <p id="telefono-menu" class="text-sm font-bold text-slate-700">—</p>
+                            </div>
+                        </div>
+
+                        <!-- Tipo documento + número -->
+                        <div class="flex items-center gap-5">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100 flex-shrink-0">
+                                <i class="fas fa-id-card text-lg"></i>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Documento</p>
+                                <p id="doc-detalle-menu" class="text-sm font-bold text-slate-700">—</p>
+                            </div>
+                        </div>
+
+                        <!-- CAMPO 1: Régimen EPS -->
+                        <div class="flex items-center gap-5">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100 flex-shrink-0">
+                                <i class="fas fa-layer-group text-lg"></i>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Régimen EPS</p>
+                                <p id="regimen-menu" class="text-sm font-bold text-slate-700">—</p>
+                            </div>
+                        </div>
+
+                        <!-- CAMPO 2: Tipo EPS -->
+                        <div class="flex items-center gap-5">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100 flex-shrink-0">
+                                <i class="fas fa-tags text-lg"></i>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo EPS</p>
+                                <p id="tipoeps-menu" class="text-sm font-bold text-slate-700">—</p>
+                            </div>
+                        </div>
+
+                        <!-- CAMPO 3: EPS -->
+                        <div class="flex items-center gap-5">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100 flex-shrink-0">
                                 <i class="fas fa-shield-alt text-lg"></i>
                             </div>
                             <div>
-                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">EPS / Aseguramiento</p>
-                                <p id="eps-menu" class="text-sm font-bold text-slate-700">Cargando...</p>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">EPS</p>
+                                <p id="eps-menu" class="text-sm font-bold text-slate-700">—</p>
                             </div>
                         </div>
-                    </div>
-                    <div class="pt-6 border-t border-slate-100 flex flex-col gap-3">
-                        <button onclick="closeProfileDropdown(); cambiarVista('config')"
-                            class="w-full bg-sky-50 text-sky-700 py-4 rounded-2xl font-black hover:bg-sky-100 transition-all uppercase text-[10px] tracking-widest border border-sky-100">
-                            <i class="fas fa-user-edit mr-2"></i> Actualizar Datos
-                        </button>
-                        <button onclick="mostrarConfirmacionSimple('¿Desea cerrar sesión?', 'salir')"
-                            class="w-full bg-red-50 text-red-600 py-4 rounded-2xl font-black hover:bg-red-100 transition-all uppercase text-[10px] tracking-widest border border-red-100">
-                            <i class="fas fa-sign-out-alt mr-2"></i> Cerrar Sesión
-                        </button>
+
                     </div>
                 </div>
             </div>
         </header>
 
-        <!-- Nodos de datos ocultos (retrocompatibilidad) -->
+        <!-- Nodos ocultos (retrocompatibilidad) -->
         <span id="perfil-nombres"     class="hidden" aria-hidden="true"></span>
         <span id="perfil-apellidos"   class="hidden" aria-hidden="true"></span>
         <span id="perfil-correo"      class="hidden" aria-hidden="true"></span>
@@ -335,7 +380,6 @@
         </div>
     </div>
 
-    <!-- Un solo script — paciente_ui.js eliminado -->
     <script src="{{ url_for('static', filename='js/paciente.js') }}"></script>
 </body>
 </html>
