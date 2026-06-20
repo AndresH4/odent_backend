@@ -73,6 +73,27 @@ def _validar_hora_minimo_tres_horas(hora_str, fecha_str):
         return False
 
 
+def _tiene_cita_activa_por_usuario(cur, usuario_id):
+    """
+    Consulta REAL a la base de datos: verifica si el Usuario_ID (paciente
+    logueado) ya tiene una cita registrada cuyo estado de agenda sea
+    'Disponible' (EstadoAgenda_ID = 1, slot reservado sintéticamente) u
+    'Ocupado' (EstadoAgenda_ID = 2), es decir, una cita Activa/Pendiente.
+    Se resuelve el Paciente_ID a partir del Usuario_ID mediante JOIN con
+    la tabla paciente, sin confiar en ningún dato enviado por el frontend.
+    """
+    cur.execute("""
+        SELECT c.Cita_ID
+        FROM cita c
+        JOIN paciente p ON p.Paciente_ID = c.Paciente_ID
+        JOIN agenda a   ON a.Agenda_ID   = c.Agenda_ID
+        WHERE p.Usuario_ID = ?
+          AND a.EstadoAgenda_ID IN (1, 2)
+        LIMIT 1
+    """, (usuario_id,))
+    return cur.fetchone() is not None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # USUARIOS  —  GET /api/usuarios
 # ─────────────────────────────────────────────────────────────────────────────
@@ -419,7 +440,7 @@ def crear_cita():
 
         # ── Verificar que el paciente existe en BD (evita datos falsos) ───────
         cur.execute(
-            "SELECT p.Paciente_ID, u.Rol_ID FROM paciente p JOIN usuarios u ON u.Usuario_ID = p.Usuario_ID WHERE p.Paciente_ID = ?",
+            "SELECT p.Paciente_ID, p.Usuario_ID, u.Rol_ID FROM paciente p JOIN usuarios u ON u.Usuario_ID = p.Usuario_ID WHERE p.Paciente_ID = ?",
             (paciente_id,)
         )
         paciente_row = cur.fetchone()
@@ -427,6 +448,8 @@ def crear_cita():
             return _json_error('El paciente no existe en el sistema.', 404)
         if paciente_row['Rol_ID'] != 3:
             return _json_error('El usuario no tiene rol de paciente.', 403)
+
+        usuario_id_paciente = paciente_row['Usuario_ID']
 
         # ── Verificar slot de agenda ──────────────────────────────────────────
         cur.execute(
@@ -451,21 +474,20 @@ def crear_cita():
                 'Para citas del día de hoy, la hora debe ser al menos 3 horas posterior a la hora actual.'
             )
 
-        # ── Verificar que el paciente no tenga ya una cita activa ─────────────
-        cur.execute("""
-            SELECT c.Cita_ID
-            FROM cita c
-            JOIN agenda a ON a.Agenda_ID = c.Agenda_ID
-            WHERE c.Paciente_ID = ?
-              AND a.EstadoAgenda_ID IN (1, 2)
-        """, (paciente_id,))
-        if cur.fetchone():
-            return _json_error('El paciente ya tiene una cita activa pendiente.')
+        # ── VALIDACIÓN DE CITA ÚNICA — CONSULTA REAL A LA BASE DE DATOS ───────
+        # Se verifica directamente contra la BD (Usuario_ID del paciente
+        # logueado, resuelto vía paciente_row) si ya existe una cita con
+        # estado Activo/Pendiente (EstadoAgenda_ID 1 = Disponible/reservado
+        # sintéticamente, 2 = Ocupado). No se confía en ningún dato del
+        # frontend para esta validación.
+        if _tiene_cita_activa_por_usuario(cur, usuario_id_paciente):
+            return _json_error('No puedes agendar. Ya tienes una cita activa en el sistema.', 409)
 
         cur.execute(
             "INSERT INTO cita (Paciente_ID, Agenda_ID, Motivo_Consulta) VALUES (?, ?, ?)",
             (paciente_id, agenda_id, motivo)
         )
+        # ── Cita_ID autoincremental generado por la BD ────────────────────────
         cita_id = cur.lastrowid
 
         cur.execute(
@@ -473,6 +495,7 @@ def crear_cita():
         )
 
         con.commit()
+        # ── Se retorna el Cita_ID real para que el frontend lo use ────────────
         return _json_ok({"ok": True, "Cita_ID": cita_id, "status": "Cita registrada con éxito."}, 201)
 
     except Exception as exc:

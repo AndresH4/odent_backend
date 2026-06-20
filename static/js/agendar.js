@@ -719,7 +719,8 @@ async function finalizarTodo() {
         }
     }
 
-    // POST /api/citas — el backend valida Paciente_ID, Agenda_ID y fecha/hora
+    // POST /api/citas — el backend valida Paciente_ID, Agenda_ID, fecha/hora
+    // y la restricción de cita única consultando directamente la base de datos.
     try {
         const res  = await fetch('/api/citas', {
             method:  'POST',
@@ -731,6 +732,19 @@ async function finalizarTodo() {
             })
         });
         const data = await res.json();
+
+        // ── Manejo específico del rechazo por cita activa existente ───────────
+        // El backend responde 409 (Conflict) cuando la consulta a la BD confirma
+        // que el paciente ya tiene una cita Activa/Pendiente. En este caso NO se
+        // limpia el formulario ni se cambia de pantalla: solo se cierra el modal
+        // de verificación y se notifica al usuario para que pueda corregir/ver
+        // su cita existente.
+        if (res.status === 409) {
+            cerrarModal();
+            alert(data.error || 'No puedes agendar. Ya tienes una cita activa en el sistema.');
+            return;
+        }
+
         cerrarModal();
         if (data.ok) {
             const msgEl = document.getElementById('mensajeExito');

@@ -1,18 +1,7 @@
+### Archivo: modulo_usuarios/routes.py
 """
 modulo_usuarios/routes.py — Stylo Dental
 Blueprint de usuarios con creación TRANSACCIONAL y atómica.
- 
-Flujo de transacción en add_usuario():
-  1. BEGIN (implícito al desactivar autocommit con isolation_level)
-  2. INSERT INTO usuarios          → obtiene Usuario_ID con lastrowid
-  3. Según rol_id:
-       Rol 1 (Administrador) → INSERT INTO administrador
-       Rol 2 (Especialista)  → INSERT INTO especialista   → obtiene Especialista_ID
-                               INSERT INTO especialista_especialidad (si viene especialidad_id)
-       Rol 3 (Paciente)      → INSERT INTO paciente       → obtiene Paciente_ID
-                               INSERT INTO afiliacion (obligatorio: eps_id + tipo_afiliacion_id)
-  4. COMMIT  — solo si todos los pasos anteriores fueron exitosos.
-  5. ROLLBACK — en cualquier excepción: ningún registro queda en la BD.
 """
  
 from flask import Blueprint, request, jsonify, render_template
@@ -35,7 +24,7 @@ usuarios_bp = Blueprint('usuarios_bp', __name__)
 def login():
     datos = request.get_json(silent=True) or {}
  
-    correo    = (datos.get('correo') or '').strip().lower()
+    correo     = (datos.get('correo') or '').strip().lower()
     contrasena = datos.get('contrasena') or ''
  
     if not correo or not contrasena:
@@ -58,6 +47,29 @@ def login():
  
         usuario_data = dict(fila)
         usuario_data.pop('Contrasena', None)
+
+        # ── CORRECCIÓN: Si es especialista (Rol_ID == 2), adjuntar Especialista_ID
+        # para que especialista.js pueda cargar sus citas sin una petición extra.
+        if usuario_data.get('Rol_ID') == 2:
+            cursor.execute(
+                "SELECT Especialista_ID FROM especialista WHERE Usuario_ID = ?",
+                (usuario_data['Usuario_ID'],)
+            )
+            esp_row = cursor.fetchone()
+            if esp_row:
+                usuario_data['Especialista_ID'] = esp_row['Especialista_ID']
+
+                # Adjuntar también la especialidad del especialista para mostrarlo en UI
+                cursor.execute("""
+                    SELECT esp.Nombre_Especialidad
+                    FROM especialista_especialidad ee
+                    JOIN especialidad esp ON esp.Especialidad_ID = ee.Especialidad_ID
+                    WHERE ee.Especialista_ID = ?
+                    LIMIT 1
+                """, (esp_row['Especialista_ID'],))
+                esp_nombre = cursor.fetchone()
+                if esp_nombre:
+                    usuario_data['Especialidad'] = esp_nombre['Nombre_Especialidad']
  
         return jsonify({"ok": True, "usuario": usuario_data}), 200
  
@@ -105,29 +117,6 @@ def get_usuarios():
 # =============================================================================
 # USUARIOS — POST creación TRANSACCIONAL ATÓMICA
 # =============================================================================
-# Payload esperado desde creacion.js:
-# {
-#   "nombres":            str,
-#   "apellidos":          str,
-#   "documento":          str,
-#   "telefono":           str,
-#   "correo":             str,
-#   "contrasena":         str,
-#   "fecha_nacimiento":   str  (YYYY-MM-DD),
-#   "genero_id":          int  (default 1),
-#   "tipo_documento_id":  int  (default 1),
-#   "estado_id":          int  (default 1),
-#   "rol_id":             int  (1=Admin, 2=Especialista, 3=Paciente),
-#
-#   -- Solo Paciente (rol_id = 3) — OBLIGATORIOS:
-#   "eps_id":             int,
-#   "tipo_afiliacion_id": int,
-#
-#   -- Solo Especialista (rol_id = 2):
-#   "tarjeta_profesional": str,
-#   "especialidad_id":     int  (opcional)
-# }
-# =============================================================================
  
 @usuarios_bp.route('/usuarios', methods=['POST'])
 def add_usuario():
@@ -135,7 +124,6 @@ def add_usuario():
     if not datos:
         return jsonify({"ok": False, "error": "No se recibió JSON válido"}), 400
  
-    # ── Campos base (tabla usuarios) ──────────────────────────────────────────
     nombres           = (datos.get('nombres') or '').strip()
     apellidos         = (datos.get('apellidos') or '').strip()
     documento         = (datos.get('documento') or '').strip()
@@ -148,18 +136,16 @@ def add_usuario():
     estado_id         = int(datos.get('estado_id') or 1)
     rol_id            = int(datos.get('rol_id') or 3)
  
-    # ── Validaciones de campos obligatorios ───────────────────────────────────
     errores = []
-    if not nombres:        errores.append("nombres es requerido")
-    if not apellidos:      errores.append("apellidos es requerido")
-    if not documento:      errores.append("documento es requerido")
-    if not telefono:       errores.append("telefono es requerido")
-    if not correo:         errores.append("correo es requerido")
-    if not contrasena:     errores.append("contrasena es requerida")
+    if not nombres:    errores.append("nombres es requerido")
+    if not apellidos:  errores.append("apellidos es requerido")
+    if not documento:  errores.append("documento es requerido")
+    if not telefono:   errores.append("telefono es requerido")
+    if not correo:     errores.append("correo es requerido")
+    if not contrasena: errores.append("contrasena es requerida")
     if rol_id not in (1, 2, 3):
         errores.append("rol_id inválido (debe ser 1, 2 o 3)")
  
-    # Paciente: afiliación obligatoria
     eps_id             = datos.get('eps_id')
     tipo_afiliacion_id = datos.get('tipo_afiliacion_id')
  
@@ -169,7 +155,6 @@ def add_usuario():
         if not tipo_afiliacion_id:
             errores.append("tipo_afiliacion_id es obligatorio para Paciente")
  
-    # Especialista: tarjeta profesional obligatoria
     tarjeta_profesional = (datos.get('tarjeta_profesional') or '').strip()
     especialidad_id     = datos.get('especialidad_id')
  
@@ -179,18 +164,15 @@ def add_usuario():
     if errores:
         return jsonify({"ok": False, "error": "; ".join(errores)}), 400
  
-    # ── TRANSACCIÓN ATÓMICA ───────────────────────────────────────────────────
     conexion = None
     try:
-        # isolation_level=None → control manual de transacción
         conexion = get_db_connection()
-        conexion.isolation_level = None          # autocommit OFF
+        conexion.isolation_level = None
         conexion.execute("PRAGMA foreign_keys = ON")
         cursor = conexion.cursor()
  
         cursor.execute("BEGIN")
  
-        # PASO 1 — Insertar en usuarios
         cursor.execute(
             """INSERT INTO usuarios
                (Nombres, Apellidos, TipoDoc_ID, NumeroDocumento, Contrasena,
@@ -203,16 +185,13 @@ def add_usuario():
         if not usuario_id:
             raise ValueError("No se obtuvo Usuario_ID tras el INSERT en usuarios")
  
-        # PASO 2 — Tabla hija según rol
         if rol_id == 1:
-            # ── Administrador ────────────────────────────────────────────────
             cursor.execute(
                 "INSERT INTO administrador (Usuario_ID) VALUES (?)",
                 (usuario_id,)
             )
  
         elif rol_id == 2:
-            # ── Especialista ─────────────────────────────────────────────────
             cursor.execute(
                 "INSERT INTO especialista (Usuario_ID, Tarjeta_Profesional) VALUES (?, ?)",
                 (usuario_id, tarjeta_profesional)
@@ -221,7 +200,6 @@ def add_usuario():
             if not especialista_id:
                 raise ValueError("No se obtuvo Especialista_ID")
  
-            # Especialidad (opcional)
             if especialidad_id:
                 cursor.execute(
                     """INSERT INTO especialista_especialidad (Especialista_ID, Especialidad_ID)
@@ -230,7 +208,6 @@ def add_usuario():
                 )
  
         elif rol_id == 3:
-            # ── Paciente ─────────────────────────────────────────────────────
             cursor.execute(
                 "INSERT INTO paciente (Usuario_ID) VALUES (?)",
                 (usuario_id,)
@@ -239,14 +216,12 @@ def add_usuario():
             if not paciente_id:
                 raise ValueError("No se obtuvo Paciente_ID")
  
-            # Afiliación obligatoria
             cursor.execute(
                 """INSERT INTO afiliacion (Usuario_ID, EPS_ID, TipoEPS_ID, Fecha_Afiliacion)
                    VALUES (?, ?, ?, ?)""",
                 (usuario_id, int(eps_id), int(tipo_afiliacion_id), date.today().isoformat())
             )
  
-        # PASO 3 — COMMIT: todo fue bien
         cursor.execute("COMMIT")
  
         return jsonify({
@@ -256,7 +231,6 @@ def add_usuario():
         }), 201
  
     except Exception as e:
-        # ROLLBACK: cualquier fallo deshace TODO (cero registros huérfanos)
         if conexion:
             try:
                 conexion.execute("ROLLBACK")
@@ -368,7 +342,7 @@ def vista_creacion_usuario():
  
  
 # =============================================================================
-# TIPO EPS — usado por aseguramiento.js para poblar "Tipo de EPS"
+# TIPO EPS
 # =============================================================================
  
 @usuarios_bp.route('/tipo-eps', methods=['GET'])
@@ -389,7 +363,7 @@ def get_tipo_eps():
  
  
 # =============================================================================
-# EPS — listar todas / crear nueva (usado por el botón "Otro" en aseguramiento.js)
+# EPS
 # =============================================================================
  
 @usuarios_bp.route('/eps', methods=['GET', 'POST'])
@@ -400,10 +374,6 @@ def crud_eps():
             conexion = get_db_connection()
             conexion.row_factory = sqlite3.Row
             cursor = conexion.cursor()
-            # Se incluye Regimen_ID como ID_Tipo_EPS para permitir el filtrado
-            # reactivo en aseguramiento.js (filtrarEPSporTipo) sin alterar el
-            # resto de la tabla. Si tu negocio diferencia EPS por TipoEPS_ID en
-            # vez de Regimen_ID, ajusta esta consulta a tu lógica real.
             cursor.execute(
                 "SELECT EPS_ID AS ID_EPS, Nombre_EPS, Telefono_EPS, Regimen_ID AS ID_Tipo_EPS FROM eps"
             )
@@ -415,7 +385,6 @@ def crud_eps():
             if conexion:
                 conexion.close()
  
-    # POST — crear nueva EPS (opción "Otro" del formulario)
     datos = request.get_json(silent=True) or {}
     nombre_eps  = (datos.get('Nombre_EPS') or '').strip()
     tipo_eps_id = datos.get('ID_Tipo_EPS')
@@ -430,8 +399,6 @@ def crud_eps():
     try:
         conexion = get_db_connection()
         cursor = conexion.cursor()
-        # La tabla eps exige Regimen_ID NOT NULL; se usa el ID_Tipo_EPS recibido
-        # como Regimen_ID para mantener compatibilidad con el esquema actual.
         cursor.execute(
             "INSERT INTO eps (Nombre_EPS, Telefono_EPS, Regimen_ID) VALUES (?, ?, ?)",
             (nombre_eps, telefono or 'N/A', int(tipo_eps_id))
@@ -447,7 +414,7 @@ def crud_eps():
  
  
 # =============================================================================
-# REGIMEN EPS — usado por aseguramiento.js para poblar "Régimen"
+# REGIMEN EPS
 # =============================================================================
  
 @usuarios_bp.route('/regimen-eps', methods=['GET'])
@@ -470,7 +437,7 @@ def get_regimen_eps():
  
  
 # =============================================================================
-# PACIENTE — crear / actualizar (usado por aseguramiento.js)
+# PACIENTE
 # =============================================================================
  
 @usuarios_bp.route('/paciente', methods=['POST'])
@@ -487,7 +454,6 @@ def crear_paciente():
         conexion.row_factory = sqlite3.Row
         cursor = conexion.cursor()
  
-        # Si el usuario ya tiene registro de paciente, se reutiliza en vez de duplicar
         cursor.execute("SELECT Paciente_ID FROM paciente WHERE Usuario_ID = ?", (usuario_id,))
         existente = cursor.fetchone()
         if existente:
@@ -506,8 +472,6 @@ def crear_paciente():
  
 @usuarios_bp.route('/paciente/<int:id>', methods=['PUT'])
 def actualizar_paciente(id):
-    # La tabla paciente solo tiene Paciente_ID y Usuario_ID; no hay campos
-    # adicionales que actualizar aquí, así que se confirma su existencia.
     conexion = None
     try:
         conexion = get_db_connection()
@@ -526,7 +490,7 @@ def actualizar_paciente(id):
  
  
 # =============================================================================
-# AFILIACION — crear / actualizar (usado por aseguramiento.js)
+# AFILIACION
 # =============================================================================
  
 @usuarios_bp.route('/afiliacion', methods=['POST'])
@@ -547,9 +511,6 @@ def crear_afiliacion():
     try:
         conexion = get_db_connection()
         cursor = conexion.cursor()
-        # La tabla afiliacion exige TipoEPS_ID NOT NULL; se usa el valor de
-        # ID_Regimen_EPS recibido también como TipoEPS_ID para mantener
-        # compatibilidad con el esquema actual de la base de datos.
         cursor.execute(
             """INSERT INTO afiliacion (Usuario_ID, EPS_ID, TipoEPS_ID, Fecha_Afiliacion)
                VALUES (?, ?, ?, ?)""",
