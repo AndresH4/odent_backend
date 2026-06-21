@@ -1,4 +1,3 @@
-### Archivo: modulo_usuarios/routes.py
 """
 modulo_usuarios/routes.py — Stylo Dental
 Blueprint de usuarios con creación TRANSACCIONAL y atómica.
@@ -147,7 +146,9 @@ def add_usuario():
         errores.append("rol_id inválido (debe ser 1, 2 o 3)")
  
     eps_id             = datos.get('eps_id')
-    tipo_afiliacion_id = datos.get('tipo_afiliacion_id')
+    # Acepta 'tipo_eps_id' (campo real enviado desde creacion.js) y mantiene
+    # compatibilidad con 'tipo_afiliacion_id' para otros posibles clientes.
+    tipo_afiliacion_id = datos.get('tipo_eps_id') or datos.get('tipo_afiliacion_id')
  
     if rol_id == 3:
         if not eps_id:
@@ -160,6 +161,8 @@ def add_usuario():
  
     if rol_id == 2 and not tarjeta_profesional:
         errores.append("tarjeta_profesional es obligatoria para Especialista")
+    if rol_id == 2 and tarjeta_profesional and (len(tarjeta_profesional) < 4 or len(tarjeta_profesional) > 10):
+        errores.append("tarjeta_profesional debe tener entre 4 y 10 caracteres")
  
     if errores:
         return jsonify({"ok": False, "error": "; ".join(errores)}), 400
@@ -172,6 +175,38 @@ def add_usuario():
         cursor = conexion.cursor()
  
         cursor.execute("BEGIN")
+ 
+        # ── Validaciones de duplicados / integridad referencial contra la BD real ──
+        cursor.execute("SELECT 1 FROM usuarios WHERE LOWER(Correo) = ?", (correo,))
+        if cursor.fetchone():
+            cursor.execute("ROLLBACK")
+            return jsonify({"ok": False, "error": "El correo electrónico ya está registrado."}), 409
+ 
+        cursor.execute("SELECT 1 FROM usuarios WHERE NumeroDocumento = ?", (documento,))
+        if cursor.fetchone():
+            cursor.execute("ROLLBACK")
+            return jsonify({"ok": False, "error": "El número de documento ya está registrado."}), 409
+ 
+        if rol_id == 2:
+            cursor.execute("SELECT 1 FROM especialista WHERE Tarjeta_Profesional = ?", (tarjeta_profesional,))
+            if cursor.fetchone():
+                cursor.execute("ROLLBACK")
+                return jsonify({"ok": False, "error": "La tarjeta profesional ya está registrada."}), 409
+            if especialidad_id:
+                cursor.execute("SELECT 1 FROM especialidad WHERE Especialidad_ID = ?", (int(especialidad_id),))
+                if not cursor.fetchone():
+                    cursor.execute("ROLLBACK")
+                    return jsonify({"ok": False, "error": "La especialidad seleccionada no existe."}), 400
+ 
+        if rol_id == 3:
+            cursor.execute("SELECT 1 FROM eps WHERE EPS_ID = ?", (int(eps_id),))
+            if not cursor.fetchone():
+                cursor.execute("ROLLBACK")
+                return jsonify({"ok": False, "error": "La EPS seleccionada no existe."}), 400
+            cursor.execute("SELECT 1 FROM tipo_eps WHERE TipoEPS_ID = ?", (int(tipo_afiliacion_id),))
+            if not cursor.fetchone():
+                cursor.execute("ROLLBACK")
+                return jsonify({"ok": False, "error": "El tipo de EPS seleccionado no existe."}), 400
  
         cursor.execute(
             """INSERT INTO usuarios
@@ -375,7 +410,7 @@ def crud_eps():
             conexion.row_factory = sqlite3.Row
             cursor = conexion.cursor()
             cursor.execute(
-                "SELECT EPS_ID AS ID_EPS, Nombre_EPS, Telefono_EPS, Regimen_ID AS ID_Tipo_EPS FROM eps"
+                "SELECT EPS_ID AS ID_EPS, Nombre_EPS, Telefono_EPS, Regimen_ID FROM eps"
             )
             filas = cursor.fetchall()
             return jsonify({"ok": True, "data": [dict(fila) for fila in filas]}), 200
@@ -443,7 +478,11 @@ def get_regimen_eps():
 @usuarios_bp.route('/paciente', methods=['POST'])
 def crear_paciente():
     datos = request.get_json(silent=True) or {}
-    usuario_id = datos.get('ID_Usuario')
+    usuario_id      = datos.get('ID_Usuario')
+    grupo_sanguineo = (datos.get('Grupo_Sanguineo') or '').strip() or None
+    alergias        = (datos.get('Alergias') or '').strip() or None
+    antecedentes    = (datos.get('Antecedentes') or '').strip() or None
+    observaciones   = (datos.get('Observaciones') or '').strip() or None
  
     if not usuario_id:
         return jsonify({"ok": False, "error": "ID_Usuario es requerido"}), 400
@@ -457,9 +496,20 @@ def crear_paciente():
         cursor.execute("SELECT Paciente_ID FROM paciente WHERE Usuario_ID = ?", (usuario_id,))
         existente = cursor.fetchone()
         if existente:
+            cursor.execute(
+                """UPDATE paciente
+                   SET Grupo_Sanguineo = ?, Alergias = ?, Antecedentes = ?, Observaciones = ?
+                   WHERE Paciente_ID = ?""",
+                (grupo_sanguineo, alergias, antecedentes, observaciones, existente["Paciente_ID"])
+            )
+            conexion.commit()
             return jsonify({"ok": True, "data": {"ID_Paciente": existente["Paciente_ID"]}}), 200
  
-        cursor.execute("INSERT INTO paciente (Usuario_ID) VALUES (?)", (usuario_id,))
+        cursor.execute(
+            """INSERT INTO paciente (Usuario_ID, Grupo_Sanguineo, Alergias, Antecedentes, Observaciones)
+               VALUES (?, ?, ?, ?, ?)""",
+            (usuario_id, grupo_sanguineo, alergias, antecedentes, observaciones)
+        )
         conexion.commit()
         nuevo_id = cursor.lastrowid
         return jsonify({"ok": True, "data": {"ID_Paciente": nuevo_id}}), 201
@@ -498,7 +548,9 @@ def crear_afiliacion():
     datos = request.get_json(silent=True) or {}
     usuario_id     = datos.get('ID_Usuario')
     eps_id         = datos.get('ID_EPS')
-    regimen_eps_id = datos.get('ID_Regimen_EPS')
+    # Acepta 'ID_Tipo_EPS' (campo real enviado desde creacion.js) y mantiene
+    # compatibilidad con 'ID_Regimen_EPS' para otros posibles clientes.
+    regimen_eps_id = datos.get('ID_Tipo_EPS') or datos.get('ID_Regimen_EPS')
  
     if not usuario_id:
         return jsonify({"ok": False, "error": "ID_Usuario es requerido"}), 400
@@ -510,7 +562,21 @@ def crear_afiliacion():
     conexion = None
     try:
         conexion = get_db_connection()
+        conexion.row_factory = sqlite3.Row
         cursor = conexion.cursor()
+ 
+        cursor.execute("SELECT Afiliacion_ID FROM afiliacion WHERE Usuario_ID = ?", (usuario_id,))
+        existente = cursor.fetchone()
+        if existente:
+            cursor.execute(
+                """UPDATE afiliacion
+                   SET EPS_ID = ?, TipoEPS_ID = ?, Fecha_Afiliacion = ?
+                   WHERE Afiliacion_ID = ?""",
+                (eps_id, regimen_eps_id, date.today().isoformat(), existente["Afiliacion_ID"])
+            )
+            conexion.commit()
+            return jsonify({"ok": True, "data": {"ID_Afiliacion": existente["Afiliacion_ID"]}}), 200
+ 
         cursor.execute(
             """INSERT INTO afiliacion (Usuario_ID, EPS_ID, TipoEPS_ID, Fecha_Afiliacion)
                VALUES (?, ?, ?, ?)""",
@@ -530,7 +596,7 @@ def crear_afiliacion():
 def actualizar_afiliacion(id):
     datos = request.get_json(silent=True) or {}
     eps_id         = datos.get('ID_EPS')
-    regimen_eps_id = datos.get('ID_Regimen_EPS')
+    regimen_eps_id = datos.get('ID_Tipo_EPS') or datos.get('ID_Regimen_EPS')
     fecha          = datos.get('Fecha_Afiliacion') or date.today().isoformat()
  
     if not eps_id:

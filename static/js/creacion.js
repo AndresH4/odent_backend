@@ -624,12 +624,12 @@ async function registrarAfiliacionEnBackend(usuarioId, epsId, tipoEpsId) {
 }
 
 // ── CREAR EPS NUEVA ────────────────────────────────────────────────────────────
-async function crearNuevaEPS(nombre, telefono, tipoEpsId) {
+async function crearNuevaEPS(nombre, telefono, regimenId) {
     try {
         const res  = await fetch('/api/eps', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ Nombre_EPS: nombre, ID_Tipo_EPS: tipoEpsId, Telefono: telefono })
+            body:    JSON.stringify({ Nombre_EPS: nombre, ID_Tipo_EPS: regimenId, Telefono: telefono })
         });
         const data = await res.json();
         if (!data.ok) { console.error('Error al crear EPS:', data.error); return null; }
@@ -682,13 +682,13 @@ async function crearUsuario() {
 
     const tipoDocTexto = document.getElementById("tipoDocumento").value;
     const mapaTipoDoc  = {
-        "Cedula de ciudadania": 1,
+        "Cedula de ciudadanía": 1,
         "Tarjeta de identidad": 2,
-        "Permiso por protección temporal": 3
+        "Cedula de extranjería": 3
     };
     const tipoDocId = mapaTipoDoc[tipoDocTexto] || 1;
 
-    const epsSelect = document.getElementById("eps");
+    const epsSelect = document.getElementById('eps');
     const tipoEpsId = parseInt(document.getElementById("tipoEps").value, 10)  || null;
     const regimenId = parseInt(document.getElementById("regimen").value, 10)   || null;
     let   epsId     = epsSelect.value === EPS_OTRO_VALUE
@@ -699,7 +699,7 @@ async function crearUsuario() {
         const nombreOtro   = document.getElementById('eps-otro-nombre-creacion').value.trim();
         const telefonoOtro = document.getElementById('eps-otro-telefono-creacion').value.trim();
         mostrarProgreso("Registrando nueva EPS...");
-        const nuevoEpsId = await crearNuevaEPS(nombreOtro, telefonoOtro, tipoEpsId);
+        const nuevoEpsId = await crearNuevaEPS(nombreOtro, telefonoOtro, regimenId);
         if (!nuevoEpsId) {
             mostrarError("No se pudo registrar la nueva EPS. Intenta de nuevo.");
             return;

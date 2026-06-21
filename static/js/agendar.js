@@ -8,6 +8,8 @@ let pacienteIdAgendar  = null;
 let especialistasData  = [];
 let fechaISOAgendar    = '';
 let _sesionPacienteAgendar = null;
+let _tieneMultaActualAgendar = false;
+let _confirmResolver = null;
 
 const HORAS_DEFAULT = [
     '07:00:00', '07:30:00', '08:00:00', '08:30:00', '09:00:00', '09:30:00',
@@ -54,6 +56,69 @@ function resetearFormulario() {
     slotSeleccionado  = null;
     pacienteIdAgendar = null;
     agendaDisponible  = [];
+    _tieneMultaActualAgendar = false;
+}
+
+// ─── Modal genérico de alerta (reemplazo de alert()) ──────────────────────────
+function mostrarAlertaGenerica(mensaje, titulo, tipo) {
+    const modal   = document.getElementById('modalAlertaGenerica');
+    const msgEl   = document.getElementById('mensajeAlertaGenerica');
+    const tituloEl = document.getElementById('tituloAlertaGenerica');
+    const headerEl = document.getElementById('headerAlertaGenerica');
+    const iconoEl  = document.getElementById('iconoAlertaGenerica');
+
+    if (msgEl) msgEl.textContent = mensaje || '';
+    if (tituloEl) tituloEl.textContent = titulo || 'Aviso';
+
+    if (headerEl) {
+        headerEl.className = 'modal-header ' + (tipo === 'error' ? 'modal-header-red' : 'modal-header-orange');
+    }
+    if (iconoEl) {
+        iconoEl.className = 'modal-icon ' + (tipo === 'error' ? 'modal-icon-red' : 'modal-icon-orange-suave');
+        iconoEl.innerHTML = tipo === 'error'
+            ? '<i class="fas fa-times-circle"></i>'
+            : '<i class="fas fa-info-circle"></i>';
+    }
+
+    if (modal) modal.style.display = 'flex';
+}
+
+function cerrarModalAlertaGenerica() {
+    const modal = document.getElementById('modalAlertaGenerica');
+    if (modal) modal.style.display = 'none';
+}
+
+// ─── Modal genérico de confirmación (reemplazo de confirm()) ──────────────────
+function mostrarConfirmGenerico(mensaje) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('modalConfirmGenerico');
+        const msgEl = document.getElementById('mensajeConfirmGenerico');
+        if (msgEl) msgEl.textContent = mensaje || '';
+        _confirmResolver = resolve;
+        if (modal) modal.style.display = 'flex';
+    });
+}
+
+function _resolverConfirmGenerico(valor) {
+    const modal = document.getElementById('modalConfirmGenerico');
+    if (modal) modal.style.display = 'none';
+    if (_confirmResolver) {
+        _confirmResolver(valor);
+        _confirmResolver = null;
+    }
+}
+
+// ─── Interfaz 3: Modal de error por cita activa ───────────────────────────────
+function mostrarModalErrorCitaActiva(mensaje) {
+    const modal = document.getElementById('modalErrorCitaActiva');
+    const msgEl = document.getElementById('mensajeErrorCitaActiva');
+    if (msgEl && mensaje) msgEl.textContent = mensaje;
+    if (modal) modal.style.display = 'flex';
+}
+
+function cerrarModalErrorCitaActiva() {
+    const modal = document.getElementById('modalErrorCitaActiva');
+    if (modal) modal.style.display = 'none';
 }
 
 // ─── Autocompletar datos del paciente logueado ────────────────────────────────
@@ -522,7 +587,7 @@ async function _sincronizarDatosPaciente() {
     }
 }
 
-// ─── Validar y abrir modal de verificación ────────────────────────────────────
+// ─── Validar y abrir modal de verificación (Interfaz 1 / Interfaz 2) ──────────
 async function validarYAgendar() {
     const campos   = ['nombre', 'apellido', 'tipo-doc', 'num-doc', 'telefono', 'correo', 'servicio', 'fecha', 'hora'];
     const regexLetr = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ ]+$/;
@@ -574,17 +639,20 @@ async function validarYAgendar() {
     if (!valido) return;
 
     seleccionarSlot();
-    if (!slotSeleccionado) { alert('Seleccione un horario disponible.'); return; }
+    if (!slotSeleccionado) {
+        mostrarAlertaGenerica('Seleccione un horario disponible.', 'Falta información', 'error');
+        return;
+    }
 
     // Validación adicional de hora (mínimo 3 horas si es hoy)
     const fechaSeleccionada = leerFechaISO();
     if (!_horaEsValida(slotSeleccionado.Hora_Inicio, fechaSeleccionada)) {
-        alert('La hora seleccionada debe ser al menos 3 horas posterior a la hora actual para citas del día de hoy.');
+        mostrarAlertaGenerica('La hora seleccionada debe ser al menos 3 horas posterior a la hora actual para citas del día de hoy.', 'Horario no válido', 'error');
         return;
     }
 
     if (!_sesionPacienteAgendar || !_sesionPacienteAgendar.Usuario_ID) {
-        alert('Sesión no válida. Por favor inicie sesión nuevamente.');
+        mostrarAlertaGenerica('Sesión no válida. Por favor inicie sesión nuevamente.', 'Sesión expirada', 'error');
         window.location.replace('/login');
         return;
     }
@@ -595,12 +663,12 @@ async function validarYAgendar() {
     try {
         const resPac = await fetch(`/api/paciente/por-usuario/${_sesionPacienteAgendar.Usuario_ID}`);
         if (!resPac.ok) {
-            alert('No se encontró el paciente en el sistema. Por favor contacte soporte.');
+            mostrarAlertaGenerica('No se encontró el paciente en el sistema. Por favor contacte soporte.', 'Paciente no encontrado', 'error');
             return;
         }
         const pac = await resPac.json();
         if (!pac || !pac.Paciente_ID) {
-            alert('No se encontró el paciente en el sistema. Por favor contacte soporte.');
+            mostrarAlertaGenerica('No se encontró el paciente en el sistema. Por favor contacte soporte.', 'Paciente no encontrado', 'error');
             return;
         }
         pacienteIdAgendar = pac.Paciente_ID;
@@ -610,11 +678,14 @@ async function validarYAgendar() {
 
         // Verificar multa activa
         const tieneMulta = await _verificarMultaActiva(pacienteIdAgendar);
+        _tieneMultaActualAgendar = tieneMulta;
 
         const alerta = document.getElementById('alertaMulta');
         const header = document.getElementById('headerVerificacion');
         const btnFin = document.getElementById('btnFinal');
 
+        // ── Interfaz 2: Confirmación con Multa (paleta suave) ──────────────────
+        // ── Interfaz 1: Confirmación Normal ─────────────────────────────────────
         if (tieneMulta) {
             alerta?.classList.remove('hidden');
             if (header) header.className = 'modal-header modal-header-orange';
@@ -627,11 +698,12 @@ async function validarYAgendar() {
 
     } catch (e) {
         console.error('[agendar] Error verificando paciente:', e);
-        alert('Error de conexión. Intente de nuevo.');
+        mostrarAlertaGenerica('Error de conexión. Intente de nuevo.', 'Error de conexión', 'error');
         return;
     }
 
-    // Mostrar resumen en modal usando datos de sesión ya sincronizados con la BD
+    // Mostrar resumen en modal con jerarquía profesional, usando datos de
+    // sesión ya sincronizados con la BD.
     const fecha   = leerFechaISO();
     const resumen = document.getElementById('resumen');
     if (resumen) {
@@ -643,29 +715,27 @@ async function validarYAgendar() {
         const tipoDocTexto = tipoDocEl ? (tipoDocEl.options[tipoDocEl.selectedIndex]?.text || tipoDocEl.value) : '';
 
         resumen.innerHTML = `
-            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">
-                <span style="font-size:10px;font-weight:700;color:#0284c7;text-transform:uppercase;display:block;margin-bottom:4px;">Paciente</span>
-                <p style="font-size:14px;color:#1e293b;font-weight:600;margin:0;text-transform:uppercase;">
-                    ${nombres} ${apellidos}
-                </p>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">
-                    <span style="font-size:10px;font-weight:700;color:#0284c7;text-transform:uppercase;display:block;margin-bottom:4px;">Documento</span>
-                    <p style="font-size:13px;color:#1e293b;margin:0;">${tipoDocTexto}: ${numDoc}</p>
-                </div>
-                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">
-                    <span style="font-size:10px;font-weight:700;color:#0284c7;text-transform:uppercase;display:block;margin-bottom:4px;">Teléfono</span>
-                    <p style="font-size:13px;color:#1e293b;margin:0;">${telefono}</p>
-                </div>
-            </div>
-            <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 14px;">
-                <span style="font-size:10px;font-weight:700;color:#0284c7;text-transform:uppercase;display:block;margin-bottom:4px;">Cita</span>
-                <p style="font-size:14px;color:#1e293b;font-weight:700;margin:0 0 4px;text-transform:uppercase;">${slotSeleccionado.Nombre_Especialidad}</p>
-                <p style="font-size:12px;color:#475569;margin:0;">
+            <div class="resumen-bloque-principal">
+                <span class="resumen-label">Cita Programada</span>
+                <p class="resumen-valor-grande">${slotSeleccionado.Nombre_Especialidad}</p>
+                <p class="resumen-valor-sub">
                     Dr(a). ${slotSeleccionado.NombreEspecialista} &nbsp;|&nbsp;
                     ${fecha} &nbsp;${formatHora(slotSeleccionado.Hora_Inicio)}
                 </p>
+            </div>
+            <div class="resumen-bloque-secundario">
+                <span class="resumen-label">Paciente</span>
+                <p class="resumen-valor" style="text-transform:uppercase;">${nombres} ${apellidos}</p>
+            </div>
+            <div class="resumen-grid-secundaria">
+                <div class="resumen-bloque-secundario">
+                    <span class="resumen-label">Documento</span>
+                    <p class="resumen-valor">${tipoDocTexto}: ${numDoc}</p>
+                </div>
+                <div class="resumen-bloque-secundario">
+                    <span class="resumen-label">Teléfono</span>
+                    <p class="resumen-valor">${telefono}</p>
+                </div>
             </div>`;
     }
 
@@ -675,7 +745,8 @@ async function validarYAgendar() {
 // ─── POST /api/citas — confirmar y guardar cita ───────────────────────────────
 async function finalizarTodo() {
     if (!slotSeleccionado || !pacienteIdAgendar) {
-        alert('Datos incompletos. Vuelva a intentarlo.');
+        cerrarModal();
+        mostrarAlertaGenerica('Datos incompletos. Vuelva a intentarlo.', 'Datos incompletos', 'error');
         return;
     }
 
@@ -683,25 +754,19 @@ async function finalizarTodo() {
     const fechaFinal = leerFechaISO();
     if (!fechaFinal || !_validarFechaNoAnterior(fechaFinal)) {
         cerrarModal();
-        alert('La fecha seleccionada no es válida. No se puede agendar con fecha anterior a la actual.');
+        mostrarAlertaGenerica('La fecha seleccionada no es válida. No se puede agendar con fecha anterior a la actual.', 'Fecha no válida', 'error');
         return;
     }
 
     if (!_horaEsValida(slotSeleccionado.Hora_Inicio, fechaFinal)) {
         cerrarModal();
-        alert('La hora seleccionada ya no es válida (debe ser al menos 3 horas posterior a la hora actual para citas de hoy).');
+        mostrarAlertaGenerica('La hora seleccionada ya no es válida (debe ser al menos 3 horas posterior a la hora actual para citas de hoy).', 'Horario no válido', 'error');
         return;
     }
 
-    // Segunda verificación de multa activa antes de confirmar (seguridad doble)
-    const tieneMulta = await _verificarMultaActiva(pacienteIdAgendar);
-    if (tieneMulta) {
-        const confirmar = confirm(
-            'Tiene una multa pendiente. Al confirmar la cita acepta pagarla el día de su atención. ¿Desea continuar?'
-        );
-        if (!confirmar) return;
-    }
-
+    // Interfaz 2: si hay multa activa, no se muestran pasos intermedios — se
+    // procede directamente a confirmar y luego se lanza el mensaje de éxito
+    // estándar con la nota de multa añadida.
     const motivo = document.getElementById('servicio').value;
 
     // Si slot sintético → persistirlo primero via POST /api/agenda
@@ -733,15 +798,15 @@ async function finalizarTodo() {
         });
         const data = await res.json();
 
-        // ── Manejo específico del rechazo por cita activa existente ───────────
+        // ── Interfaz 3: Manejo específico del rechazo por cita activa existente ──
         // El backend responde 409 (Conflict) cuando la consulta a la BD confirma
-        // que el paciente ya tiene una cita Activa/Pendiente. En este caso NO se
-        // limpia el formulario ni se cambia de pantalla: solo se cierra el modal
-        // de verificación y se notifica al usuario para que pueda corregir/ver
-        // su cita existente.
+        // que el paciente ya tiene una cita Activa/Pendiente. Se corta el flujo
+        // inmediatamente: se cierra el modal de verificación y se muestra el
+        // modal de error dedicado (Interfaz 3), sin limpiar el formulario ni
+        // cambiar de pantalla.
         if (res.status === 409) {
             cerrarModal();
-            alert(data.error || 'No puedes agendar. Ya tienes una cita activa en el sistema.');
+            mostrarModalErrorCitaActiva(data.error || 'No puedes agendar. Ya tienes una cita activa en el sistema.');
             return;
         }
 
@@ -749,19 +814,35 @@ async function finalizarTodo() {
         if (data.ok) {
             const msgEl = document.getElementById('mensajeExito');
             if (msgEl) msgEl.textContent = 'Su cita ha sido registrada exitosamente. ¡Gracias por confiar en Stylo Dental!';
+
+            // Interfaz 2: nota recordatoria de multa en el mensaje final de éxito
+            const notaMulta = document.getElementById('notaMultaExito');
+            if (notaMulta) {
+                if (_tieneMultaActualAgendar) {
+                    notaMulta.classList.remove('hidden');
+                } else {
+                    notaMulta.classList.add('hidden');
+                }
+            }
+
             document.getElementById('modalExito').style.display = 'flex';
         } else {
-            alert(`No se pudo agendar: ${data.error}`);
+            mostrarAlertaGenerica(data.error || 'No se pudo agendar la cita.', 'No se pudo agendar', 'error');
         }
     } catch (e) {
         cerrarModal();
-        alert('Error de conexión. Intente de nuevo.');
+        mostrarAlertaGenerica('Error de conexión. Intente de nuevo.', 'Error de conexión', 'error');
     }
 }
 
 function cerrarModal()         { document.getElementById('modalVerificacion').style.display = 'none'; }
 function cerrarModalBloqueo()  { document.getElementById('modalBloqueo').style.display      = 'none'; }
-function cerrarExitoYLimpiar() { document.getElementById('modalExito').style.display = 'none'; resetearFormulario(); }
+function cerrarExitoYLimpiar() {
+    document.getElementById('modalExito').style.display = 'none';
+    const notaMulta = document.getElementById('notaMultaExito');
+    if (notaMulta) notaMulta.classList.add('hidden');
+    resetearFormulario();
+}
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {

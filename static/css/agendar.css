@@ -405,6 +405,11 @@ select.form-control.invalid:focus {
 .modal-header-red    { background: linear-gradient(135deg, #dc2626, #ef4444); }
 .modal-header-orange { background: linear-gradient(135deg, #c2410c, #f97316); }
 
+/* Interfaz 3: cabecera de error suave (tonos rojos suaves) */
+.modal-header-error-suave {
+    background: linear-gradient(135deg, #fca5a5, #f87171);
+}
+
 .modal-body {
     padding: 24px;
 }
@@ -422,6 +427,12 @@ select.form-control.invalid:focus {
 .modal-icon-red   { background: #fef2f2; color: #dc2626; }
 .modal-icon-green { background: #f0fdf4; color: #16a34a; }
 
+/* Interfaz 3: icono de error suave */
+.modal-icon-error-suave { background: #fff1f1; color: #ef4444; }
+
+/* Modal genérico de alerta (reemplazo de alert) en tonos naranja suaves */
+.modal-icon-orange-suave { background: #fff7ed; color: #ea580c; }
+
 .modal-title {
     font-size: 18px;
     font-weight: 700;
@@ -436,14 +447,14 @@ select.form-control.invalid:focus {
     margin: 0 0 20px;
 }
 
-/* ─── ALERTA MULTA ─── */
+/* ─── ALERTA MULTA (paleta más suave) ─── */
 .alerta-multa {
-    background: #fff7ed;
-    border-left: 4px solid #f97316;
+    background: #fffaf3;
+    border-left: 4px solid #fdba74;
     border-radius: 0 8px 8px 0;
     padding: 12px 14px;
     margin-bottom: 16px;
-    color: #c2410c;
+    color: #c2731c;
 }
 
 .alerta-multa.hidden { display: none; }
@@ -466,6 +477,30 @@ select.form-control.invalid:focus {
     margin: 0;
 }
 
+/* ─── NOTA MULTA EN MODAL DE ÉXITO ─── */
+.nota-multa-exito {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    background: #fffaf3;
+    border-left: 4px solid #fdba74;
+    border-radius: 0 8px 8px 0;
+    padding: 10px 12px;
+    margin: -8px 0 20px;
+    color: #c2731c;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.5;
+    text-align: left;
+}
+
+.nota-multa-exito.hidden { display: none; }
+
+.nota-multa-exito i {
+    margin-top: 1px;
+    flex-shrink: 0;
+}
+
 /* ─── RESUMEN ─── */
 .resumen-container {
     display: flex;
@@ -480,6 +515,69 @@ select.form-control.invalid:focus {
 .resumen-container::-webkit-scrollbar { width: 4px; }
 .resumen-container::-webkit-scrollbar-track { background: transparent; }
 .resumen-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+/* ─── RESUMEN: JERARQUÍA PROFESIONAL ─── */
+.resumen-bloque-principal {
+    background: linear-gradient(135deg, #f0f9ff, #eff6ff);
+    border: 1.5px solid #bae6fd;
+    border-radius: 12px;
+    padding: 16px 18px;
+}
+
+.resumen-bloque-principal .resumen-label {
+    font-size: 10px;
+    font-weight: 800;
+    color: #0284c7;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    display: block;
+    margin-bottom: 6px;
+}
+
+.resumen-bloque-principal .resumen-valor-grande {
+    font-size: 16px;
+    color: #0f172a;
+    font-weight: 800;
+    margin: 0 0 2px;
+    text-transform: uppercase;
+}
+
+.resumen-bloque-principal .resumen-valor-sub {
+    font-size: 12.5px;
+    color: #475569;
+    font-weight: 600;
+    margin: 0;
+}
+
+.resumen-grid-secundaria {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.resumen-bloque-secundario {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 14px;
+}
+
+.resumen-bloque-secundario .resumen-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.resumen-bloque-secundario .resumen-valor {
+    font-size: 13px;
+    color: #1e293b;
+    font-weight: 600;
+    margin: 0;
+}
 
 /* ─── MODAL ACTIONS ─── */
 .modal-actions {
@@ -532,6 +630,12 @@ select.form-control.invalid:focus {
 .btn-naranja { background: linear-gradient(135deg, #c2410c, #f97316); box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3); }
 .btn-dark    { background: linear-gradient(135deg, #1e293b, #334155); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
 
+/* Interfaz 3: botón único de error suave */
+.btn-error-suave {
+    background: linear-gradient(135deg, #f87171, #fca5a5);
+    box-shadow: 0 4px 12px rgba(248, 113, 113, 0.3);
+}
+
 .btn-primario:hover { opacity: 0.92; transform: translateY(-1px); }
 .btn-primario:active { transform: translateY(0); }
 
@@ -543,4 +647,5 @@ select.form-control.invalid:focus {
     .form-grid { grid-template-columns: 1fr; gap: 20px; }
     .btn-confirmar { min-width: unset; width: 100%; }
     .card-container { border-radius: 14px; }
+    .resumen-grid-secundaria { grid-template-columns: 1fr; }
 }

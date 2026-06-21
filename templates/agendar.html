@@ -131,7 +131,7 @@
         </div>
     </div>
 
-    <!-- Modal Verificación -->
+    <!-- Modal Verificación (Interfaz 1 / Interfaz 2) -->
     <div id="modalVerificacion" class="modal-overlay">
         <div class="modal-content">
             <div id="headerVerificacion" class="modal-header modal-header-blue">
@@ -141,7 +141,7 @@
                 <div id="alertaMulta" class="alerta-multa hidden">
                     <div class="alerta-multa-title">
                         <i class="fas fa-exclamation-triangle"></i>
-                        Multa Pendiente Detectada
+                        Multa activa detectada
                     </div>
                     <p>Usted tiene una multa por inasistencia previa. Al confirmar esta cita, acepta que debe cancelar la multa el día de su atención.</p>
                 </div>
@@ -180,7 +180,65 @@
                 </div>
                 <h3 class="modal-title">¡Cita Agendada!</h3>
                 <p id="mensajeExito" class="modal-desc"></p>
+                <div id="notaMultaExito" class="nota-multa-exito hidden">
+                    <i class="fas fa-info-circle"></i>
+                    Recuerde: tiene una multa pendiente que debe pagar el día de su atención.
+                </div>
                 <button type="button" onclick="cerrarExitoYLimpiar()" class="btn-primario btn-dark w-full">Aceptar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Interfaz 3: Modal Error — Cita Activa Existente -->
+    <div id="modalErrorCitaActiva" class="modal-overlay">
+        <div class="modal-content modal-sm">
+            <div class="modal-header modal-header-error-suave">
+                <h3>No se pudo agendar</h3>
+            </div>
+            <div class="modal-body text-center">
+                <div class="modal-icon modal-icon-error-suave">
+                    <i class="fas fa-calendar-times"></i>
+                </div>
+                <h3 class="modal-title">Ya tienes una cita activa</h3>
+                <p id="mensajeErrorCitaActiva" class="modal-desc">
+                    No puedes agendar una nueva cita porque ya tienes una cita activa registrada en el sistema. Por favor espera a que finalice o sea cancelada para poder agendar una nueva.
+                </p>
+                <button type="button" onclick="cerrarModalErrorCitaActiva()" class="btn-primario btn-error-suave w-full">Aceptar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal genérico de alerta/error (reemplazo de alert()) -->
+    <div id="modalAlertaGenerica" class="modal-overlay">
+        <div class="modal-content modal-sm">
+            <div id="headerAlertaGenerica" class="modal-header modal-header-orange">
+                <h3 id="tituloAlertaGenerica">Aviso</h3>
+            </div>
+            <div class="modal-body text-center">
+                <div id="iconoAlertaGenerica" class="modal-icon modal-icon-orange-suave">
+                    <i class="fas fa-info-circle"></i>
+                </div>
+                <p id="mensajeAlertaGenerica" class="modal-desc"></p>
+                <button type="button" onclick="cerrarModalAlertaGenerica()" class="btn-primario btn-dark w-full">Aceptar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal genérico de confirmación (reemplazo de confirm()) -->
+    <div id="modalConfirmGenerico" class="modal-overlay">
+        <div class="modal-content modal-sm">
+            <div class="modal-header modal-header-orange">
+                <h3>Confirmación Requerida</h3>
+            </div>
+            <div class="modal-body text-center">
+                <div class="modal-icon modal-icon-orange-suave">
+                    <i class="fas fa-question-circle"></i>
+                </div>
+                <p id="mensajeConfirmGenerico" class="modal-desc"></p>
+                <div class="modal-actions">
+                    <button type="button" onclick="_resolverConfirmGenerico(false)" class="btn-secundario">Cancelar</button>
+                    <button type="button" onclick="_resolverConfirmGenerico(true)" class="btn-primario btn-naranja">Continuar</button>
+                </div>
             </div>
         </div>
     </div>
