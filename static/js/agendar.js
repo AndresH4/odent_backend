@@ -10,6 +10,7 @@ let fechaISOAgendar    = '';
 let _sesionPacienteAgendar = null;
 let _tieneMultaActualAgendar = false;
 let _confirmResolver = null;
+let _tiposDocumentoAgendar = [];
 
 const HORAS_DEFAULT = [
     '07:00:00', '07:30:00', '08:00:00', '08:30:00', '09:00:00', '09:30:00',
@@ -20,6 +21,12 @@ const HORAS_DEFAULT = [
 const ESPECIALIDADES_FIJAS = [
     'Endodoncia', 'Odontopediatria', 'Odontologia General',
     'Cirugia Oral', 'Ortodoncia', 'Control brackets'
+];
+
+const TIPOS_DOCUMENTO_FALLBACK = [
+    { TipoDoc_ID: 1, Nombre_Tipo_Documento: 'Cedula de ciudadania' },
+    { TipoDoc_ID: 2, Nombre_Tipo_Documento: 'Tarjeta de identidad' },
+    { TipoDoc_ID: 3, Nombre_Tipo_Documento: 'Permiso por protección temporal' }
 ];
 
 // ─── Utilidades ──────────────────────────────────────────────────────────────
@@ -121,6 +128,34 @@ function cerrarModalErrorCitaActiva() {
     if (modal) modal.style.display = 'none';
 }
 
+// ─── Carga dinámica de Tipos de Documento desde la BD ─────────────────────────
+async function cargarTiposDocumentoAgendar() {
+    const select = document.getElementById('tipo-doc');
+    if (!select) return;
+
+    const poblar = (lista) => {
+        _tiposDocumentoAgendar = lista;
+        select.innerHTML = '<option value="" disabled selected>Seleccione el tipo de documento</option>';
+        lista.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value       = t.TipoDoc_ID;
+            opt.textContent = t.Nombre_Tipo_Documento;
+            select.appendChild(opt);
+        });
+    };
+
+    try {
+        const res = await fetch('/api/tipos_documento');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) throw new Error('Lista vacía');
+        poblar(data);
+    } catch (e) {
+        console.warn('[agendar] No se pudieron cargar tipos de documento, usando fallback:', e);
+        poblar(TIPOS_DOCUMENTO_FALLBACK);
+    }
+}
+
 // ─── Autocompletar datos del paciente logueado ────────────────────────────────
 async function autocompletarDatosPaciente() {
     const raw = sessionStorage.getItem('odent_usuario');
@@ -165,51 +200,21 @@ async function autocompletarDatosPaciente() {
         console.warn('[agendar] No se pudo obtener Paciente_ID:', e);
     }
 
-    // Obtener tipo de documento, asignar valores reales y autoseleccionar
+    // Autoseleccionar el tipo de documento real del paciente, ahora que
+    // _tiposDocumentoAgendar fue poblado con TipoDoc_ID reales de la BD
+    // por cargarTiposDocumentoAgendar() (las opciones ya usan value=TipoDoc_ID).
     try {
-        const resTipos = await fetch('/api/tipos_documento');
-        if (resTipos.ok) {
-            const tipos = await resTipos.json();
-            const selectTipoDoc = document.getElementById('tipo-doc');
-
-            // Asignar el TipoDoc_ID real como value de cada opción (por coincidencia
-            // de texto), para que al editar/enviar el formulario se use el ID correcto.
-            if (selectTipoDoc) {
-                for (let i = 0; i < selectTipoDoc.options.length; i++) {
-                    const opt = selectTipoDoc.options[i];
-                    if (!opt.value && opt.text) {
-                        const matchOpt = tipos.find(t =>
-                            (t.Nombre_Tipo_Documento || '').toLowerCase().split(' ')[0] === opt.text.toLowerCase().split(' ')[0]
-                        );
-                        if (matchOpt) opt.value = matchOpt.TipoDoc_ID;
-                    }
-                }
-            }
-
-            const tipoDoc = tipos.find(t => String(t.TipoDoc_ID) === String(sesion.TipoDoc_ID));
-            if (selectTipoDoc && tipoDoc) {
-                // Buscar la opción que coincida (por texto aproximado)
-                const nombreTipo = tipoDoc.Nombre_Tipo_Documento || '';
-                let encontrado = false;
-                for (let i = 0; i < selectTipoDoc.options.length; i++) {
-                    if (selectTipoDoc.options[i].text.toLowerCase().includes(nombreTipo.toLowerCase().split(' ')[0])) {
-                        selectTipoDoc.selectedIndex = i;
-                        encontrado = true;
-                        break;
-                    }
-                }
-                if (!encontrado && selectTipoDoc.options.length > 1) {
-                    selectTipoDoc.selectedIndex = 1;
+        const selectTipoDoc = document.getElementById('tipo-doc');
+        if (selectTipoDoc && sesion.TipoDoc_ID) {
+            for (let i = 0; i < selectTipoDoc.options.length; i++) {
+                if (String(selectTipoDoc.options[i].value) === String(sesion.TipoDoc_ID)) {
+                    selectTipoDoc.selectedIndex = i;
+                    break;
                 }
             }
         }
     } catch (e) {
-        console.warn('[agendar] No se pudo cargar tipo de documento:', e);
-        // Seleccionar primera opción disponible como fallback
-        const selectTipoDoc = document.getElementById('tipo-doc');
-        if (selectTipoDoc && selectTipoDoc.options.length > 1) {
-            selectTipoDoc.selectedIndex = 1;
-        }
+        console.warn('[agendar] No se pudo autoseleccionar tipo de documento:', e);
     }
 }
 
@@ -845,8 +850,9 @@ function cerrarExitoYLimpiar() {
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
     inicializarCampoFechaAgendar();
+    await cargarTiposDocumentoAgendar();
     autocompletarDatosPaciente();
     cargarEspecialistas();
     document.getElementById('servicio')?.addEventListener('change', cargarAgenda);

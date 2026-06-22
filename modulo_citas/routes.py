@@ -16,6 +16,8 @@ Endpoints REST para:
   • /api/respuesta        — registrar respuesta de ranking (Cita_ID explícito)
   • /api/verificar-password — verificar contraseña del paciente
   • /api/actualizar-perfil-paciente — actualizar datos del paciente
+  • /api/citas/<id>/cancelar-sin-multa — cancelar sin penalización
+  • /api/citas/<id>/cancelar-con-multa — cancelar con multa obligatoria
 
 Registro en app.py:
     from modulo_citas.routes import citas_bp
@@ -25,6 +27,7 @@ Registro en app.py:
 from flask import Blueprint, request, jsonify
 from db import get_db_connection
 from datetime import date, datetime, timedelta
+import re
 
 citas_bp = Blueprint('citas_bp', __name__)
 
@@ -73,12 +76,40 @@ def _validar_hora_minimo_tres_horas(hora_str, fecha_str):
         return False
 
 
+def _validar_politica_password(password):
+    """
+    Valida que la contraseña cumpla la política de seguridad:
+      • Mínimo 8 caracteres
+      • Al menos una letra mayúscula
+      • Al menos una letra minúscula
+      • Al menos un número
+      • Al menos un carácter especial
+    """
+    if len(password) < 8:
+        return False, 'La contraseña debe tener al menos 8 caracteres.'
+    if not re.search(r'[A-Z]', password):
+        return False, 'La contraseña debe contener al menos una letra mayúscula.'
+    if not re.search(r'[a-z]', password):
+        return False, 'La contraseña debe contener al menos una letra minúscula.'
+    if not re.search(r'[0-9]', password):
+        return False, 'La contraseña debe contener al menos un número.'
+    if not re.search(r'[^A-Za-z0-9]', password):
+        return False, 'La contraseña debe contener al menos un carácter especial.'
+    return True, ''
+
+
 def _tiene_cita_activa_por_usuario(cur, usuario_id):
     """
     Consulta REAL a la base de datos: verifica si el Usuario_ID (paciente
     logueado) ya tiene una cita registrada cuyo estado de agenda sea
     'Disponible' (EstadoAgenda_ID = 1, slot reservado sintéticamente) u
-    'Ocupado' (EstadoAgenda_ID = 2), es decir, una cita Activa/Pendiente.
+    'Ocupado' (EstadoAgenda_ID = 2), es decir, una cita Activa/Pendiente,
+    Y cuya fecha programada (a.Fecha) sea hoy o una fecha futura.
+    No existe en el esquema un estado "Cumplida", por lo que una cita ya
+    atendida permanece con EstadoAgenda_ID = 2 (Ocupado) de forma
+    indefinida; sin el filtro de fecha, esa cita pasada bloquearía para
+    siempre el agendamiento de nuevas citas (falso positivo). Por eso se
+    exige adicionalmente que a.Fecha >= hoy para considerarla Activa.
     Se resuelve el Paciente_ID a partir del Usuario_ID mediante JOIN con
     la tabla paciente, sin confiar en ningún dato enviado por el frontend.
     """
@@ -89,9 +120,23 @@ def _tiene_cita_activa_por_usuario(cur, usuario_id):
         JOIN agenda a   ON a.Agenda_ID   = c.Agenda_ID
         WHERE p.Usuario_ID = ?
           AND a.EstadoAgenda_ID IN (1, 2)
+          AND a.Fecha >= ?
         LIMIT 1
-    """, (usuario_id,))
+    """, (usuario_id, date.today().isoformat()))
     return cur.fetchone() is not None
+
+
+def _calcular_minutos_restantes(fecha_str, hora_str):
+    """
+    Calcula los minutos que faltan entre ahora y la fecha/hora de la cita.
+    Retorna float (puede ser negativo si la cita ya pasó).
+    """
+    try:
+        cita_dt = datetime.strptime(f"{fecha_str} {hora_str[:5]}", '%Y-%m-%d %H:%M')
+        delta   = cita_dt - datetime.now()
+        return delta.total_seconds() / 60.0
+    except (ValueError, TypeError):
+        return float('inf')
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -250,6 +295,8 @@ def crear_usuario():
         return _json_error(str(exc), 500)
     finally:
         if con: con.close()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # AGENDA  —  GET /api/agenda?especialista_id=&fecha=
 # ─────────────────────────────────────────────────────────────────────────────
@@ -436,7 +483,13 @@ def crear_cita():
     con = None
     try:
         con = get_db_connection()
+        con.execute("PRAGMA foreign_keys = ON")
         cur = con.cursor()
+
+        # ── BEGIN TRANSACTION explícita: todas las escrituras relacionadas con
+        # esta cita (cita + actualización de agenda) se confirman o revierten
+        # como una sola unidad atómica, garantizando integridad referencial. ───
+        cur.execute("BEGIN TRANSACTION")
 
         # ── Verificar que el paciente existe en BD (evita datos falsos) ───────
         cur.execute(
@@ -445,61 +498,86 @@ def crear_cita():
         )
         paciente_row = cur.fetchone()
         if not paciente_row:
+            cur.execute("ROLLBACK")
             return _json_error('El paciente no existe en el sistema.', 404)
         if paciente_row['Rol_ID'] != 3:
+            cur.execute("ROLLBACK")
             return _json_error('El usuario no tiene rol de paciente.', 403)
 
         usuario_id_paciente = paciente_row['Usuario_ID']
 
-        # ── Verificar slot de agenda ──────────────────────────────────────────
+        # ── Verificar slot de agenda (bloqueado dentro de la misma transacción
+        # para evitar condiciones de carrera entre la lectura del estado y el
+        # INSERT/UPDATE posteriores) ───────────────────────────────────────────
         cur.execute(
-            "SELECT EstadoAgenda_ID, Fecha, Hora_Inicio FROM agenda WHERE Agenda_ID = ?",
+            "SELECT EstadoAgenda_ID, Fecha, Hora_Inicio, Especialista_ID FROM agenda WHERE Agenda_ID = ?",
             (agenda_id,)
         )
         slot = cur.fetchone()
         if not slot:
+            cur.execute("ROLLBACK")
             return _json_error('El slot de agenda no existe.', 404)
         if slot['EstadoAgenda_ID'] != 1:
+            cur.execute("ROLLBACK")
             return _json_error('Ese horario ya no está disponible.')
+
+        # ── Validar que el especialista referenciado por el slot exista
+        # realmente en la tabla especialista (integridad referencial) ─────────
+        cur.execute(
+            "SELECT Especialista_ID FROM especialista WHERE Especialista_ID = ?",
+            (slot['Especialista_ID'],)
+        )
+        if not cur.fetchone():
+            cur.execute("ROLLBACK")
+            return _json_error('El especialista asociado al horario no existe.', 404)
 
         # ── Validar fecha no anterior a hoy (verificación backend) ────────────
         fecha_agenda = slot['Fecha']
         if not _validar_fecha_no_anterior(fecha_agenda):
+            cur.execute("ROLLBACK")
             return _json_error('No se puede agendar una cita con fecha anterior a la actual.')
 
         # ── Validar hora mínima 3 horas si es hoy (verificación backend) ──────
         hora_inicio = slot['Hora_Inicio']
         if not _validar_hora_minimo_tres_horas(hora_inicio, fecha_agenda):
+            cur.execute("ROLLBACK")
             return _json_error(
                 'Para citas del día de hoy, la hora debe ser al menos 3 horas posterior a la hora actual.'
             )
 
         # ── VALIDACIÓN DE CITA ÚNICA — CONSULTA REAL A LA BASE DE DATOS ───────
-        # Se verifica directamente contra la BD (Usuario_ID del paciente
-        # logueado, resuelto vía paciente_row) si ya existe una cita con
-        # estado Activo/Pendiente (EstadoAgenda_ID 1 = Disponible/reservado
-        # sintéticamente, 2 = Ocupado). No se confía en ningún dato del
-        # frontend para esta validación.
         if _tiene_cita_activa_por_usuario(cur, usuario_id_paciente):
+            cur.execute("ROLLBACK")
             return _json_error('No puedes agendar. Ya tienes una cita activa en el sistema.', 409)
 
+        # ── INSERT en tabla `cita` — vincula Paciente_ID y Agenda_ID ──────────
         cur.execute(
             "INSERT INTO cita (Paciente_ID, Agenda_ID, Motivo_Consulta) VALUES (?, ?, ?)",
             (paciente_id, agenda_id, motivo)
         )
-        # ── Cita_ID autoincremental generado por la BD ────────────────────────
         cita_id = cur.lastrowid
+        if not cita_id:
+            cur.execute("ROLLBACK")
+            return _json_error('No se pudo registrar la cita en el sistema.', 500)
 
+        # ── UPDATE en tabla `agenda` — marca el slot como Ocupado ─────────────
         cur.execute(
             "UPDATE agenda SET EstadoAgenda_ID = 2 WHERE Agenda_ID = ?", (agenda_id,)
         )
+        if cur.rowcount == 0:
+            cur.execute("ROLLBACK")
+            return _json_error('No se pudo actualizar el estado de la agenda.', 500)
 
-        con.commit()
-        # ── Se retorna el Cita_ID real para que el frontend lo use ────────────
+        cur.execute("COMMIT")
+
         return _json_ok({"ok": True, "Cita_ID": cita_id, "status": "Cita registrada con éxito."}, 201)
 
     except Exception as exc:
-        if con: con.rollback()
+        if con:
+            try:
+                con.execute("ROLLBACK")
+            except Exception:
+                pass
         return _json_error(str(exc), 500)
     finally:
         if con: con.close()
@@ -545,7 +623,8 @@ def get_cita(cita_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CANCELAR CITA  —  PUT /api/citas/<id>/cancelar
+# CANCELAR CITA (endpoint legado)  —  PUT /api/citas/<id>/cancelar
+# Mantiene comportamiento original para compatibilidad con otros módulos.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>/cancelar', methods=['PUT'])
@@ -571,6 +650,93 @@ def cancelar_cita(cita_id):
 
         con.commit()
         return _json_ok({"ok": True, "status": "Cita cancelada y multa generada."})
+
+    except Exception as exc:
+        if con: con.rollback()
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CANCELAR SIN MULTA  —  PUT /api/citas/<id>/cancelar-sin-multa
+# Se usa cuando faltan MÁS de 2 horas para la cita.
+# Marca la agenda como Cancelado (EstadoAgenda_ID = 3). No genera multa.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/citas/<int:cita_id>/cancelar-sin-multa', methods=['PUT'])
+def cancelar_cita_sin_multa(cita_id):
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+
+        cur.execute("""
+            SELECT c.Agenda_ID, a.Fecha, a.Hora_Inicio
+            FROM cita c
+            JOIN agenda a ON a.Agenda_ID = c.Agenda_ID
+            WHERE c.Cita_ID = ?
+        """, (cita_id,))
+        row = cur.fetchone()
+        if not row:
+            return _json_error('Cita no encontrada.', 404)
+
+        # ── Verificación backend: confirmar que efectivamente faltan > 2 horas ─
+        minutos_restantes = _calcular_minutos_restantes(row['Fecha'], row['Hora_Inicio'])
+        if minutos_restantes <= 120:
+            return _json_error(
+                'No se puede cancelar sin multa: faltan 2 horas o menos para la cita.', 409
+            )
+
+        agenda_id = row['Agenda_ID']
+        cur.execute(
+            "UPDATE agenda SET EstadoAgenda_ID = 3 WHERE Agenda_ID = ?", (agenda_id,)
+        )
+
+        con.commit()
+        return _json_ok({"ok": True, "status": "Cita cancelada sin penalización."})
+
+    except Exception as exc:
+        if con: con.rollback()
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CANCELAR CON MULTA  —  PUT /api/citas/<id>/cancelar-con-multa
+# Se usa cuando faltan 2 horas o MENOS para la cita.
+# Marca la agenda como Cancelado (EstadoAgenda_ID = 3) y genera multa.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/citas/<int:cita_id>/cancelar-con-multa', methods=['PUT'])
+def cancelar_cita_con_multa(cita_id):
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+
+        cur.execute("""
+            SELECT c.Agenda_ID, a.Fecha, a.Hora_Inicio
+            FROM cita c
+            JOIN agenda a ON a.Agenda_ID = c.Agenda_ID
+            WHERE c.Cita_ID = ?
+        """, (cita_id,))
+        row = cur.fetchone()
+        if not row:
+            return _json_error('Cita no encontrada.', 404)
+
+        agenda_id = row['Agenda_ID']
+
+        cur.execute(
+            "UPDATE agenda SET EstadoAgenda_ID = 3 WHERE Agenda_ID = ?", (agenda_id,)
+        )
+        cur.execute(
+            "INSERT INTO multa (Cita_ID, EstadoMulta_ID) VALUES (?, 1)", (cita_id,)
+        )
+
+        con.commit()
+        return _json_ok({"ok": True, "status": "Cita cancelada y multa generada por poco tiempo de anticipación."})
 
     except Exception as exc:
         if con: con.rollback()
@@ -942,7 +1108,8 @@ def verificar_password():
 # ─────────────────────────────────────────────────────────────────────────────
 # ACTUALIZAR PERFIL PACIENTE  —  POST /api/actualizar-perfil-paciente
 # Body JSON: { usuario_id, nombres, apellidos, documento, tipo_documento_id,
-#              correo, telefono, nacimiento, nuevaPass }
+#              correo, telefono, nacimiento, nuevaPass,
+#              eps_id, tipo_eps_id, regimen_id }
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/actualizar-perfil-paciente', methods=['POST'])
@@ -957,6 +1124,9 @@ def actualizar_perfil_paciente():
     apellidos         = datos.get('apellidos')
     documento         = datos.get('documento')
     tipo_documento_id = datos.get('tipo_documento_id')
+    eps_id            = datos.get('eps_id')
+    tipo_eps_id       = datos.get('tipo_eps_id')
+    regimen_id        = datos.get('regimen_id')
 
     if not usuario_id:
         return _json_error('usuario_id es obligatorio.')
@@ -969,7 +1139,6 @@ def actualizar_perfil_paciente():
         campos  = []
         valores = []
 
-        # ── Datos de identidad del paciente (ahora editables desde el formulario) ──
         if nombres:
             campos.append("Nombres = ?")
             valores.append(nombres)
@@ -992,20 +1161,47 @@ def actualizar_perfil_paciente():
             campos.append("FechaNacimiento = ?")
             valores.append(nacimiento)
         if nueva_pass:
+            ok, msg = _validar_politica_password(nueva_pass)
+            if not ok:
+                return _json_error(msg, 400)
             campos.append("Contrasena = ?")
             valores.append(nueva_pass)
 
-        if not campos:
+        if not campos and not any([eps_id, tipo_eps_id]):
             return _json_error('No hay campos para actualizar.')
 
-        valores.append(usuario_id)
-        cur.execute(
-            f"UPDATE usuarios SET {', '.join(campos)} WHERE Usuario_ID = ?",
-            tuple(valores)
-        )
+        if campos:
+            valores.append(usuario_id)
+            cur.execute(
+                f"UPDATE usuarios SET {', '.join(campos)} WHERE Usuario_ID = ?",
+                tuple(valores)
+            )
+            if cur.rowcount == 0:
+                return _json_error('Usuario no encontrado.', 404)
 
-        if cur.rowcount == 0:
-            return _json_error('Usuario no encontrado.', 404)
+        # ── Actualizar afiliación (EPS, TipoEPS) si se enviaron ───────────────
+        if eps_id or tipo_eps_id:
+            cur.execute(
+                "SELECT Afiliacion_ID, EPS_ID, TipoEPS_ID FROM afiliacion WHERE Usuario_ID = ?",
+                (usuario_id,)
+            )
+            afil_row = cur.fetchone()
+
+            eps_final      = int(eps_id)      if eps_id      else (afil_row['EPS_ID']     if afil_row else None)
+            tipo_eps_final = int(tipo_eps_id) if tipo_eps_id else (afil_row['TipoEPS_ID'] if afil_row else None)
+
+            if afil_row:
+                cur.execute("""
+                    UPDATE afiliacion
+                    SET EPS_ID = ?, TipoEPS_ID = ?, Fecha_Afiliacion = ?
+                    WHERE Afiliacion_ID = ?
+                """, (eps_final, tipo_eps_final, date.today().isoformat(), afil_row['Afiliacion_ID']))
+            else:
+                if eps_final and tipo_eps_final:
+                    cur.execute("""
+                        INSERT INTO afiliacion (Usuario_ID, EPS_ID, TipoEPS_ID, Fecha_Afiliacion)
+                        VALUES (?, ?, ?, ?)
+                    """, (usuario_id, eps_final, tipo_eps_final, date.today().isoformat()))
 
         con.commit()
         return _json_ok({"ok": True, "mensaje": "Perfil actualizado correctamente."})

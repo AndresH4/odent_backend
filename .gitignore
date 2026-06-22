@@ -1,5 +1,6 @@
 # Ignorar el archivo de configuración secreta
 .env
+*.env
 
 # Ignorar la base de datos local (para que no se sobrescriba el trabajo de otros)
 *.db
