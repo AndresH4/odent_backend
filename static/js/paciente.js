@@ -110,7 +110,7 @@ async function _cargarTipoDocumento(tipoDocId, numeroDoc) {
     }
 }
 
-// ─── EPS COMPLETA ─────────────────────────────────────────────────────────────
+// ─── EPS COMPLETA (dropdown header) ──────────────────────────────────────────
 async function _cargarAfiliacionCompleta() {
     if (!_usuarioId) return;
     try {
@@ -143,7 +143,7 @@ async function _cargarAfiliacionCompleta() {
 
         let nombreEPS = afil.Nombre_EPS || afil.nombre_eps || '';
         if (!nombreEPS && epsId) {
-            const epsObj = listaEps.find(e => String(e.EPS_ID || e.Id_EPS || e.eps_id) === String(epsId));
+            const epsObj = listaEps.find(e => String(e.EPS_ID || e.Id_EPS || e.eps_id || e.ID_EPS) === String(epsId));
             nombreEPS = epsObj ? (epsObj.Nombre_EPS || epsObj.nombre_eps || epsObj.Nombre || '—') : '—';
         }
         _setText('eps-menu',   nombreEPS || '—');
@@ -153,7 +153,7 @@ async function _cargarAfiliacionCompleta() {
         if (!nombreRegimen) {
             let regimenId = afil.Regimen_ID || afil.ID_Regimen_EPS || afil.regimen_id || null;
             if (!regimenId && epsId) {
-                const epsObj = listaEps.find(e => String(e.EPS_ID || e.Id_EPS || e.eps_id) === String(epsId));
+                const epsObj = listaEps.find(e => String(e.EPS_ID || e.Id_EPS || e.eps_id || e.ID_EPS) === String(epsId));
                 regimenId = epsObj ? (epsObj.Regimen_ID || epsObj.regimen_id || epsObj.ID_Regimen_EPS || null) : null;
             }
             if (regimenId) {
@@ -206,9 +206,9 @@ function _actualizarReloj() {
 
     const el = document.getElementById('reloj');
     if (el) {
-        const h  = ahora.getHours();
-        const m  = String(ahora.getMinutes()).padStart(2, '0');
-        const s  = String(ahora.getSeconds()).padStart(2, '0');
+        const h   = ahora.getHours();
+        const m   = String(ahora.getMinutes()).padStart(2, '0');
+        const s   = String(ahora.getSeconds()).padStart(2, '0');
         const h12 = h % 12 || 12;
         const ampm = h < 12 ? 'AM' : 'PM';
         el.innerText = `${String(h12).padStart(2, '0')}:${m}:${s} ${ampm}`;
@@ -308,13 +308,29 @@ function _resolverEstado(c) {
     return { label: c.EstadoAgenda || '—', clase: 'bg-slate-100 text-slate-500' };
 }
 
+// ── Conjunto de estados que NUNCA deben aparecer en la sección "Inicio".
+// Toda cita cuya etiqueta resuelta (_resolverEstado) coincida con alguno de
+// estos valores queda forzosamente excluida de las citas activas/vigentes,
+// sin importar su EstadoAgenda crudo ni su Fecha. ────────────────────────────
+const ESTADOS_EXCLUIDOS_DE_INICIO = ['Cancelada', 'Cancelada con multa'];
+
 function _esCitaActiva(c) {
+    // Filtro estricto: si la etiqueta resuelta es "Cancelada" o "Cancelada con
+    // multa", la cita jamás se considera activa, independientemente de su
+    // EstadoAgenda crudo o de su Fecha.
+    const estadoInfo = _resolverEstado(c);
+    if (ESTADOS_EXCLUIDOS_DE_INICIO.includes(estadoInfo.label)) {
+        return false;
+    }
+
     const hoy   = new Date().toISOString().split('T')[0];
     const estado = (c.EstadoAgenda || '').toLowerCase();
     return (estado === 'ocupado' || estado === 'disponible') && c.Fecha >= hoy;
 }
 
 function _esCitaHistorial(c) {
+    // Toda cita "Cancelada" o "Cancelada con multa" queda garantizada aquí,
+    // ya que _esCitaActiva las excluye explícitamente arriba.
     return !_esCitaActiva(c);
 }
 
@@ -469,14 +485,12 @@ window.solicitarConfirmacionFinal = function () {
     const minutosRestantes = _calcularMinutosRestantes(cita.Fecha, cita.Hora_Inicio);
 
     if (minutosRestantes <= 120) {
-        // Faltan 2 horas o menos → mostrar advertencia de multa
         _cancelarConMulta = true;
         const tiempoTexto = _formatearTiempoRestante(minutosRestantes);
         const tiempoEl = document.getElementById('tiempo-restante-multa');
         if (tiempoEl) tiempoEl.textContent = tiempoTexto;
         document.getElementById('modalAdvertenciaMulta').style.display = 'flex';
     } else {
-        // Más de 2 horas → flujo normal sin multa
         _cancelarConMulta = false;
         document.getElementById('modalConfirmacionFinal').style.display = 'flex';
     }
@@ -708,7 +722,10 @@ function _marcarRequisitosIncumplidos() {
     return res.length && res.upper && res.lower && res.number && res.special;
 }
 
-// ─── MI PERFIL — CARGA DE SELECTS EPS ────────────────────────────────────────
+// ─── MI PERFIL — CARGA DE SELECTS EPS (COMPLETA, INDEPENDIENTE) ──────────────
+// Cada selector (Régimen, Tipo EPS, EPS) se carga con el 100% de los registros
+// de su tabla correspondiente. El Régimen ya NO depende de la EPS seleccionada;
+// se muestra el catálogo completo para que el paciente elija libremente.
 let _listaEpsGlobal     = [];
 let _listaRegimenGlobal = [];
 let _listaTipoEpsGlobal = [];
@@ -725,19 +742,22 @@ async function _cargarSelectsEps() {
         _listaRegimenGlobal = _normalizar(resRegimen.ok ? await resRegimen.json() : []);
         _listaTipoEpsGlobal = _normalizar(resTipo.ok    ? await resTipo.json()    : []);
 
-        const selEps = document.getElementById('edit-eps');
-        if (selEps) {
-            selEps.innerHTML = '<option value="">Seleccione EPS...</option>';
-            _listaEpsGlobal.forEach(e => {
-                const id  = e.EPS_ID || e.Id_EPS || e.eps_id;
-                const nom = e.Nombre_EPS || e.nombre_eps || e.Nombre || '';
+        // ── 1. Poblar select de RÉGIMEN EPS — catálogo completo ───────────────
+        const selRegimen = document.getElementById('edit-regimen-eps');
+        if (selRegimen) {
+            selRegimen.innerHTML = '<option value="">Seleccione Régimen...</option>';
+            selRegimen.disabled  = false;
+            _listaRegimenGlobal.forEach(r => {
+                const id  = r.Regimen_ID || r.ID_Regimen_EPS || r.regimen_id;
+                const nom = r.Descripcion || r.Nombre_Regimen || r.nombre_regimen || '';
                 const opt = document.createElement('option');
                 opt.value       = id;
                 opt.textContent = nom;
-                selEps.appendChild(opt);
+                selRegimen.appendChild(opt);
             });
         }
 
+        // ── 2. Poblar select de TIPO EPS — catálogo completo ─────────────────
         const selTipo = document.getElementById('edit-tipo-eps');
         if (selTipo) {
             selTipo.innerHTML = '<option value="">Seleccione Tipo EPS...</option>';
@@ -751,10 +771,18 @@ async function _cargarSelectsEps() {
             });
         }
 
-        const selRegimen = document.getElementById('edit-regimen-eps');
-        if (selRegimen) {
-            selRegimen.innerHTML = '<option value="">Se carga según EPS seleccionada</option>';
-            selRegimen.disabled  = true;
+        // ── 3. Poblar select de EPS — catálogo completo ───────────────────────
+        const selEps = document.getElementById('edit-eps');
+        if (selEps) {
+            selEps.innerHTML = '<option value="">Seleccione EPS...</option>';
+            _listaEpsGlobal.forEach(e => {
+                const id  = e.EPS_ID || e.Id_EPS || e.eps_id || e.ID_EPS;
+                const nom = e.Nombre_EPS || e.nombre_eps || e.Nombre || '';
+                const opt = document.createElement('option');
+                opt.value       = id;
+                opt.textContent = nom;
+                selEps.appendChild(opt);
+            });
         }
 
     } catch (err) {
@@ -762,80 +790,105 @@ async function _cargarSelectsEps() {
     }
 }
 
-function _actualizarRegimenSegunEps(epsId) {
-    const selRegimen = document.getElementById('edit-regimen-eps');
-    if (!selRegimen) return;
+// ─── MI PERFIL — PRECARGA DESDE BD ───────────────────────────────────────────
+async function _precargarPerfil() {
+    if (!_usuarioId) return;
 
-    const epsObj = _listaEpsGlobal.find(e =>
-        String(e.EPS_ID || e.Id_EPS || e.eps_id) === String(epsId)
-    );
+    _resetearFlujoPassword();
 
-    selRegimen.innerHTML  = '<option value="">Seleccione Régimen...</option>';
-    selRegimen.disabled   = true;
+    // ── 1. Obtener datos actualizados del usuario desde el backend ────────────
+    try {
+        const resUser = await fetch(`/api/usuarios/${_usuarioId}`);
+        if (resUser.ok) {
+            const userData = await resUser.json();
+            if (userData) {
+                _sesionPaciente = { ..._sesionPaciente, ...userData };
+                sessionStorage.setItem('odent_usuario', JSON.stringify(_sesionPaciente));
+            }
+        }
+    } catch (err) {
+        console.warn('[perfil] No se pudo refrescar datos de usuario:', err);
+    }
 
-    if (!epsObj) return;
+    // ── 2. Precargar campos de texto con datos de la sesión (ya frescos) ──────
+    const u = _sesionPaciente;
+    const nombreCompleto = `${u.Nombres || ''} ${u.Apellidos || ''}`.trim();
+    _setVal('edit-nombres',   nombreCompleto);
+    _setVal('edit-correo',    u.Correo   || '');
+    _setVal('edit-telefono',  u.Telefono || '');
 
-    const regimenId = epsObj.Regimen_ID || epsObj.regimen_id || epsObj.ID_Regimen_EPS || null;
-    if (!regimenId) return;
+    // ── 3. Cargar TODOS los selects con el catálogo completo de la BD ─────────
+    await _cargarSelectsEps();
 
-    const regObj = _listaRegimenGlobal.find(r =>
-        String(r.Regimen_ID || r.ID_Regimen_EPS || r.regimen_id) === String(regimenId)
-    );
+    // ── 4. Precargar valores actuales de afiliación del paciente ──────────────
+    try {
+        const resAfil = await fetch('/api/afiliacion');
+        if (resAfil.ok) {
+            const rawAfil  = await resAfil.json();
+            const dataAfil = _normalizar(rawAfil);
+            const afil = dataAfil.find(
+                a => String(a.Usuario_ID || a.ID_Usuario) === String(_usuarioId)
+            );
+            if (afil) {
+                const epsId     = afil.EPS_ID     || afil.Id_EPS     || afil.eps_id     || '';
+                const tipoEpsId = afil.TipoEPS_ID || afil.ID_Tipo_EPS || afil.tipoeps_id || '';
 
-    if (regObj) {
-        const id  = regObj.Regimen_ID || regObj.ID_Regimen_EPS || regObj.regimen_id;
-        const nom = regObj.Descripcion || regObj.Nombre_Regimen || regObj.nombre_regimen || '';
-        const opt = document.createElement('option');
-        opt.value       = id;
-        opt.textContent = nom;
-        opt.selected    = true;
-        selRegimen.appendChild(opt);
-        selRegimen.disabled = false;
+                // Obtener el Regimen_ID a partir de la EPS actual del paciente
+                let regimenIdActual = '';
+                if (epsId) {
+                    const epsObj = _listaEpsGlobal.find(e =>
+                        String(e.EPS_ID || e.Id_EPS || e.eps_id || e.ID_EPS) === String(epsId)
+                    );
+                    if (epsObj) {
+                        regimenIdActual = String(
+                            epsObj.Regimen_ID || epsObj.regimen_id || epsObj.ID_Regimen_EPS || ''
+                        );
+                    }
+                }
+
+                const selRegimen = document.getElementById('edit-regimen-eps');
+                const selEps     = document.getElementById('edit-eps');
+                const selTipo    = document.getElementById('edit-tipo-eps');
+
+                if (selRegimen && regimenIdActual) selRegimen.value = regimenIdActual;
+                if (selEps     && epsId)           selEps.value     = String(epsId);
+                if (selTipo    && tipoEpsId)       selTipo.value    = String(tipoEpsId);
+            }
+        }
+    } catch (err) {
+        console.warn('[perfil] Error precargando afiliación:', err);
+    }
+
+    // ── 5. Listener: al cambiar EPS, sugerir el Régimen correspondiente ───────
+    // El selector de Régimen permanece editable con el catálogo completo;
+    // solo se pre-selecciona el régimen asociado a la EPS elegida como ayuda visual.
+    const selEps = document.getElementById('edit-eps');
+    if (selEps) {
+        const selEpsNuevo = selEps.cloneNode(true);
+        selEps.parentNode.replaceChild(selEpsNuevo, selEps);
+        selEpsNuevo.addEventListener('change', function () {
+            _sugerirRegimenSegunEps(this.value);
+        });
     }
 }
 
-// ─── MI PERFIL ────────────────────────────────────────────────────────────────
-async function _precargarPerfil() {
-    if (!_sesionPaciente) return;
-    const nombreCompleto = `${_sesionPaciente.Nombres || ''} ${_sesionPaciente.Apellidos || ''}`.trim();
-    _setVal('edit-nombres',   nombreCompleto);
-    _setVal('edit-correo',    _sesionPaciente.Correo   || '');
-    _setVal('edit-telefono',  _sesionPaciente.Telefono || '');
-    _resetearFlujoPassword();
+/**
+ * Pre-selecciona el Régimen asociado a la EPS elegida.
+ * El select de Régimen permanece habilitado y con todas las opciones;
+ * el paciente puede cambiarlo libremente si lo desea.
+ */
+function _sugerirRegimenSegunEps(epsId) {
+    const selRegimen = document.getElementById('edit-regimen-eps');
+    if (!selRegimen || !epsId) return;
 
-    await _cargarSelectsEps();
+    const epsObj = _listaEpsGlobal.find(e =>
+        String(e.EPS_ID || e.Id_EPS || e.eps_id || e.ID_EPS) === String(epsId)
+    );
+    if (!epsObj) return;
 
-    // Precargar valores actuales de afiliación
-    if (_usuarioId) {
-        try {
-            const resAfil = await fetch('/api/afiliacion');
-            if (resAfil.ok) {
-                const dataAfil = _normalizar(await resAfil.json());
-                const afil = dataAfil.find(
-                    a => String(a.Usuario_ID || a.ID_Usuario) === String(_usuarioId)
-                );
-                if (afil) {
-                    const epsId     = afil.EPS_ID     || afil.Id_EPS     || afil.eps_id     || '';
-                    const tipoEpsId = afil.TipoEPS_ID || afil.ID_Tipo_EPS || afil.tipoeps_id || '';
-
-                    const selEps  = document.getElementById('edit-eps');
-                    const selTipo = document.getElementById('edit-tipo-eps');
-                    if (selEps)  selEps.value  = String(epsId);
-                    if (selTipo) selTipo.value = String(tipoEpsId);
-
-                    if (epsId) _actualizarRegimenSegunEps(epsId);
-                }
-            }
-        } catch (err) {
-            console.warn('[perfil] Error precargando afiliación:', err);
-        }
-    }
-
-    const selEps = document.getElementById('edit-eps');
-    if (selEps) {
-        selEps.addEventListener('change', function () {
-            _actualizarRegimenSegunEps(this.value);
-        });
+    const regimenId = epsObj.Regimen_ID || epsObj.regimen_id || epsObj.ID_Regimen_EPS || null;
+    if (regimenId) {
+        selRegimen.value = String(regimenId);
     }
 }
 
@@ -892,29 +945,34 @@ window.validarPasswordActual = function () {
     });
 };
 
+// ─── GUARDAR PERFIL — UPDATE REAL EN BD ──────────────────────────────────────
 window.guardarPerfilPaciente = function () {
-    const nombreCompleto = document.getElementById('edit-nombres')?.value.trim() || '';
-    const partes         = nombreCompleto.split(' ');
-    const nombres        = partes.slice(0, Math.ceil(partes.length / 2)).join(' ');
-    const apellidos      = partes.slice(Math.ceil(partes.length / 2)).join(' ');
+    const nombreCompleto = (document.getElementById('edit-nombres')?.value || '').trim();
+    const partes         = nombreCompleto.split(/\s+/);
+    const mitad          = Math.ceil(partes.length / 2);
+    const nombres        = partes.slice(0, mitad).join(' ');
+    const apellidos      = partes.slice(mitad).join(' ');
 
-    const correo    = document.getElementById('edit-correo')?.value.trim();
-    const telefono  = document.getElementById('edit-telefono')?.value.trim();
-    const passNueva = document.getElementById('conf-pass-nueva')?.value;
-    const passConf  = document.getElementById('conf-pass-confirmar')?.value;
+    const correo    = (document.getElementById('edit-correo')?.value   || '').trim();
+    const telefono  = (document.getElementById('edit-telefono')?.value || '').trim();
+    const passNueva = document.getElementById('conf-pass-nueva')?.value    || '';
+    const passConf  = document.getElementById('conf-pass-confirmar')?.value || '';
     const errNueva  = document.getElementById('error-pass-nueva');
     const step2     = document.getElementById('pass-step2');
 
-    const epsId     = document.getElementById('edit-eps')?.value     || null;
-    const tipoEpsId = document.getElementById('edit-tipo-eps')?.value || null;
-    const regimenEl = document.getElementById('edit-regimen-eps');
-    const regimenId = regimenEl && !regimenEl.disabled ? (regimenEl.value || null) : null;
+    // ── Leer valores de los selectores EPS (orden: Régimen, Tipo, EPS) ───────
+    const selEps     = document.getElementById('edit-eps');
+    const selTipoEps = document.getElementById('edit-tipo-eps');
+    const regimenEl  = document.getElementById('edit-regimen-eps');
 
+    const epsId     = selEps     ? (selEps.value     || null) : null;
+    const tipoEpsId = selTipoEps ? (selTipoEps.value || null) : null;
+    const regimenId = regimenEl  ? (regimenEl.value  || null) : null;
+
+    // ── Validar contraseña si se mostró el paso 2 ────────────────────────────
     if (step2?.style.display !== 'none' && passNueva) {
         const todosOk = _marcarRequisitosIncumplidos();
-        if (!todosOk) {
-            return;
-        }
+        if (!todosOk) return;
         if (passNueva !== passConf) {
             if (errNueva) errNueva.style.display = 'block';
             return;
@@ -922,36 +980,38 @@ window.guardarPerfilPaciente = function () {
     }
     if (errNueva) errNueva.style.display = 'none';
 
+    const payload = {
+        usuario_id:  _usuarioId,
+        nombres:     nombres   || undefined,
+        apellidos:   apellidos || undefined,
+        correo:      correo    || undefined,
+        telefono:    telefono  || undefined,
+        nuevaPass:   (step2?.style.display !== 'none' && passNueva) ? passNueva : null,
+        eps_id:      epsId     ? parseInt(epsId)     : null,
+        tipo_eps_id: tipoEpsId ? parseInt(tipoEpsId) : null,
+        regimen_id:  regimenId ? parseInt(regimenId) : null,
+    };
+
     fetch('/api/actualizar-perfil-paciente', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-            usuario_id: _usuarioId,
-            nombres,
-            apellidos,
-            correo,
-            telefono,
-            nuevaPass:  passNueva || null,
-            eps_id:     epsId     ? parseInt(epsId)     : null,
-            tipo_eps_id: tipoEpsId ? parseInt(tipoEpsId) : null,
-            regimen_id: regimenId ? parseInt(regimenId) : null,
-        }),
+        body:    JSON.stringify(payload),
     })
     .then(r => r.json())
     .then(data => {
         if (data.ok) {
             if (_sesionPaciente) {
-                _sesionPaciente.Nombres   = nombres;
-                _sesionPaciente.Apellidos = apellidos;
-                _sesionPaciente.Correo    = correo;
-                _sesionPaciente.Telefono  = telefono;
+                if (nombres)   _sesionPaciente.Nombres   = nombres;
+                if (apellidos) _sesionPaciente.Apellidos = apellidos;
+                if (correo)    _sesionPaciente.Correo    = correo;
+                if (telefono)  _sesionPaciente.Telefono  = telefono;
                 sessionStorage.setItem('odent_usuario', JSON.stringify(_sesionPaciente));
             }
             _cargarSesion();
             cambiarVista('inicio');
             _mostrarNotificacion('Perfil Actualizado', 'Tus datos han sido guardados correctamente.', 'success');
         } else {
-            _mostrarNotificacion('Error', data.mensaje || 'No se pudo guardar. Intenta de nuevo.', 'error');
+            _mostrarNotificacion('Error', data.mensaje || data.error || 'No se pudo guardar. Intenta de nuevo.', 'error');
         }
     })
     .catch(() => _mostrarNotificacion('Error de Conexión', 'No se pudo guardar el perfil.', 'error'));

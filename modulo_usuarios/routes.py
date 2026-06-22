@@ -2,7 +2,7 @@
 modulo_usuarios/routes.py — Stylo Dental
 Blueprint de usuarios con creación TRANSACCIONAL y atómica.
 """
-
+ 
 from flask import Blueprint, request, jsonify, render_template
 import sqlite3
 import re
@@ -12,7 +12,7 @@ from modulo_usuarios import (
     administrador, aseguramiento_datos, accion_aseguramiento
 )
 from datetime import date
-
+ 
 usuarios_bp = Blueprint('usuarios_bp', __name__)
 
 
@@ -39,11 +39,33 @@ def _validar_politica_password(password):
         return False, 'La contraseña debe contener al menos un carácter especial.'
     return True, ''
 
-
+ 
 # =============================================================================
 # AUTENTICACIÓN — LOGIN
 # =============================================================================
-
+#
+# SOPORTE DUAL DE VALIDACIÓN (entorno de desarrollo local):
+#
+#   Condición A — Usuarios nuevos / seguros:
+#       Si `Contrasena` en BD inicia con un prefijo de hash reconocido por
+#       werkzeug ('pbkdf2:' o 'scrypt:'), la única vía de validación es
+#       `check_password_hash(hash_bd, contrasena)`. Esta función nunca compara
+#       el hash en texto plano contra sí mismo: si alguien pega literalmente
+#       el string del hash en el campo de contraseña del formulario, el
+#       resultado será un nuevo hash interno que NO coincidirá con `hash_bd`,
+#       por lo que el acceso se rechaza automáticamente.
+#
+#   Condición B — Datos de prueba en texto plano:
+#       Si `Contrasena` en BD NO inicia con esos prefijos, se asume que es un
+#       registro de prueba almacenado en texto plano, y se valida con una
+#       comparación directa de cadenas (hash_bd == contrasena).
+#
+#   REGLA CRÍTICA: en ningún punto de este flujo se ejecuta un UPDATE ni se
+#   reescribe `Contrasena` en la base de datos. No hay auto-migración: los
+#   registros de prueba en texto plano permanecen intactos exactamente como
+#   fueron creados, login tras login.
+# =============================================================================
+ 
 @usuarios_bp.route('/auth/login', methods=['POST'])
 def login():
     from werkzeug.security import check_password_hash
@@ -73,10 +95,15 @@ def login():
 
         hash_bd = fila['Contrasena']
 
-        # Soporte dual: hashes werkzeug (pbkdf2/scrypt) y texto plano legacy
-        if hash_bd.startswith('pbkdf2:') or hash_bd.startswith('scrypt:'):
+        # Soporte dual: hashes werkzeug (pbkdf2/scrypt) vs. texto plano legacy
+        if hash_bd.startswith('scrypt:') or hash_bd.startswith('pbkdf2:'):
+            # Condición A: usuario "nuevo/seguro" -> única vía válida es el hash.
+            # check_password_hash rechaza automáticamente si se pega el hash
+            # crudo en el campo de contraseña (no hay coincidencia posible).
             autenticado = check_password_hash(hash_bd, contrasena)
         else:
+            # Condición B: dato de prueba en texto plano -> comparación directa.
+            # No se realiza ningún UPDATE/migración sobre `hash_bd` aquí.
             autenticado = (hash_bd == contrasena)
 
         if not autenticado:
@@ -112,12 +139,12 @@ def login():
     finally:
         if conexion:
             conexion.close()
-
-
+ 
+ 
 # =============================================================================
 # ROLES
 # =============================================================================
-
+ 
 @usuarios_bp.route('/roles', methods=['GET'])
 def get_roles():
     conexion = None
@@ -133,31 +160,42 @@ def get_roles():
     finally:
         if conexion:
             conexion.close()
-
+ 
 @usuarios_bp.route('/roles/reporte', methods=['GET'])
 def get_reporte_roles():
     return jsonify(rol.reporte_usuarios_por_rol())
-
-
+ 
+ 
 # =============================================================================
 # USUARIOS — GET lista
 # =============================================================================
-
+ 
 @usuarios_bp.route('/usuarios', methods=['GET'])
 def get_usuarios():
     return jsonify(usuario.read_all_usuarios())
-
-
+ 
+ 
 # =============================================================================
 # USUARIOS — POST creación TRANSACCIONAL ATÓMICA
 # =============================================================================
-
+#
+# ENCRIPTACIÓN OBLIGATORIA PARA NUEVOS REGISTROS:
+#   Todo usuario creado a partir de este endpoint nace con su contraseña
+#   procesada por `generate_password_hash` (werkzeug, prefijo 'pbkdf2:' o
+#   'scrypt:' según versión instalada). Esto garantiza que en el siguiente
+#   login dicho usuario caiga siempre en la Condición A del bloque de login
+#   (validación exclusivamente por hash), sin pasar nunca por la rama de
+#   texto plano reservada a los datos de prueba preexistentes.
+# =============================================================================
+ 
 @usuarios_bp.route('/usuarios', methods=['POST'])
 def add_usuario():
+    from werkzeug.security import generate_password_hash
+
     datos = request.get_json(silent=True)
     if not datos:
         return jsonify({"ok": False, "error": "No se recibió JSON válido"}), 400
-
+ 
     nombres           = (datos.get('nombres') or '').strip()
     apellidos         = (datos.get('apellidos') or '').strip()
     documento         = (datos.get('documento') or '').strip()
@@ -169,7 +207,7 @@ def add_usuario():
     tipo_documento_id = int(datos.get('tipo_documento_id') or 1)
     estado_id         = int(datos.get('estado_id') or 1)
     rol_id            = int(datos.get('rol_id') or 3)
-
+ 
     errores = []
     if not nombres:    errores.append("nombres es requerido")
     if not apellidos:  errores.append("apellidos es requerido")
@@ -184,52 +222,51 @@ def add_usuario():
             errores.append(msg_pwd)
     if rol_id not in (1, 2, 3):
         errores.append("rol_id inválido (debe ser 1, 2 o 3)")
-
-    # Acepta las tres variantes de key que puede enviar creacion.js
+ 
+    # Acepta las variantes de key que puede enviar creacion.js
+    eps_id             = datos.get('eps_id')
     tipo_afiliacion_id = (
         datos.get('tipo_eps_id') or
         datos.get('tipo_afiliacion_eps_id') or
         datos.get('tipo_afiliacion_id')
     )
-    eps_id = datos.get('eps_id')
-
+ 
     if rol_id == 3:
         if not eps_id:
             errores.append("eps_id es obligatorio para Paciente")
         if not tipo_afiliacion_id:
             errores.append("tipo_afiliacion_id es obligatorio para Paciente")
-
+ 
     tarjeta_profesional = (datos.get('tarjeta_profesional') or '').strip()
     especialidad_id     = datos.get('especialidad_id')
-
+ 
     if rol_id == 2 and not tarjeta_profesional:
         errores.append("tarjeta_profesional es obligatoria para Especialista")
     if rol_id == 2 and tarjeta_profesional and (len(tarjeta_profesional) < 4 or len(tarjeta_profesional) > 10):
         errores.append("tarjeta_profesional debe tener entre 4 y 10 caracteres")
-
+ 
     if errores:
         return jsonify({"ok": False, "error": "; ".join(errores)}), 400
-
+ 
     conexion = None
     try:
-        from werkzeug.security import generate_password_hash
         conexion = get_db_connection()
         conexion.isolation_level = None
         conexion.execute("PRAGMA foreign_keys = ON")
         cursor = conexion.cursor()
-
+ 
         cursor.execute("BEGIN")
-
+ 
         cursor.execute("SELECT 1 FROM usuarios WHERE LOWER(Correo) = ?", (correo,))
         if cursor.fetchone():
             cursor.execute("ROLLBACK")
             return jsonify({"ok": False, "error": "El correo electrónico ya está registrado."}), 409
-
+ 
         cursor.execute("SELECT 1 FROM usuarios WHERE NumeroDocumento = ?", (documento,))
         if cursor.fetchone():
             cursor.execute("ROLLBACK")
             return jsonify({"ok": False, "error": "El número de documento ya está registrado."}), 409
-
+ 
         if rol_id == 2:
             cursor.execute("SELECT 1 FROM especialista WHERE Tarjeta_Profesional = ?", (tarjeta_profesional,))
             if cursor.fetchone():
@@ -240,40 +277,35 @@ def add_usuario():
                 if not cursor.fetchone():
                     cursor.execute("ROLLBACK")
                     return jsonify({"ok": False, "error": "La especialidad seleccionada no existe."}), 400
-
+ 
         if rol_id == 3:
             cursor.execute("SELECT 1 FROM eps WHERE EPS_ID = ?", (int(eps_id),))
             if not cursor.fetchone():
                 cursor.execute("ROLLBACK")
                 return jsonify({"ok": False, "error": "La EPS seleccionada no existe."}), 400
-            cursor.execute(
-                "SELECT 1 FROM tipo_afiliacion_eps WHERE TipoEPS_ID = ?",
-                (int(tipo_afiliacion_id),)
-            )
+            cursor.execute("SELECT 1 FROM tipo_afiliacion_eps WHERE TipoEPS_ID = ?", (int(tipo_afiliacion_id),))
             if not cursor.fetchone():
                 cursor.execute("ROLLBACK")
-                return jsonify({"ok": False, "error": "El tipo de afiliación EPS seleccionado no existe."}), 400
-
-        contrasena_hash = generate_password_hash(contrasena)
-
+                return jsonify({"ok": False, "error": "El tipo de EPS seleccionado no existe."}), 400
+ 
         cursor.execute(
             """INSERT INTO usuarios
                (Nombres, Apellidos, TipoDoc_ID, NumeroDocumento, Contrasena,
                 FechaNacimiento, Genero_ID, Correo, Telefono, Estado_ID, Rol_ID)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (nombres, apellidos, tipo_documento_id, documento, contrasena_hash,
+            (nombres, apellidos, tipo_documento_id, documento, generate_password_hash(contrasena),
              fecha_nacimiento, genero_id, correo, telefono, estado_id, rol_id)
         )
         usuario_id = cursor.lastrowid
         if not usuario_id:
             raise ValueError("No se obtuvo Usuario_ID tras el INSERT en usuarios")
-
+ 
         if rol_id == 1:
             cursor.execute(
                 "INSERT INTO administrador (Usuario_ID) VALUES (?)",
                 (usuario_id,)
             )
-
+ 
         elif rol_id == 2:
             cursor.execute(
                 "INSERT INTO especialista (Usuario_ID, Tarjeta_Profesional) VALUES (?, ?)",
@@ -282,14 +314,14 @@ def add_usuario():
             especialista_id = cursor.lastrowid
             if not especialista_id:
                 raise ValueError("No se obtuvo Especialista_ID")
-
+ 
             if especialidad_id:
                 cursor.execute(
                     """INSERT INTO especialista_especialidad (Especialista_ID, Especialidad_ID)
                        VALUES (?, ?)""",
                     (especialista_id, int(especialidad_id))
                 )
-
+ 
         elif rol_id == 3:
             cursor.execute(
                 "INSERT INTO paciente (Usuario_ID) VALUES (?)",
@@ -298,21 +330,21 @@ def add_usuario():
             paciente_id = cursor.lastrowid
             if not paciente_id:
                 raise ValueError("No se obtuvo Paciente_ID")
-
+ 
             cursor.execute(
                 """INSERT INTO afiliacion (Usuario_ID, EPS_ID, TipoEPS_ID, Fecha_Afiliacion)
                    VALUES (?, ?, ?, ?)""",
                 (usuario_id, int(eps_id), int(tipo_afiliacion_id), date.today().isoformat())
             )
-
+ 
         cursor.execute("COMMIT")
-
+ 
         return jsonify({
             "ok": True,
             "status": "Usuario creado con éxito",
             "usuario_id": usuario_id
         }), 201
-
+ 
     except Exception as e:
         if conexion:
             try:
@@ -320,16 +352,16 @@ def add_usuario():
             except Exception:
                 pass
         return jsonify({"ok": False, "error": f"Transacción revertida: {str(e)}"}), 400
-
+ 
     finally:
         if conexion:
             conexion.close()
-
-
+ 
+ 
 # =============================================================================
 # USUARIOS — GET / PUT / DELETE por ID
 # =============================================================================
-
+ 
 @usuarios_bp.route('/usuarios/<int:id>', methods=['GET', 'PUT', 'DELETE'])
 def crud_usuario(id):
     if request.method == 'GET':
@@ -342,37 +374,37 @@ def crud_usuario(id):
     if request.method == 'DELETE':
         res = usuario.delete_usuario(id)
         return jsonify(res), (200 if res.get('ok') else 400)
-
-
+ 
+ 
 # =============================================================================
 # CATÁLOGOS
 # =============================================================================
-
+ 
 @usuarios_bp.route('/generos', methods=['GET'])
 def get_generos():
     return jsonify(genero.read_all_generos())
-
+ 
 @usuarios_bp.route('/generos/reporte', methods=['GET'])
 def get_reporte_generos():
     return jsonify(genero.reporte_usuarios_por_genero())
-
+ 
 @usuarios_bp.route('/tipos_documento', methods=['GET'])
 def get_tipos_doc():
     return jsonify(tipo_documento.read_all_tipos_documento())
-
+ 
 @usuarios_bp.route('/estados_usuario', methods=['GET'])
 def get_estados():
     return jsonify(estado_usuario.read_all_estados())
-
+ 
 @usuarios_bp.route('/acciones_aseguramiento', methods=['GET'])
 def get_acciones():
     return jsonify(accion_aseguramiento.read_all_acciones())
-
-
+ 
+ 
 # =============================================================================
 # ADMINISTRADORES
 # =============================================================================
-
+ 
 @usuarios_bp.route('/administradores', methods=['GET', 'POST'])
 def crud_administradores():
     if request.method == 'GET':
@@ -380,16 +412,16 @@ def crud_administradores():
     data = request.json
     res  = administrador.create_administrador(data['usuario_id'])
     return jsonify(res), (201 if res.get('ok') else 400)
-
+ 
 @usuarios_bp.route('/administradores/activos', methods=['GET'])
 def get_admins_activos():
     return jsonify(administrador.reporte_administradores_activos())
-
-
+ 
+ 
 # =============================================================================
 # ASEGURAMIENTO / AUDITORÍA
 # =============================================================================
-
+ 
 @usuarios_bp.route('/auditoria', methods=['GET', 'POST'])
 def crud_auditoria():
     if request.method == 'GET':
@@ -399,35 +431,35 @@ def crud_auditoria():
         data['usuario_id'], data['accion_id'], data['descripcion']
     )
     return jsonify(res), (201 if res.get('ok') else 400)
-
+ 
 @usuarios_bp.route('/auditoria/usuario/<int:usuario_id>', methods=['GET'])
 def get_auditoria_usuario(usuario_id):
     return jsonify(aseguramiento_datos.read_aseguramiento_by_usuario(usuario_id))
-
+ 
 @usuarios_bp.route('/auditoria/reporte/acciones', methods=['GET'])
 def get_reporte_acciones():
     return jsonify(aseguramiento_datos.reporte_acciones_por_tipo())
-
+ 
 @usuarios_bp.route('/auditoria/reporte/fecha', methods=['GET'])
 def get_reporte_fecha():
     inicio = request.args.get('desde')
     fin    = request.args.get('hasta')
     return jsonify(aseguramiento_datos.reporte_auditoria_por_fecha(inicio, fin))
-
-
+ 
+ 
 # =============================================================================
 # VISTA HTML
 # =============================================================================
-
+ 
 @usuarios_bp.route('/vista/crear_usuario')
 def vista_creacion_usuario():
     return render_template('creacion.html')
-
-
+ 
+ 
 # =============================================================================
-# TIPO AFILIACION EPS  (antes: tipo-eps)
+# TIPO EPS
 # =============================================================================
-
+ 
 @usuarios_bp.route('/tipo-afiliacion-eps', methods=['GET'])
 def get_tipo_afiliacion_eps():
     conexion = None
@@ -435,7 +467,8 @@ def get_tipo_afiliacion_eps():
         conexion = get_db_connection()
         conexion.row_factory = sqlite3.Row
         cursor = conexion.cursor()
-        cursor.execute("SELECT TipoEPS_ID, Nombre_Tipo FROM tipo_afiliacion_eps")
+        # Retorna TODOS los registros de tipo_afiliacion_eps sin excepción
+        cursor.execute("SELECT TipoEPS_ID AS ID_Tipo_EPS, Nombre_Tipo FROM tipo_afiliacion_eps ORDER BY TipoEPS_ID")
         filas = cursor.fetchall()
         return jsonify({"ok": True, "data": [dict(fila) for fila in filas]}), 200
     except Exception as e:
@@ -443,12 +476,12 @@ def get_tipo_afiliacion_eps():
     finally:
         if conexion:
             conexion.close()
-
-
+ 
+ 
 # =============================================================================
 # EPS
 # =============================================================================
-
+ 
 @usuarios_bp.route('/eps', methods=['GET', 'POST'])
 def crud_eps():
     if request.method == 'GET':
@@ -457,8 +490,9 @@ def crud_eps():
             conexion = get_db_connection()
             conexion.row_factory = sqlite3.Row
             cursor = conexion.cursor()
+            # Retorna TODOS los registros de eps sin excepción
             cursor.execute(
-                "SELECT EPS_ID AS ID_EPS, Nombre_EPS, Telefono_EPS, Regimen_ID FROM eps"
+                "SELECT EPS_ID AS ID_EPS, Nombre_EPS, Telefono_EPS, Regimen_ID FROM eps ORDER BY EPS_ID"
             )
             filas = cursor.fetchall()
             return jsonify({"ok": True, "data": [dict(fila) for fila in filas]}), 200
@@ -467,17 +501,17 @@ def crud_eps():
         finally:
             if conexion:
                 conexion.close()
-
+ 
     datos = request.get_json(silent=True) or {}
     nombre_eps  = (datos.get('Nombre_EPS') or '').strip()
     tipo_eps_id = datos.get('ID_Tipo_EPS')
     telefono    = (datos.get('Telefono') or '').strip()
-
+ 
     if not nombre_eps:
         return jsonify({"ok": False, "error": "Nombre_EPS es requerido"}), 400
     if not tipo_eps_id:
         return jsonify({"ok": False, "error": "ID_Tipo_EPS es requerido"}), 400
-
+ 
     conexion = None
     try:
         conexion = get_db_connection()
@@ -494,12 +528,12 @@ def crud_eps():
     finally:
         if conexion:
             conexion.close()
-
-
+ 
+ 
 # =============================================================================
 # REGIMEN EPS
 # =============================================================================
-
+ 
 @usuarios_bp.route('/regimen-eps', methods=['GET'])
 def get_regimen_eps():
     conexion = None
@@ -507,8 +541,9 @@ def get_regimen_eps():
         conexion = get_db_connection()
         conexion.row_factory = sqlite3.Row
         cursor = conexion.cursor()
+        # Retorna TODOS los registros de regimen_eps sin excepción
         cursor.execute(
-            "SELECT Regimen_ID AS ID_Regimen_EPS, Descripcion AS Nombre_Regimen FROM regimen_eps"
+            "SELECT Regimen_ID AS ID_Regimen_EPS, Descripcion AS Nombre_Regimen FROM regimen_eps ORDER BY Regimen_ID"
         )
         filas = cursor.fetchall()
         return jsonify({"ok": True, "data": [dict(fila) for fila in filas]}), 200
@@ -517,12 +552,12 @@ def get_regimen_eps():
     finally:
         if conexion:
             conexion.close()
-
-
+ 
+ 
 # =============================================================================
 # PACIENTE
 # =============================================================================
-
+ 
 @usuarios_bp.route('/paciente', methods=['POST'])
 def crear_paciente():
     datos = request.get_json(silent=True) or {}
@@ -531,16 +566,16 @@ def crear_paciente():
     alergias        = (datos.get('Alergias') or '').strip() or None
     antecedentes    = (datos.get('Antecedentes') or '').strip() or None
     observaciones   = (datos.get('Observaciones') or '').strip() or None
-
+ 
     if not usuario_id:
         return jsonify({"ok": False, "error": "ID_Usuario es requerido"}), 400
-
+ 
     conexion = None
     try:
         conexion = get_db_connection()
         conexion.row_factory = sqlite3.Row
         cursor = conexion.cursor()
-
+ 
         cursor.execute("SELECT Paciente_ID FROM paciente WHERE Usuario_ID = ?", (usuario_id,))
         existente = cursor.fetchone()
         if existente:
@@ -552,7 +587,7 @@ def crear_paciente():
             )
             conexion.commit()
             return jsonify({"ok": True, "data": {"ID_Paciente": existente["Paciente_ID"]}}), 200
-
+ 
         cursor.execute(
             """INSERT INTO paciente (Usuario_ID, Grupo_Sanguineo, Alergias, Antecedentes, Observaciones)
                VALUES (?, ?, ?, ?, ?)""",
@@ -566,8 +601,8 @@ def crear_paciente():
     finally:
         if conexion:
             conexion.close()
-
-
+ 
+ 
 @usuarios_bp.route('/paciente/<int:id>', methods=['PUT'])
 def actualizar_paciente(id):
     conexion = None
@@ -585,36 +620,32 @@ def actualizar_paciente(id):
     finally:
         if conexion:
             conexion.close()
-
-
+ 
+ 
 # =============================================================================
 # AFILIACION
 # =============================================================================
-
+ 
 @usuarios_bp.route('/afiliacion', methods=['POST'])
 def crear_afiliacion():
     datos = request.get_json(silent=True) or {}
-    usuario_id         = datos.get('ID_Usuario')
-    eps_id             = datos.get('ID_EPS')
-    tipo_afiliacion_id = (
-        datos.get('ID_Tipo_EPS') or
-        datos.get('tipo_eps_id') or
-        datos.get('tipo_afiliacion_eps_id')
-    )
-
+    usuario_id     = datos.get('ID_Usuario')
+    eps_id         = datos.get('ID_EPS')
+    regimen_eps_id = datos.get('ID_Tipo_EPS') or datos.get('ID_Regimen_EPS')
+ 
     if not usuario_id:
         return jsonify({"ok": False, "error": "ID_Usuario es requerido"}), 400
     if not eps_id:
         return jsonify({"ok": False, "error": "ID_EPS es requerido"}), 400
-    if not tipo_afiliacion_id:
-        return jsonify({"ok": False, "error": "ID_Tipo_EPS es requerido"}), 400
-
+    if not regimen_eps_id:
+        return jsonify({"ok": False, "error": "ID_Regimen_EPS es requerido"}), 400
+ 
     conexion = None
     try:
         conexion = get_db_connection()
         conexion.row_factory = sqlite3.Row
         cursor = conexion.cursor()
-
+ 
         cursor.execute("SELECT Afiliacion_ID FROM afiliacion WHERE Usuario_ID = ?", (usuario_id,))
         existente = cursor.fetchone()
         if existente:
@@ -622,15 +653,15 @@ def crear_afiliacion():
                 """UPDATE afiliacion
                    SET EPS_ID = ?, TipoEPS_ID = ?, Fecha_Afiliacion = ?
                    WHERE Afiliacion_ID = ?""",
-                (eps_id, tipo_afiliacion_id, date.today().isoformat(), existente["Afiliacion_ID"])
+                (eps_id, regimen_eps_id, date.today().isoformat(), existente["Afiliacion_ID"])
             )
             conexion.commit()
             return jsonify({"ok": True, "data": {"ID_Afiliacion": existente["Afiliacion_ID"]}}), 200
-
+ 
         cursor.execute(
             """INSERT INTO afiliacion (Usuario_ID, EPS_ID, TipoEPS_ID, Fecha_Afiliacion)
                VALUES (?, ?, ?, ?)""",
-            (usuario_id, eps_id, tipo_afiliacion_id, date.today().isoformat())
+            (usuario_id, eps_id, regimen_eps_id, date.today().isoformat())
         )
         conexion.commit()
         nuevo_id = cursor.lastrowid
@@ -659,24 +690,20 @@ def get_afiliacion():
     finally:
         if conexion:
             conexion.close()
-
-
+ 
+ 
 @usuarios_bp.route('/afiliacion/<int:id>', methods=['PUT'])
 def actualizar_afiliacion(id):
     datos = request.get_json(silent=True) or {}
-    eps_id             = datos.get('ID_EPS')
-    tipo_afiliacion_id = (
-        datos.get('ID_Tipo_EPS') or
-        datos.get('tipo_eps_id') or
-        datos.get('tipo_afiliacion_eps_id')
-    )
-    fecha = datos.get('Fecha_Afiliacion') or date.today().isoformat()
-
+    eps_id         = datos.get('ID_EPS')
+    regimen_eps_id = datos.get('ID_Tipo_EPS') or datos.get('ID_Regimen_EPS')
+    fecha          = datos.get('Fecha_Afiliacion') or date.today().isoformat()
+ 
     if not eps_id:
         return jsonify({"ok": False, "error": "ID_EPS es requerido"}), 400
-    if not tipo_afiliacion_id:
-        return jsonify({"ok": False, "error": "ID_Tipo_EPS es requerido"}), 400
-
+    if not regimen_eps_id:
+        return jsonify({"ok": False, "error": "ID_Regimen_EPS es requerido"}), 400
+ 
     conexion = None
     try:
         conexion = get_db_connection()
@@ -685,7 +712,7 @@ def actualizar_afiliacion(id):
             """UPDATE afiliacion
                SET EPS_ID = ?, TipoEPS_ID = ?, Fecha_Afiliacion = ?
                WHERE Afiliacion_ID = ?""",
-            (eps_id, tipo_afiliacion_id, fecha, id)
+            (eps_id, regimen_eps_id, fecha, id)
         )
         conexion.commit()
         if cursor.rowcount == 0:
@@ -693,6 +720,132 @@ def actualizar_afiliacion(id):
         return jsonify({"ok": True, "data": {"ID_Afiliacion": id}}), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 400
+    finally:
+        if conexion:
+            conexion.close()
+
+
+# =============================================================================
+# ACTUALIZAR PERFIL PACIENTE — UPDATE REAL EN BD
+# Endpoint consumido por paciente.js al guardar cambios en "Mi Perfil".
+# Actualiza tabla usuarios (datos personales + contraseña opcional)
+# y tabla afiliacion (EPS_ID, TipoEPS_ID).
+# El campo regimen_id enviado por el frontend se usa para validación
+# informativa; el régimen real queda implícito en la EPS seleccionada
+# (campo Regimen_ID de la tabla eps), que es la fuente de verdad en BD.
+#
+# FIX DE CONSISTENCIA: la contraseña nueva se hashea con generate_password_hash
+# (mismo esquema que ya verifica /auth/login vía check_password_hash) antes de
+# guardarse en la columna Contrasena. Antes se guardaba en texto plano, lo cual
+# generaba el formato inconsistente frente al login.
+# =============================================================================
+
+@usuarios_bp.route('/actualizar-perfil-paciente', methods=['POST'])
+def actualizar_perfil_paciente():
+    from werkzeug.security import generate_password_hash
+
+    datos             = request.get_json(silent=True) or {}
+    usuario_id        = datos.get('usuario_id')
+    correo            = datos.get('correo')
+    telefono          = datos.get('telefono')
+    nacimiento        = datos.get('nacimiento')
+    nueva_pass        = datos.get('nuevaPass')
+    nombres           = datos.get('nombres')
+    apellidos         = datos.get('apellidos')
+    documento         = datos.get('documento')
+    tipo_documento_id = datos.get('tipo_documento_id')
+    eps_id            = datos.get('eps_id')
+    tipo_eps_id       = datos.get('tipo_eps_id')
+    # regimen_id viene del frontend como referencia; se persiste en afiliacion
+    # solo si el esquema de BD tiene columna dedicada; de lo contrario se ignora
+    # porque el régimen queda determinado por la FK eps.Regimen_ID.
+
+    if not usuario_id:
+        return jsonify({"ok": False, "error": "usuario_id es obligatorio."}), 400
+
+    conexion = None
+    try:
+        conexion = get_db_connection()
+        conexion.row_factory = sqlite3.Row
+        cursor = conexion.cursor()
+
+        # ── Construir UPDATE dinámico para tabla usuarios ─────────────────────
+        campos  = []
+        valores = []
+
+        if nombres:
+            campos.append("Nombres = ?")
+            valores.append(nombres)
+        if apellidos:
+            campos.append("Apellidos = ?")
+            valores.append(apellidos)
+        if documento:
+            campos.append("NumeroDocumento = ?")
+            valores.append(documento)
+        if tipo_documento_id:
+            campos.append("TipoDoc_ID = ?")
+            valores.append(tipo_documento_id)
+        if correo:
+            campos.append("Correo = ?")
+            valores.append(correo)
+        if telefono:
+            campos.append("Telefono = ?")
+            valores.append(telefono)
+        if nacimiento:
+            campos.append("FechaNacimiento = ?")
+            valores.append(nacimiento)
+        if nueva_pass:
+            ok, msg = _validar_politica_password(nueva_pass)
+            if not ok:
+                return jsonify({"ok": False, "error": msg}), 400
+            campos.append("Contrasena = ?")
+            valores.append(generate_password_hash(nueva_pass))
+
+        if campos:
+            valores.append(usuario_id)
+            cursor.execute(
+                f"UPDATE usuarios SET {', '.join(campos)} WHERE Usuario_ID = ?",
+                tuple(valores)
+            )
+            if cursor.rowcount == 0:
+                return jsonify({"ok": False, "error": "Usuario no encontrado."}), 404
+
+        # ── Actualizar tabla afiliacion si se enviaron datos de EPS ──────────
+        if eps_id or tipo_eps_id:
+            cursor.execute(
+                "SELECT Afiliacion_ID, EPS_ID, TipoEPS_ID FROM afiliacion WHERE Usuario_ID = ?",
+                (usuario_id,)
+            )
+            afil_row = cursor.fetchone()
+
+            eps_final      = int(eps_id)      if eps_id      else (afil_row['EPS_ID']     if afil_row else None)
+            tipo_eps_final = int(tipo_eps_id) if tipo_eps_id else (afil_row['TipoEPS_ID'] if afil_row else None)
+
+            if afil_row:
+                cursor.execute(
+                    """UPDATE afiliacion
+                       SET EPS_ID = ?, TipoEPS_ID = ?, Fecha_Afiliacion = ?
+                       WHERE Afiliacion_ID = ?""",
+                    (eps_final, tipo_eps_final, date.today().isoformat(), afil_row['Afiliacion_ID'])
+                )
+            else:
+                if eps_final and tipo_eps_final:
+                    cursor.execute(
+                        """INSERT INTO afiliacion (Usuario_ID, EPS_ID, TipoEPS_ID, Fecha_Afiliacion)
+                           VALUES (?, ?, ?, ?)""",
+                        (usuario_id, eps_final, tipo_eps_final, date.today().isoformat())
+                    )
+
+        conexion.commit()
+        return jsonify({"ok": True, "mensaje": "Perfil actualizado correctamente."}), 200
+
+    except Exception as e:
+        if conexion:
+            try:
+                conexion.rollback()
+            except Exception:
+                pass
+        return jsonify({"ok": False, "error": str(e)}), 500
     finally:
         if conexion:
             conexion.close()
