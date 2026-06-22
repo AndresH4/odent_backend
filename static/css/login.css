@@ -118,7 +118,7 @@ input::placeholder {
     font-size: 13px;
 }
 
-/* ─── VALIDACIÓN (clases listas por si añades validación visual luego) ─── */
+/* ─── VALIDACIÓN ─── */
 .invalid,
 input.input-error {
     border-color: #ef4444 !important;
@@ -155,7 +155,33 @@ input.input-error:focus {
 
 .toggle-password:hover { color: #0284c7; }
 
-/* ─── MENSAJE DE ERROR GENERAL (#loginError) ─── */
+/* ─── ENLACE OLVIDÉ CONTRASEÑA ─── */
+.forgot-link-wrap {
+    text-align: right;
+    margin-top: 8px;
+}
+
+.forgot-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #0284c7;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: none;
+    width: auto;
+    transition: color 0.2s;
+}
+
+.forgot-link:hover {
+    color: #0369a1;
+    text-decoration: underline;
+    transform: none;
+    background: none;
+}
+
+/* ─── MENSAJE DE ERROR GENERAL ─── */
 .error-msg {
     display: none;
     text-align: center;
@@ -198,6 +224,13 @@ button:hover {
 
 button:active { transform: translateY(0); }
 
+button:disabled {
+    background: #cbd5e1;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
 /* ─── FOOTER ─── */
 .footer-link {
     margin-top: 22px;
@@ -216,8 +249,279 @@ button:active { transform: translateY(0); }
     text-decoration: underline;
 }
 
+/* ════════════════════════════════════════════════════════════
+   MODAL RECUPERAR CONTRASEÑA
+   ════════════════════════════════════════════════════════════ */
+
+.overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(8, 47, 73, 0.55);
+    backdrop-filter: blur(3px);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.overlay.show {
+    display: flex;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-recuperar {
+    width: 100%;
+    max-width: 440px;
+    max-height: 90vh;
+    overflow-y: auto;
+    background: #ffffff;
+    border-radius: 18px;
+    box-shadow: 0 25px 70px rgba(2, 132, 199, 0.25), 0 8px 24px rgba(0,0,0,0.12);
+    padding: 28px 30px 32px;
+    position: relative;
+    animation: slideUp 0.25s ease;
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(16px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.modal-close {
+    position: absolute;
+    top: 16px; right: 16px;
+    width: 32px; height: 32px;
+    background: #f1f5f9;
+    border-radius: 50%;
+    color: #64748b;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
+}
+
+.modal-close:hover {
+    background: #e2e8f0;
+    color: #334155;
+    transform: none;
+    box-shadow: none;
+}
+
+/* ─── STEPPER ─── */
+.stepper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 4px 0 26px;
+    padding-top: 6px;
+}
+
+.step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+.step-dot {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s ease;
+}
+
+.step.active .step-dot {
+    background: linear-gradient(135deg, #0284c7, #0ea5e9);
+    color: white;
+    box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.15);
+}
+
+.step.done .step-dot {
+    background: #10b981;
+    color: white;
+}
+
+.step-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #94a3b8;
+    letter-spacing: 0.2px;
+}
+
+.step.active .step-label { color: #0284c7; }
+.step.done .step-label { color: #10b981; }
+
+.step-line {
+    width: 36px;
+    height: 2px;
+    background: #e2e8f0;
+    margin: 0 6px;
+    margin-bottom: 17px;
+}
+
+/* ─── PANELES ─── */
+.panel { text-align: center; }
+
+.panel-icon {
+    width: 54px; height: 54px;
+    margin: 0 auto 14px;
+    background: linear-gradient(135deg, #e0f2fe, #f0f9ff);
+    border: 1.5px solid #bae6fd;
+    color: #0284c7;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.panel h3 {
+    margin: 0 0 8px;
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.panel-desc {
+    margin: 0 0 22px;
+    font-size: 13px;
+    color: #64748b;
+    line-height: 1.5;
+}
+
+.panel .form-group { text-align: left; }
+
+#recCodigo {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 8px;
+    padding: 12px;
+}
+
+/* ─── REENVIAR CÓDIGO ─── */
+.resend-wrap {
+    margin-top: 16px;
+    font-size: 12.5px;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+#btnReenviar {
+    width: auto;
+    background: none;
+    box-shadow: none;
+    color: #0284c7;
+    font-size: 12.5px;
+    font-weight: 700;
+    padding: 0;
+    margin: 0;
+}
+
+#btnReenviar:hover {
+    background: none;
+    transform: none;
+    box-shadow: none;
+    text-decoration: underline;
+}
+
+#btnReenviar:disabled {
+    color: #94a3b8;
+    background: none;
+    cursor: not-allowed;
+    text-decoration: none;
+}
+
+/* ─── LISTA DE REQUISITOS DE CONTRASEÑA ─── */
+.rules-list {
+    list-style: none;
+    margin: 0 0 18px;
+    padding: 12px 14px;
+    background: #f8fafc;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    text-align: left;
+    transition: border-color 0.2s ease;
+}
+
+.rules-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: #94a3b8;
+    padding: 4px 0;
+    transition: color 0.2s ease;
+}
+
+.rule-icon {
+    display: none; /* prefijos de texto reemplazan el ícono circular */
+}
+
+.rule-text {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: inherit;
+    transition: color 0.2s ease;
+}
+
+/* Estado: válido (verde) */
+.rules-list li.valid {
+    color: #10b981;
+}
+
+/* Estado: inválido/error (rojo) */
+.rules-list li.invalid {
+    color: #ef4444;
+}
+
+/* ─── PANEL ÉXITO ─── */
+.panel-success { padding: 10px 0 4px; }
+
+.success-icon {
+    width: 64px; height: 64px;
+    margin: 0 auto 18px;
+    background: linear-gradient(135deg, #d1fae5, #ecfdf5);
+    border: 2px solid #6ee7b7;
+    color: #10b981;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes popIn {
+    from { opacity: 0; transform: scale(0.5); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.redirect-note {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 18px;
+}
+
 /* ─── RESPONSIVE ─── */
 @media (max-width: 480px) {
     .body { padding: 24px 24px 28px; }
     .container { border-radius: 14px; }
+    .modal-recuperar { padding: 24px 20px 28px; }
+    .step-label { display: none; }
+    .step-line { width: 24px; }
 }

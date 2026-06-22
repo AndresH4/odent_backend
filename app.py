@@ -309,7 +309,163 @@ def verificar_codigo():
         del codigos_temporales[correo]
         return jsonify({"ok": True}), 200
     return jsonify({"ok": False, "error": "Código incorrecto"}), 400
- 
+
+# =============================================================================
+# API — SOLICITAR CÓDIGO RECUPERACIÓN DE CONTRASEÑA
+# =============================================================================
+
+@app.route('/api/auth/solicitar-codigo', methods=['POST'])
+def solicitar_codigo_recuperacion():
+    datos  = request.get_json(silent=True) or {}
+    correo = (datos.get('correo') or '').strip().lower()
+
+    if not correo:
+        return jsonify({"ok": False, "error": "Correo requerido"}), 400
+
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+        cur.execute("SELECT 1 FROM usuarios WHERE LOWER(Correo) = ?", (correo,))
+        if not cur.fetchone():
+            return jsonify({"ok": False, "error": "No existe una cuenta con ese correo."}), 404
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if con: con.close()
+
+    codigo = str(random.randint(100000, 999999))
+    codigos_temporales[correo] = codigo
+
+    cuerpo_html = f"""
+    <div style="font-family:'Segoe UI',sans-serif;max-width:480px;margin:auto;
+                border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+        <div style="background:linear-gradient(135deg,#0369a1,#0ea5e9);
+                    padding:24px;text-align:center;">
+            <h2 style="color:white;margin:0;font-size:20px;">Recuperación de contraseña</h2>
+        </div>
+        <div style="padding:28px 32px;">
+            <p style="color:#475569;font-size:15px;margin-top:0;">
+                Usa el siguiente código para restablecer tu contraseña.
+                Expira en <strong>10 minutos</strong>.
+            </p>
+            <div style="background:#f0f9ff;border:2px dashed #7dd3fc;border-radius:10px;
+                        text-align:center;padding:18px;margin:24px 0;
+                        font-size:34px;font-weight:800;letter-spacing:10px;
+                        color:#0284c7;font-family:'Courier New',monospace;">
+                {codigo}
+            </div>
+            <p style="color:#94a3b8;font-size:12px;text-align:center;margin-bottom:0;">
+                Si no solicitaste este código, ignora este mensaje.
+            </p>
+        </div>
+    </div>
+    """
+
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = "Código de recuperación - Stylo Dental"
+        msg['From']    = SMTP_FROM
+        msg['To']      = correo
+        msg.attach(MIMEText(cuerpo_html, 'html'))
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as servidor:
+            servidor.ehlo()
+            servidor.starttls()
+            servidor.login(SMTP_USER, SMTP_PASSWORD)
+            servidor.sendmail(SMTP_USER, correo, msg.as_string())
+
+        return jsonify({"ok": True}), 200
+
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# =============================================================================
+# API — VERIFICAR CÓDIGO RECUPERACIÓN DE CONTRASEÑA
+# =============================================================================
+
+@app.route('/api/auth/verificar-codigo', methods=['POST'])
+def verificar_codigo_recuperacion():
+    datos     = request.get_json(silent=True) or {}
+    correo    = (datos.get('correo') or '').strip().lower()
+    ingresado = str(datos.get('codigo') or '').strip()
+    esperado  = codigos_temporales.get(correo)
+
+    if not esperado:
+        return jsonify({"ok": False, "error": "No hay código generado para este correo."}), 400
+    if ingresado != esperado:
+        return jsonify({"ok": False, "error": "Código incorrecto."}), 400
+
+    # No eliminamos el código aquí; se elimina al cambiar la contraseña
+    return jsonify({"ok": True}), 200
+
+
+# =============================================================================
+# API — CAMBIAR CONTRASEÑA (recuperación)
+# =============================================================================
+
+@app.route('/api/auth/cambiar-password', methods=['POST'])
+def cambiar_password():
+    from werkzeug.security import generate_password_hash
+    import re
+
+    datos            = request.get_json(silent=True) or {}
+    correo           = (datos.get('correo') or '').strip().lower()
+    nueva_contrasena = datos.get('nueva_contrasena') or ''
+
+    if not correo or not nueva_contrasena:
+        return jsonify({"ok": False, "error": "Correo y nueva contraseña son requeridos."}), 400
+
+    # Validar política de contraseña (igual que el registro)
+    errores_politica = []
+    if len(nueva_contrasena) < 8:
+        errores_politica.append("Mínimo 8 caracteres.")
+    if not re.search(r'[A-Z]', nueva_contrasena):
+        errores_politica.append("Al menos una letra mayúscula.")
+    if not re.search(r'[a-z]', nueva_contrasena):
+        errores_politica.append("Al menos una letra minúscula.")
+    if not re.search(r'[0-9]', nueva_contrasena):
+        errores_politica.append("Al menos un número.")
+    if not re.search(r'[^A-Za-z0-9]', nueva_contrasena):
+        errores_politica.append("Al menos un carácter especial.")
+    if errores_politica:
+        return jsonify({"ok": False, "error": " ".join(errores_politica)}), 400
+
+    # Verificar que el código fue validado previamente
+    if correo not in codigos_temporales:
+        return jsonify({"ok": False, "error": "Sesión de recuperación no válida o expirada."}), 400
+
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+
+        cur.execute("SELECT Usuario_ID FROM usuarios WHERE LOWER(Correo) = ?", (correo,))
+        fila = cur.fetchone()
+        if not fila:
+            return jsonify({"ok": False, "error": "No existe una cuenta con ese correo."}), 404
+
+        hash_nueva = generate_password_hash(nueva_contrasena)
+
+        cur.execute(
+            "UPDATE usuarios SET Contrasena = ? WHERE LOWER(Correo) = ?",
+            (hash_nueva, correo)
+        )
+        con.commit()
+
+        if cur.rowcount == 0:
+            return jsonify({"ok": False, "error": "No se pudo actualizar la contraseña."}), 500
+
+        # Invalidar el código una vez usada la operación exitosamente
+        codigos_temporales.pop(correo, None)
+
+        return jsonify({"ok": True}), 200
+
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if con: con.close() 
  
 # =============================================================================
 # INICIO

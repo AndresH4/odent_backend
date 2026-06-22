@@ -1,15 +1,13 @@
 import sqlite3
 from sqlite3 import Error
+from werkzeug.security import generate_password_hash
 
 def create_database_and_tables():
     db_name = "odent.db"
     
-    # Estructura adaptada a la sintaxis de SQLite (INTEGER PRIMARY KEY AUTOINCREMENT)
     sql_script = """
-    -- Activar el soporte de llaves foráneas en SQLite para esta sesión
     PRAGMA foreign_keys = ON;
 
-    -- 1. Tablas Maestras Independientes
     CREATE TABLE tipo_documento (
       TipoDoc_ID INTEGER PRIMARY KEY AUTOINCREMENT,
       Nombre_Tipo_Documento VARCHAR(50) NOT NULL
@@ -70,7 +68,6 @@ def create_database_and_tables():
       Nombre_Diagnostico VARCHAR(100) NOT NULL
     );
 
-    -- 2. Entidades Principales con Dependencias
     CREATE TABLE eps (
       EPS_ID INTEGER PRIMARY KEY AUTOINCREMENT,
       Nombre_EPS VARCHAR(50) NOT NULL,
@@ -85,7 +82,7 @@ def create_database_and_tables():
       Apellidos VARCHAR(50) NOT NULL,
       TipoDoc_ID INT NOT NULL,
       NumeroDocumento VARCHAR(15) NOT NULL,
-      Contrasena VARCHAR(100) NOT NULL,
+      Contrasena VARCHAR(255) NOT NULL,
       FechaNacimiento DATE NOT NULL,
       Genero_ID INT NOT NULL,
       Correo VARCHAR(100) NOT NULL,
@@ -98,7 +95,6 @@ def create_database_and_tables():
       FOREIGN KEY (Rol_ID) REFERENCES rol(Rol_ID)
     );
 
-    -- 3. Subtipos / Roles de Usuarios
     CREATE TABLE administrador (
       Administrador_ID INTEGER PRIMARY KEY AUTOINCREMENT,
       Usuario_ID INT NOT NULL,
@@ -118,7 +114,6 @@ def create_database_and_tables():
       FOREIGN KEY (Usuario_ID) REFERENCES usuarios(Usuario_ID)
     );
 
-    -- 4. Tablas de Asociación y Operacionales
     CREATE TABLE especialista_especialidad (
       Especialista_ID INT NOT NULL,
       Especialidad_ID INT NOT NULL,
@@ -148,7 +143,6 @@ def create_database_and_tables():
       FOREIGN KEY (Accion_ID) REFERENCES accion_aseguramiento(Accion_ID)
     );
 
-    -- 5. Agenda y Citas Médicas
     CREATE TABLE agenda (
       Agenda_ID INTEGER PRIMARY KEY AUTOINCREMENT,
       Especialista_ID INT NOT NULL,
@@ -169,7 +163,6 @@ def create_database_and_tables():
       FOREIGN KEY (Agenda_ID) REFERENCES agenda(Agenda_ID)
     );
 
-    -- 6. Consecuencias de la Cita (Multas, Rankings, Historias Clínicas)
     CREATE TABLE multa (
       Multa_ID INTEGER PRIMARY KEY AUTOINCREMENT,
       Cita_ID INT NOT NULL,
@@ -216,13 +209,8 @@ def create_database_and_tables():
       FOREIGN KEY (Historial_ID) REFERENCES historial_clinico(Historial_ID)
     );
 
-
-    -- ==========================================
-    -- INSERCIÓN DE DATOS DE PRUEBA (MOCK DATA)
-    -- ==========================================
-
     INSERT INTO tipo_documento (Nombre_Tipo_Documento) VALUES 
-    ('Cedula de ciudadania'), ('Tarjeta de identidad'), ('Permiso por protección temporal');
+    ('Cedula de ciudadania'), ('Cedula de Extranjeria'), ('Tarjeta de identidad'), ('Registro civil'), ('Pasaporte') , ('Permiso Especial de Permanencia '), ('Documento de Identificacion Extranjero'), ('Permiso por protección temporal');
 
     INSERT INTO genero (NombreGenero) VALUES ('Femenino'), ('Masculino');
     INSERT INTO estado_usuario (Nombre_Estado) VALUES ('Activo'), ('Inactivo');
@@ -238,39 +226,56 @@ def create_database_and_tables():
     ('Compensar', '601 4441234', 1), ('Salud Total', '601 4055440', 1), ('NuevaEPS', '601 3077022', 1),
     ('Famisanar', '301 3078069', 1), ('Sanitas', '601 3759000', 1), ('CapitalSalud', '601 7427257', 2), ('Sura', '601 4897941', 1);
 
-    INSERT INTO usuarios (Nombres, Apellidos, TipoDoc_ID, NumeroDocumento, Contrasena, FechaNacimiento, Genero_ID, Correo, Telefono, Estado_ID, Rol_ID) VALUES
-    ('Andres Felipe', 'Hernandez Rodriguez', 1, '1028465975', 'Andresh04_', '1996-08-24', 2, 'andresfhernandez4@gmail.com', '3136684258', 1, 1),
-    ('Iris Dayana', 'Joya Estupiñan', 1, '1054888650', 'Irisjoya12*', '2002-03-12', 1, 'iris.dayana@gmail.com', '3056894808', 1, 2),
-    ('Isabella Maria', 'Cabal Rodriguez', 1, '1020834210', 'Isacabal9.', '2000-11-03', 1, 'isacabalr09@gmail.com', '3108849033', 1, 3),
-    ('Maicol Stiven', 'Poveda Cuellar', 1, '1230764856', 'Maicolpoveda..40', '2001-07-23', 2, 'maicollsfanfan@gmail.com', '3124569845', 1, 3),
-    ('Lorena Valentina', 'Peñaloza Gomez', 1, '1023987345', 'Lorevpeñaloza__30', '2006-04-15', 1, 'lore_valentina30@gmail.com', '3219964823', 1, 3),
-    ('Kevin Andres', 'Ocampo Vasquez', 1, '1000684012', 'Kandresovasquez*07', '2002-01-11', 2, 'kevandres04@gmail.com', '3132438921', 1, 3),
-    ('Juliana', 'Olarte Gomez', 1, '1095425107', 'Juli_olarte28', '1998-12-30', 1, 'julianaolarte@gmail.com', '3255699949', 1, 2),
-    ('Paula Alejandra', 'Hernandez Parra', 3, '11696298', 'Paulahern.*56', '1991-06-05', 1, 'paulahernandez@gmail.com', '3124567890', 1, 2),
-    ('Dayana Alexandra', 'Agudelo Medina', 3, '7264893', 'Alexandraagu44*', '2005-09-18', 1, 'dayanaa_agudelo@gmail.com', '3108982640', 1, 3),
-    ('Gabriela Lishet', 'Pozo Ortiz', 1, '1023666105', 'gabY2910.', '2004-06-22', 1, 'gabrilpozo_16@gmail.com', '3213244214', 1, 3),
-    ('Clara Maria', 'Castillo marquez', 1, '1018885632', 'Claramn_09', '2001-02-09', 1, 'claracastillo01@gmail.com', '3227845689', 1, 2),
-    ('Jorge Andres', 'Perez Joya', 3, '1022455699', 'Jorgitop.30', '2000-10-30', 2, 'jorgeperez02@gmail.com', '3244455578', 1, 2),
-    ('Lucia Maria', 'Colmenares Martinez', 1, '1099958546', 'Luciacolmenares_28', '2007-04-28', 1, 'luciolmenares@gmail.com', '3125689708', 1, 2),
-    ('Alisson Sofia', 'Gonzales Rivera', 2, '1024762387', 'Alissongonzales12%', '2012-09-12', 1, 'Alissonsfiagonr@gmail.com', '3208731292', 1, 3),
-    ('Martin Alejandro', 'Ordoñez Parra', 1, '1004466755', 'Martinp04_', '2006-10-04', 2, 'martin26op@gmail.com', '3116489554', 1, 3),
-    ('Katy Andrea', 'Lagos Manrique', 1, '1113976297', 'katyLagos_02', '2000-07-02', 1, 'katylagos@gmail.com', '3244744875', 1, 2),
-    ('Carlos Felipe', 'Castellano Maldonado', 1, '1132527487', 'carlosCC_09.', '2004-01-09', 2, 'maldonado.carlos@gmail.com', '3225476125', 1, 2),
-    ('Jurleidis Maria', 'Gonzales Prieto', 3, '1151078677', 'jMuly.08', '1997-12-08', 1, 'jurleidisprieto@gmail.com', '3200054876', 1, 2),
-    ('Angela', 'Arias Cañon', 2, '1230678310', 'Angelaa99.', '2014-11-09', 1, 'angelarias4@gmail.com', '3142186778', 1, 3),
-    ('Natalia Isabella', 'Parra Perez', 1, '1188181058', 'Nataliaparra_31', '2004-10-31', 1, 'nataliaparra@gmail.com', '3006546925', 1, 2),
-    ('Sara Maria', 'Garcia Reina', 1, '1432982314', 'Saaragarcia*06', '2006-12-06', 1, 'saramgar28@gmail.com', '3208871462', 1, 3),
-    ('Juan Jose', 'Pérez García', 1, '1429637536', 'Juann**28', '2001-01-28', 2, 'juanperez@gmail.com', '3113145821', 1, 3),
-    ('Maria Fernanda', 'López Torres', 1, '1023674009', 'MariaFernanda05.', '2005-05-05', 1, 'lopezfernanda@gmail.com', '3209425824', 1, 3),
-    ('Carlos Felipe', 'Ruiz Lima', 1, '1019762538', 'Carlosruiz0880', '1995-08-24', 2, 'carlosruiz@gmail.com', '3102857413', 1, 3),
-    ('Ana Maria', 'Belen Rojas', 1, '1006667274', 'Anaa*.27', '2001-05-27', 1, 'anamaria88@gmail.com', '3220145856', 1, 3),
-    ('Luis Fernando', 'Castro Ortiz', 1, '1208554755', 'Luiscas&20', '2003-04-20', 2, 'luisxcastro@gmail.com', '3117547674', 1, 3),
-    ('Elena Sofia', 'Mendez Paz', 1, '1109986749', 'ElenaM._11', '2007-01-11', 1, 'elenamendez@gmail.com', '3205892244', 1, 3),
-    ('Jorge Enrique', 'Villa Sol', 1, '1006456477', 'Jorge_e09', '1998-02-09', 2, 'jorgevilla@gmail.com', '3136485315', 1, 3),
-    ('Paula Sofia', 'Luna Mar', 1, '1024440980', 'Paulaluna*06', '2007-10-06', 1, 'paulitalinda@gmail.com', '3123251678', 1, 3),
-    ('Roberto Andres', 'Diaz Mena', 1, '1002366327', 'Robertodd.03', '2004-05-03', 2, 'robertod@gmail.com', '3152468228', 1, 3),
-    ('Lucia Alejandra', 'Vega Solis', 1, '1109263541', 'Luciavega24*', '2007-08-24', 1, 'luciavega@gmail.com', '3195543648', 1, 3);
+    INSERT INTO estado_agenda (Nombre_Estado) VALUES ('Disponible'), ('Ocupado'), ('Cancelado');
 
+    INSERT INTO accion_aseguramiento (Nombre_Accion) VALUES ('Asegurar'), ('Actualizar'), ('Eliminar');
+
+    INSERT INTO estado_multa (Nombre_Estado) VALUES ('Pendiente'), ('Pagada');
+
+    INSERT INTO preguntas_ranking (Texto_Pregunta) VALUES 
+    ('¿El odontólogo fue amable durante la consulta?'), ('¿Te explicó claramente el diagnóstico?');
+
+    INSERT INTO diagnostico (Nombre_Diagnostico) VALUES 
+    ('Caries Dental Profunda'), ('Gingivitis Crónica'), ('Periodontitis Avanzada'), ('Absceso Periapical'),
+    ('Tercer Molar Impactado'), ('Pulpite Irreversible'), ('Maloclusión Clase II'), ('Bruxismo Severo'),
+    ('Evolución de Tratamiento General'), ('Consulta de Control Preventivo');
+    """
+
+    usuarios_data = [
+        ('Andres Felipe',    'Hernandez Rodriguez', 1, '1028465975', 'Andresh04_',          '1996-08-24', 2, 'andresfhernandez4@gmail.com',  '3136684258', 1, 1),
+        ('Iris Dayana',      'Joya Estupiñan',      1, '1054888650', 'Irisjoya12*',          '2002-03-12', 1, 'iris.dayana@gmail.com',         '3056894808', 1, 2),
+        ('Isabella Maria',   'Cabal Rodriguez',     1, '1020834210', 'Isacabal9.',           '2000-11-03', 1, 'isacabalr09@gmail.com',         '3108849033', 1, 3),
+        ('Maicol Stiven',    'Poveda Cuellar',      1, '1230764856', 'Maicolpoveda..40',     '2001-07-23', 2, 'maicollsfanfan@gmail.com',      '3124569845', 1, 3),
+        ('Lorena Valentina', 'Peñaloza Gomez',      1, '1023987345', 'Lorevpeñaloza__30',    '2006-04-15', 1, 'lore_valentina30@gmail.com',    '3219964823', 1, 3),
+        ('Kevin Andres',     'Ocampo Vasquez',      1, '1000684012', 'Kandresovasquez*07',   '2002-01-11', 2, 'kevandres04@gmail.com',         '3132438921', 1, 3),
+        ('Juliana',          'Olarte Gomez',        1, '1095425107', 'Juli_olarte28',        '1998-12-30', 1, 'julianaolarte@gmail.com',       '3255699949', 1, 2),
+        ('Paula Alejandra',  'Hernandez Parra',     3, '11696298',   'Paulahern.*56',        '1991-06-05', 1, 'paulahernandez@gmail.com',      '3124567890', 1, 2),
+        ('Dayana Alexandra', 'Agudelo Medina',      3, '7264893',    'Alexandraagu44*',      '2005-09-18', 1, 'dayanaa_agudelo@gmail.com',     '3108982640', 1, 3),
+        ('Gabriela Lishet',  'Pozo Ortiz',          1, '1023666105', 'gabY2910.',            '2004-06-22', 1, 'gabrilpozo_16@gmail.com',       '3213244214', 1, 3),
+        ('Clara Maria',      'Castillo marquez',    1, '1018885632', 'Claramn_09',           '2001-02-09', 1, 'claracastillo01@gmail.com',     '3227845689', 1, 2),
+        ('Jorge Andres',     'Perez Joya',          3, '1022455699', 'Jorgitop.30',          '2000-10-30', 2, 'jorgeperez02@gmail.com',        '3244455578', 1, 2),
+        ('Lucia Maria',      'Colmenares Martinez', 1, '1099958546', 'Luciacolmenares_28',   '2007-04-28', 1, 'luciolmenares@gmail.com',       '3125689708', 1, 2),
+        ('Alisson Sofia',    'Gonzales Rivera',     2, '1024762387', 'Alissongonzales12%',   '2012-09-12', 1, 'Alissonsfiagonr@gmail.com',     '3208731292', 1, 3),
+        ('Martin Alejandro', 'Ordoñez Parra',       1, '1004466755', 'Martinp04_',           '2006-10-04', 2, 'martin26op@gmail.com',          '3116489554', 1, 3),
+        ('Katy Andrea',      'Lagos Manrique',      1, '1113976297', 'katyLagos_02',         '2000-07-02', 1, 'katylagos@gmail.com',           '3244744875', 1, 2),
+        ('Carlos Felipe',    'Castellano Maldonado',1, '1132527487', 'carlosCC_09.',         '2004-01-09', 2, 'maldonado.carlos@gmail.com',    '3225476125', 1, 2),
+        ('Jurleidis Maria',  'Gonzales Prieto',     3, '1151078677', 'jMuly.08',             '1997-12-08', 1, 'jurleidisprieto@gmail.com',     '3200054876', 1, 2),
+        ('Angela',           'Arias Cañon',         2, '1230678310', 'Angelaa99.',           '2014-11-09', 1, 'angelarias4@gmail.com',         '3142186778', 1, 3),
+        ('Natalia Isabella', 'Parra Perez',         1, '1188181058', 'Nataliaparra_31',      '2004-10-31', 1, 'nataliaparra@gmail.com',        '3006546925', 1, 2),
+        ('Sara Maria',       'Garcia Reina',        1, '1432982314', 'Saaragarcia*06',       '2006-12-06', 1, 'saramgar28@gmail.com',          '3208871462', 1, 3),
+        ('Juan Jose',        'Pérez García',        1, '1429637536', 'Juann**28',            '2001-01-28', 2, 'juanperez@gmail.com',           '3113145821', 1, 3),
+        ('Maria Fernanda',   'López Torres',        1, '1023674009', 'MariaFernanda05.',     '2005-05-05', 1, 'lopezfernanda@gmail.com',       '3209425824', 1, 3),
+        ('Carlos Felipe',    'Ruiz Lima',           1, '1019762538', 'Carlosruiz0880',       '1995-08-24', 2, 'carlosruiz@gmail.com',          '3102857413', 1, 3),
+        ('Ana Maria',        'Belen Rojas',         1, '1006667274', 'Anaa*.27',             '2001-05-27', 1, 'anamaria88@gmail.com',          '3220145856', 1, 3),
+        ('Luis Fernando',    'Castro Ortiz',        1, '1208554755', 'Luiscas&20',           '2003-04-20', 2, 'luisxcastro@gmail.com',         '3117547674', 1, 3),
+        ('Elena Sofia',      'Mendez Paz',          1, '1109986749', 'ElenaM._11',           '2007-01-11', 1, 'elenamendez@gmail.com',         '3205892244', 1, 3),
+        ('Jorge Enrique',    'Villa Sol',           1, '1006456477', 'Jorge_e09',            '1998-02-09', 2, 'jorgevilla@gmail.com',          '3136485315', 1, 3),
+        ('Paula Sofia',      'Luna Mar',            1, '1024440980', 'Paulaluna*06',         '2007-10-06', 1, 'paulitalinda@gmail.com',        '3123251678', 1, 3),
+        ('Roberto Andres',   'Diaz Mena',           1, '1002366327', 'Robertodd.03',         '2004-05-03', 2, 'robertod@gmail.com',            '3152468228', 1, 3),
+        ('Lucia Alejandra',  'Vega Solis',          1, '1109263541', 'Luciavega24*',         '2007-08-24', 1, 'luciavega@gmail.com',           '3195543648', 1, 3),
+    ]
+
+    sql_post = """
     INSERT INTO administrador (Usuario_ID) VALUES (1);
 
     INSERT INTO paciente (Usuario_ID) VALUES 
@@ -293,8 +298,6 @@ def create_database_and_tables():
     (25, 1, 1, '2015-06-15'), (26, 6, 1, '2020-08-24'), (27, 1, 1, '2024-03-15'), (28, 6, 1, '2020-04-12'),
     (29, 4, 1, '2025-08-24'), (30, 5, 1, '2025-09-04'), (31, 2, 1, '2026-02-22');
 
-    INSERT INTO estado_agenda (Nombre_Estado) VALUES ('Disponible'), ('Ocupado'), ('Cancelado');
-
     INSERT INTO agenda (Especialista_ID, Fecha, Hora_Inicio, Hora_Final, EstadoAgenda_ID) VALUES 
     (1, '2026-03-09', '09:00:00', '09:30:00', 1), (2, '2026-03-15', '14:00:00', '14:30:00', 2),
     (3, '2026-03-21', '10:00:00', '10:30:00', 3), (4, '2026-03-21', '14:00:00', '15:00:00', 2),
@@ -306,19 +309,12 @@ def create_database_and_tables():
     (1, 1, 'Dolor Dental'), (2, 2, 'Revisión'), (3, 3, 'Limpieza'), (4, 4, 'Ortodoncia'), (5, 5, 'Ortodoncia'),
     (6, 6, 'Cirujia'), (7, 7, 'Tratamiento'), (8, 8, 'Ortodoncia'), (9, 9, 'Limpieza'), (10, 10, 'Control Ortodoncia');
 
-    INSERT INTO estado_multa (Nombre_Estado) VALUES ('Pendiente'), ('Pagada');
-
     INSERT INTO multa (Cita_ID, EstadoMulta_ID) VALUES 
     (1, 2), (2, 1), (3, 2), (4, 2), (5, 1), (6, 1), (7, 2), (8, 2), (9, 2), (10, 1);
-
-    INSERT INTO preguntas_ranking (Texto_Pregunta) VALUES 
-    ('¿El odontólogo fue amable durante la consulta?'), ('¿Te explicó claramente el diagnóstico?');
 
     INSERT INTO respuesta_ranking (Cita_ID, Preguntas_ID, Respuesta) VALUES (1, 1, 5), (2, 2, 5);
 
     INSERT INTO puntuacion_especialista (Especialista_ID, Respuesta_ID) VALUES (1, 1), (2, 2);
-
-    INSERT INTO accion_aseguramiento (Nombre_Accion) VALUES ('Asegurar'), ('Actualizar'), ('Eliminar');
 
     INSERT INTO aseguramiento_datos (Usuario_ID, Accion_ID, Fecha, Descripcion) VALUES 
     (1, 1, '2025-10-22', 'Datos asegurados'), (2, 1, '2025-10-23', 'Datos asegurados'), (3, 1, '2025-10-24', 'Datos asegurados'),
@@ -335,11 +331,6 @@ def create_database_and_tables():
     INSERT INTO historial_clinico (Cita_ID) VALUES 
     (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
 
-    INSERT INTO diagnostico (Nombre_Diagnostico) VALUES 
-    ('Caries Dental Profunda'), ('Gingivitis Crónica'), ('Periodontitis Avanzada'), ('Absceso Periapical'),
-    ('Tercer Molar Impactado'), ('Pulpite Irreversible'), ('Maloclusión Clase II'), ('Bruxismo Severo'),
-    ('Evolución de Tratamiento General'), ('Consulta de Control Preventivo');
-
     INSERT INTO historial_diagnostico (Historial_ID, Diagnostico_ID) VALUES 
     (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9), (10, 10);
 
@@ -351,26 +342,39 @@ def create_database_and_tables():
     """
 
     connection = None
-
     try:
         print(f"Buscando / Creando el archivo de base de datos local '{db_name}'...")
-        # sqlite3.connect crea el archivo automáticamente si no existe en la ruta actual
         connection = sqlite3.connect(db_name)
         cursor = connection.cursor()
-        
-        print("Inicializando la base de datos con relaciones limpias (3NF) e IDs enteros...")
-        # executescript permite correr todo el string SQL multi-línea con transacciones implícitas
+
+        print("Creando tablas e insertando datos estáticos...")
         cursor.executescript(sql_script)
-                
+
+        print("Insertando usuarios con contraseñas hasheadas...")
+        for u in usuarios_data:
+            nombres, apellidos, tipo_doc, documento, contrasena_plana, fecha_nac, genero_id, correo, telefono, estado_id, rol_id = u
+            contrasena_hash = generate_password_hash(contrasena_plana)
+            cursor.execute(
+                """INSERT INTO usuarios
+                   (Nombres, Apellidos, TipoDoc_ID, NumeroDocumento, Contrasena,
+                    FechaNacimiento, Genero_ID, Correo, Telefono, Estado_ID, Rol_ID)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (nombres, apellidos, tipo_doc, documento, contrasena_hash,
+                 fecha_nac, genero_id, correo, telefono, estado_id, rol_id)
+            )
+
+        print("Insertando relaciones y datos dependientes...")
+        cursor.executescript(sql_post)
+
         connection.commit()
-        print(f"¡✔ Base de datos '{db_name}' inicializada con éxito y poblada con datos de prueba!")
+        print(f"✔ Base de datos '{db_name}' inicializada con éxito y contraseñas hasheadas correctamente.")
 
     except Error as e:
-        print(f"❌ Error durante el proceso de inicialización en SQLite3: {e}")
+        print(f"❌ Error durante la inicialización: {e}")
     finally:
         if connection:
             connection.close()
             print("Conexión con SQLite cerrada de forma segura.")
 
 if __name__ == "__main__":
-    create_database_and_tables() 
+    create_database_and_tables()

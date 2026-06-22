@@ -5,6 +5,7 @@ Blueprint de usuarios con creación TRANSACCIONAL y atómica.
  
 from flask import Blueprint, request, jsonify, render_template
 import sqlite3
+import re
 from db import get_db_connection
 from modulo_usuarios import (
     usuario, rol, genero, tipo_documento, estado_usuario,
@@ -13,7 +14,31 @@ from modulo_usuarios import (
 from datetime import date
  
 usuarios_bp = Blueprint('usuarios_bp', __name__)
- 
+
+
+# ─── POLÍTICA DE CONTRASEÑA ───────────────────────────────────────────────────
+def _validar_politica_password(password):
+    """
+    Valida que la contraseña cumpla:
+      - Mínimo 8 caracteres
+      - Al menos una letra mayúscula
+      - Al menos una letra minúscula
+      - Al menos un número
+      - Al menos un carácter especial
+    Retorna (True, '') si cumple, o (False, mensaje) si no cumple.
+    """
+    if len(password) < 8:
+        return False, 'La contraseña debe tener al menos 8 caracteres.'
+    if not re.search(r'[A-Z]', password):
+        return False, 'La contraseña debe contener al menos una letra mayúscula.'
+    if not re.search(r'[a-z]', password):
+        return False, 'La contraseña debe contener al menos una letra minúscula.'
+    if not re.search(r'[0-9]', password):
+        return False, 'La contraseña debe contener al menos un número.'
+    if not re.search(r'[^A-Za-z0-9]', password):
+        return False, 'La contraseña debe contener al menos un carácter especial.'
+    return True, ''
+
  
 # =============================================================================
 # AUTENTICACIÓN — LOGIN
@@ -21,34 +46,45 @@ usuarios_bp = Blueprint('usuarios_bp', __name__)
  
 @usuarios_bp.route('/auth/login', methods=['POST'])
 def login():
+    from werkzeug.security import check_password_hash
+
     datos = request.get_json(silent=True) or {}
- 
+
     correo     = (datos.get('correo') or '').strip().lower()
     contrasena = datos.get('contrasena') or ''
- 
+
     if not correo or not contrasena:
         return jsonify({"ok": False, "error": "Correo y contraseña son requeridos"}), 400
- 
+
     conexion = None
     try:
         conexion = get_db_connection()
         conexion.row_factory = sqlite3.Row
         cursor = conexion.cursor()
- 
+
         cursor.execute(
-            "SELECT * FROM usuarios WHERE LOWER(Correo) = ? AND Contrasena = ?",
-            (correo, contrasena)
+            "SELECT * FROM usuarios WHERE LOWER(Correo) = ?",
+            (correo,)
         )
         fila = cursor.fetchone()
- 
+
         if fila is None:
             return jsonify({"ok": False, "error": "Correo o contraseña incorrectos"}), 401
- 
+
+        hash_bd = fila['Contrasena']
+
+        # Soporte dual: hashes werkzeug (pbkdf2/scrypt) y texto plano legacy
+        if hash_bd.startswith('pbkdf2:') or hash_bd.startswith('scrypt:'):
+            autenticado = check_password_hash(hash_bd, contrasena)
+        else:
+            autenticado = (hash_bd == contrasena)
+
+        if not autenticado:
+            return jsonify({"ok": False, "error": "Correo o contraseña incorrectos"}), 401
+
         usuario_data = dict(fila)
         usuario_data.pop('Contrasena', None)
 
-        # ── CORRECCIÓN: Si es especialista (Rol_ID == 2), adjuntar Especialista_ID
-        # para que especialista.js pueda cargar sus citas sin una petición extra.
         if usuario_data.get('Rol_ID') == 2:
             cursor.execute(
                 "SELECT Especialista_ID FROM especialista WHERE Usuario_ID = ?",
@@ -58,7 +94,6 @@ def login():
             if esp_row:
                 usuario_data['Especialista_ID'] = esp_row['Especialista_ID']
 
-                # Adjuntar también la especialidad del especialista para mostrarlo en UI
                 cursor.execute("""
                     SELECT esp.Nombre_Especialidad
                     FROM especialista_especialidad ee
@@ -69,9 +104,9 @@ def login():
                 esp_nombre = cursor.fetchone()
                 if esp_nombre:
                     usuario_data['Especialidad'] = esp_nombre['Nombre_Especialidad']
- 
+
         return jsonify({"ok": True, "usuario": usuario_data}), 200
- 
+
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
     finally:
@@ -146,8 +181,6 @@ def add_usuario():
         errores.append("rol_id inválido (debe ser 1, 2 o 3)")
  
     eps_id             = datos.get('eps_id')
-    # Acepta 'tipo_eps_id' (campo real enviado desde creacion.js) y mantiene
-    # compatibilidad con 'tipo_afiliacion_id' para otros posibles clientes.
     tipo_afiliacion_id = datos.get('tipo_eps_id') or datos.get('tipo_afiliacion_id')
  
     if rol_id == 3:
@@ -176,7 +209,6 @@ def add_usuario():
  
         cursor.execute("BEGIN")
  
-        # ── Validaciones de duplicados / integridad referencial contra la BD real ──
         cursor.execute("SELECT 1 FROM usuarios WHERE LOWER(Correo) = ?", (correo,))
         if cursor.fetchone():
             cursor.execute("ROLLBACK")
@@ -548,8 +580,6 @@ def crear_afiliacion():
     datos = request.get_json(silent=True) or {}
     usuario_id     = datos.get('ID_Usuario')
     eps_id         = datos.get('ID_EPS')
-    # Acepta 'ID_Tipo_EPS' (campo real enviado desde creacion.js) y mantiene
-    # compatibilidad con 'ID_Regimen_EPS' para otros posibles clientes.
     regimen_eps_id = datos.get('ID_Tipo_EPS') or datos.get('ID_Regimen_EPS')
  
     if not usuario_id:
@@ -590,6 +620,25 @@ def crear_afiliacion():
     finally:
         if conexion:
             conexion.close()
+
+
+@usuarios_bp.route('/afiliacion', methods=['GET'])
+def get_afiliacion():
+    conexion = None
+    try:
+        conexion = get_db_connection()
+        conexion.row_factory = sqlite3.Row
+        cursor = conexion.cursor()
+        cursor.execute(
+            "SELECT Afiliacion_ID, Usuario_ID, EPS_ID, TipoEPS_ID, Fecha_Afiliacion FROM afiliacion"
+        )
+        filas = cursor.fetchall()
+        return jsonify([dict(fila) for fila in filas]), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if conexion:
+            conexion.close()
  
  
 @usuarios_bp.route('/afiliacion/<int:id>', methods=['PUT'])
@@ -623,3 +672,11 @@ def actualizar_afiliacion(id):
     finally:
         if conexion:
             conexion.close()
+
+
+# =============================================================================
+# VALIDACIÓN DE POLÍTICA EN ENDPOINT actualizar-perfil-paciente
+# Este endpoint vive en modulo_citas/routes.py pero la política de contraseña
+# debe aplicarse también allí. Se agrega aquí la función helper exportable
+# para que modulo_citas/routes.py la importe y la use.
+# =============================================================================
