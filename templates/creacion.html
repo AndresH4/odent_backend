@@ -74,9 +74,14 @@
                     <label>Tipo de documento</label>
                     <select class="form-control" id="tipoDocumento">
                         <option value="">Seleccione una opción</option>
-                        <option>Cedula de ciudadanía</option>
-                        <option>Tarjeta de identidad</option>
-                        <option>Cedula de extranjería</option>
+                        <option value="1">Cédula de Ciudadanía</option>
+                        <option value="2">Cédula de Extranjería</option>
+                        <option value="3">Tarjeta de Identidad</option>
+                        <option value="4">Registro Civil</option>
+                        <option value="5">Pasaporte</option>
+                        <option value="6">Permiso por Protección Temporal</option>
+                        <option value="7">Permiso Especial de Permanencia</option>
+                        <option value="8">Documento de Identificación Extranjero</option>
                     </select>
                     <div class="error-msg" id="errorTipo"></div>
                 </div>
@@ -111,12 +116,14 @@
                 <div class="form-group">
                     <label>Especialidad Médica</label>
                     <select class="form-control" id="especialidadMedica">
-                        <option value="1">Endodoncia</option>
-                        <option value="2">Odontopediatria</option>
-                        <option value="3">Odontologia General</option>
-                        <option value="4">Cirugia Oral</option>
                         <option value="5">Ortodoncia</option>
-                        <option value="6">Control brackets</option>
+                        <option value="1">Endodoncia</option>
+                        <option value="9">Periodoncia</option>
+                        <option value="10">Rehabilitación Oral</option>
+                        <option value="4">Cirugía Oral</option>
+                        <option value="2">Odontopediatría</option>
+                        <option value="11">Estética Dental</option>
+                        <option value="12">Implantes Dentales</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -284,6 +291,12 @@
             <div class="form-group" style="margin-top: 20px;">
                 <label style="text-align:center; color:#475569;">Ingresa el código que aparece arriba</label>
                 <input class="form-control" type="text" id="codigo" style="text-align: center; font-size: 22px; letter-spacing: 6px; font-weight: 700;" placeholder="_ _ _ _ _ _" maxlength="6">
+                <div style="text-align:center; margin-top: 10px;">
+                    <button type="button" id="btnReenviar" onclick="reenviarCodigo()" disabled
+                        style="background: #e2e8f0; color: #94a3b8; box-shadow:none; width:auto; padding: 9px 22px; font-size:13px; cursor:not-allowed;">
+                        Reenviar código (<span id="timerReenvio">10</span>s)
+                    </button>
+                </div>
                 <div class="error-msg" id="errorCodigo" style="text-align: center;"></div>
             </div>
             <button onclick="verificarCodigo()">
@@ -302,7 +315,13 @@
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                     </div>
                 </div>
-                <div class="password-hint">Mínimo 8 caracteres, incluir una mayúscula, un número y un carácter especial.</div>
+                <ul class="req-list" id="reqList">
+                    <li id="req-len">- Mínimo 8 caracteres</li>
+                    <li id="req-upper">- Al menos una mayúscula</li>
+                    <li id="req-lower">- Al menos una minúscula</li>
+                    <li id="req-num">- Al menos un número</li>
+                    <li id="req-special">- Al menos un carácter especial</li>
+                </ul>
                 <div class="error-msg" id="errorPassword"></div>
             </div>
 
@@ -322,7 +341,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
             </button>
 
-            <div class="success-msg" id="mensajeFinal"></div>
+
             <button id="btnIrAlLogin" class="btn-login-success" onclick="abrirLogin()">
                 Ir a Iniciar Sesión
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg>
@@ -333,5 +352,18 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/creacion.js') }}"></script>
+<div id="successOverlay" class="success-overlay" style="display:none;">
+    <div class="success-card">
+        <div class="success-check-wrap">
+            <svg class="success-check-svg" viewBox="0 0 52 52">
+                <circle class="check-circle" cx="26" cy="26" r="25" fill="none"/>
+                <path class="check-tick" fill="none" d="M14 27l8 8 16-16"/>
+            </svg>
+        </div>
+        <h2 class="success-title">¡Cuenta creada con éxito!</h2>
+        <p class="success-sub">Redirigiendo al inicio de sesión...</p>
+        <div class="success-bar-wrap"><div class="success-bar" id="successBar"></div></div>
+    </div>
+</div>
 </body>
 </html>

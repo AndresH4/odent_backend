@@ -33,9 +33,9 @@ from .regimen_eps import (
     crear_regimen, obtener_regimenes, obtener_regimen_por_id,
     actualizar_regimen, eliminar_regimen,
 )
-from .tipo_eps import (
-    crear_tipo_eps, obtener_tipos_eps, obtener_tipo_eps_por_id,
-    actualizar_tipo_eps, eliminar_tipo_eps,
+from .tipo_afiliacion_eps import (
+    crear_tipo_afiliacion_eps, obtener_tipos_afiliacion_eps, obtener_tipo_afiliacion_eps_por_id,
+    actualizar_tipo_afiliacion_eps, eliminar_tipo_afiliacion_eps,
 )
 from .tabla_pregunta import (
     crear_pregunta, obtener_preguntas, obtener_pregunta_por_id,
@@ -51,64 +51,64 @@ eps_bp = Blueprint("eps", __name__)
 
 
 # =============================================================================
-# TIPO EPS
+# TIPO AFILIACIÓN EPS
 # =============================================================================
 
-@eps_bp.route('/tipo-eps', methods=['GET'])
-def listar_tipos_eps():
+@eps_bp.route('/tipo-afiliacion-eps', methods=['GET'])
+def listar_tipos_afiliacion_eps():
     try:
-        datos = obtener_tipos_eps()
+        datos = obtener_tipos_afiliacion_eps()
         return jsonify({"ok": True, "data": datos}), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-@eps_bp.route('/tipo-eps', methods=['POST'])
-def nuevo_tipo_eps():
+@eps_bp.route('/tipo-afiliacion-eps', methods=['POST'])
+def nuevo_tipo_afiliacion_eps():
     body = request.get_json()
     nombre_tipo = body.get('Nombre_Tipo') if body else None
     if not nombre_tipo:
         return jsonify({"ok": False, "error": "El campo Nombre_Tipo es requerido"}), 400
     try:
-        nuevo_id = crear_tipo_eps(nombre_tipo)
+        nuevo_id = crear_tipo_afiliacion_eps(nombre_tipo)
         return jsonify({"ok": True, "data": {"ID_Tipo_EPS": nuevo_id}}), 201
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-@eps_bp.route('/tipo-eps/<int:tipo_eps_id>', methods=['GET'])
-def ver_tipo_eps(tipo_eps_id):
+@eps_bp.route('/tipo-afiliacion-eps/<int:tipo_afiliacion_eps_id>', methods=['GET'])
+def ver_tipo_afiliacion_eps(tipo_afiliacion_eps_id):
     try:
-        registro = obtener_tipo_eps_por_id(tipo_eps_id)
+        registro = obtener_tipo_afiliacion_eps_por_id(tipo_afiliacion_eps_id)
         if registro is None:
-            return jsonify({"ok": False, "error": "Tipo de EPS no encontrado"}), 404
+            return jsonify({"ok": False, "error": "Tipo de afiliación EPS no encontrado"}), 404
         return jsonify({"ok": True, "data": registro}), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-@eps_bp.route('/tipo-eps/<int:tipo_eps_id>', methods=['PUT'])
-def editar_tipo_eps(tipo_eps_id):
+@eps_bp.route('/tipo-afiliacion-eps/<int:tipo_afiliacion_eps_id>', methods=['PUT'])
+def editar_tipo_afiliacion_eps(tipo_afiliacion_eps_id):
     body = request.get_json()
     nombre_tipo = body.get('Nombre_Tipo') if body else None
     if not nombre_tipo:
         return jsonify({"ok": False, "error": "El campo Nombre_Tipo es requerido"}), 400
     try:
-        modificado = actualizar_tipo_eps(tipo_eps_id, nombre_tipo)
+        modificado = actualizar_tipo_afiliacion_eps(tipo_afiliacion_eps_id, nombre_tipo)
         if not modificado:
-            return jsonify({"ok": False, "error": "Tipo de EPS no encontrado"}), 404
-        return jsonify({"ok": True, "mensaje": "Tipo de EPS actualizado correctamente"}), 200
+            return jsonify({"ok": False, "error": "Tipo de afiliación EPS no encontrado"}), 404
+        return jsonify({"ok": True, "mensaje": "Tipo de afiliación EPS actualizado correctamente"}), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-@eps_bp.route('/tipo-eps/<int:tipo_eps_id>', methods=['DELETE'])
-def borrar_tipo_eps(tipo_eps_id):
+@eps_bp.route('/tipo-afiliacion-eps/<int:tipo_afiliacion_eps_id>', methods=['DELETE'])
+def borrar_tipo_afiliacion_eps(tipo_afiliacion_eps_id):
     try:
-        eliminado = eliminar_tipo_eps(tipo_eps_id)
+        eliminado = eliminar_tipo_afiliacion_eps(tipo_afiliacion_eps_id)
         if not eliminado:
-            return jsonify({"ok": False, "error": "Tipo de EPS no encontrado"}), 404
-        return jsonify({"ok": True, "mensaje": "Tipo de EPS eliminado correctamente"}), 200
+            return jsonify({"ok": False, "error": "Tipo de afiliación EPS no encontrado"}), 404
+        return jsonify({"ok": True, "mensaje": "Tipo de afiliación EPS eliminado correctamente"}), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

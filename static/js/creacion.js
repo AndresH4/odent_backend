@@ -22,7 +22,7 @@ function validarEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 function validarPassword(pass) {
-    return /^(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(pass);
+    return /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(pass);
 }
 
 // ── NOTIFICACIONES ─────────────────────────────────────────────────────────────
@@ -41,21 +41,117 @@ function limpiarMensajeError() {
     if (el) { el.style.display = "none"; el.innerText = ""; }
 }
 
+// ── REQUISITOS CONTRASEÑA ──────────────────────────────────────────────────────
+const REQS = [
+    { id: 'req-len',     test: p => p.length >= 8 },
+    { id: 'req-upper',   test: p => /[A-Z]/.test(p) },
+    { id: 'req-lower',   test: p => /[a-z]/.test(p) },
+    { id: 'req-num',     test: p => /[0-9]/.test(p) },
+    { id: 'req-special', test: p => /[\W_]/.test(p) },
+];
+const LABEL = {
+    'req-len':     'Mínimo 8 caracteres',
+    'req-upper':   'Al menos una mayúscula',
+    'req-lower':   'Al menos una minúscula',
+    'req-num':     'Al menos un número',
+    'req-special': 'Al menos un carácter especial',
+};
+
+function actualizarRequisitos(mode = 'input') {
+    const p = document.getElementById("password")?.value || '';
+    REQS.forEach(({ id, test }) => {
+        const li = document.getElementById(id);
+        if (!li) return;
+        const passed = test(p);
+        li.className = '';
+        if (passed) {
+            li.className = 'ok';
+            li.textContent = '✓ ' + LABEL[id];
+        } else if (mode === 'submit') {
+            li.className = 'fail';
+            li.textContent = '✗ ' + LABEL[id];
+        } else {
+            li.textContent = '- ' + LABEL[id];
+        }
+    });
+}
+
+function todosRequisitosOk() {
+    const p = document.getElementById("password")?.value || '';
+    return REQS.every(({ test }) => test(p));
+}
+
+// ── REENVÍO CÓDIGO ─────────────────────────────────────────────────────────────
+let _reenvioTimer = null;
+
+function iniciarTimerReenvio() {
+    const btn  = document.getElementById("btnReenviar");
+    const span = document.getElementById("timerReenvio");
+    if (!btn || !span) return;
+    let seg = 10;
+    btn.disabled = true;
+    btn.style.cssText = "background:#e2e8f0;color:#94a3b8;box-shadow:none;width:auto;padding:9px 22px;font-size:13px;cursor:not-allowed;border-radius:10px;border:none;font-weight:700;";
+    btn.innerHTML = `Reenviar código (<span id="timerReenvio">${seg}</span>s)`;
+    clearInterval(_reenvioTimer);
+    _reenvioTimer = setInterval(() => {
+        seg--;
+        const s = document.getElementById("timerReenvio");
+        if (s) s.textContent = seg;
+        if (seg <= 0) {
+            clearInterval(_reenvioTimer);
+            btn.disabled = false;
+            btn.style.cssText = "background:linear-gradient(135deg,#0284c7,#0ea5e9);color:white;box-shadow:0 4px 12px rgba(14,165,233,.25);width:auto;padding:9px 22px;font-size:13px;cursor:pointer;border-radius:10px;border:none;font-weight:700;";
+            btn.innerHTML = "Reenviar código";
+        }
+    }, 1000);
+}
+
+async function reenviarCodigo() {
+    const btn = document.getElementById("btnReenviar");
+    btn.disabled = true;
+    btn.innerHTML = "Enviando...";
+    try {
+        const r = await fetch("/api/enviar-codigo", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                correo: correoVerificacion,
+                nombre: document.getElementById("nombres").value
+            })
+        });
+        const d = await r.json();
+        if (!d.ok) mostrarError("No se pudo reenviar: " + (d.error || ""));
+    } catch {
+        mostrarError("Error de conexión al reenviar.");
+    }
+    iniciarTimerReenvio();
+}
+
+// ── ANIMACIÓN ÉXITO ────────────────────────────────────────────────────────────
+function mostrarAnimacionExito() {
+    const overlay = document.getElementById("successOverlay");
+    if (!overlay) { abrirLogin(); return; }
+    overlay.style.display = "flex";
+    requestAnimationFrame(() => {
+        const bar = document.getElementById("successBar");
+        if (bar) bar.style.width = "100%";
+    });
+    setTimeout(abrirLogin, 3200);
+}
+
 // ── CAMPO FECHA: LÓGICA DE PLACEHOLDER + FORMATO MANUAL ──────────────────────
 function inicializarCampoFecha() {
-    const inputTexto  = document.getElementById("fechaNacimiento");
-    const inputNativo = document.getElementById("fechaNacimientoNative");
+    const inputTexto    = document.getElementById("fechaNacimiento");
+    const inputNativo   = document.getElementById("fechaNacimientoNative");
     const btnCalendario = document.getElementById("datePickerBtn");
 
     if (!inputTexto || !inputNativo || !btnCalendario) return;
 
-    // Al ganar foco: cambiar placeholder a formato
     inputTexto.addEventListener("focus", () => {
         inputTexto.placeholder = "DD/MM/AAAA";
         inputTexto.classList.add("typing-mode");
     });
 
-    // Al perder foco: restaurar placeholder descriptivo si vacío
     inputTexto.addEventListener("blur", () => {
         if (!inputTexto.value) {
             inputTexto.placeholder = "Ingrese su fecha de nacimiento";
@@ -63,8 +159,7 @@ function inicializarCampoFecha() {
         }
     });
 
-    // Formateo automático con separadores mientras escribe
-    inputTexto.addEventListener("input", (e) => {
+    inputTexto.addEventListener("input", () => {
         let raw = inputTexto.value.replace(/\D/g, '').slice(0, 8);
         let formatted = '';
 
@@ -74,33 +169,28 @@ function inicializarCampoFecha() {
 
         inputTexto.value = formatted;
 
-        // Sincronizar con input nativo cuando la fecha está completa (DD/MM/AAAA)
         if (raw.length === 8) {
             const dd   = raw.slice(0, 2);
             const mm   = raw.slice(2, 4);
             const yyyy = raw.slice(4, 8);
-            const isoDate = `${yyyy}-${mm}-${dd}`;
-            inputNativo.value = isoDate;
+            inputNativo.value = `${yyyy}-${mm}-${dd}`;
             verificarEdad();
         } else {
             inputNativo.value = '';
         }
     });
 
-    // Botón de calendario: abrir el date picker nativo
     btnCalendario.addEventListener("click", () => {
-        // Mostrar el input nativo brevemente para disparar el picker
-        inputNativo.style.position   = 'absolute';
-        inputNativo.style.opacity    = '0';
-        inputNativo.style.width      = '1px';
-        inputNativo.style.height     = '1px';
+        inputNativo.style.position    = 'absolute';
+        inputNativo.style.opacity     = '0';
+        inputNativo.style.width       = '1px';
+        inputNativo.style.height      = '1px';
         inputNativo.style.pointerEvents = 'auto';
         inputNativo.showPicker ? inputNativo.showPicker() : inputNativo.click();
     });
 
-    // Cuando el usuario elige una fecha del picker nativo, reflejarla en el campo texto
     inputNativo.addEventListener("change", () => {
-        const val = inputNativo.value; // formato YYYY-MM-DD
+        const val = inputNativo.value;
         if (!val) return;
         const [yyyy, mm, dd] = val.split('-');
         inputTexto.value = `${dd}/${mm}/${yyyy}`;
@@ -108,15 +198,13 @@ function inicializarCampoFecha() {
     });
 }
 
-// ── LEER FECHA DEL CAMPO TEXTO (retorna YYYY-MM-DD para el backend) ───────────
+// ── LEER FECHA ISO ─────────────────────────────────────────────────────────────
 function leerFechaISO() {
     const inputTexto  = document.getElementById("fechaNacimiento");
     const inputNativo = document.getElementById("fechaNacimientoNative");
 
-    // Si el nativo tiene valor (sync via picker o escritura completa), usarlo
     if (inputNativo && inputNativo.value) return inputNativo.value;
 
-    // Fallback: parsear campo texto manualmente
     if (inputTexto && inputTexto.value) {
         const parts = inputTexto.value.split('/');
         if (parts.length === 3 && parts[2].length === 4) {
@@ -136,6 +224,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     document.getElementById("tipoDocumento")
         .addEventListener("change", checkRequisitosAcudiente);
+
+    const pwdInput = document.getElementById("password");
+    if (pwdInput) pwdInput.addEventListener("input", () => actualizarRequisitos('input'));
 
     inicializarCampoFecha();
     cargarRolesEnFormulario();
@@ -173,19 +264,19 @@ async function cargarRegimenesEnFormulario() {
     }
 }
 
-// ── CATÁLOGO: TIPOS DE EPS ─────────────────────────────────────────────────────
+// ── CATÁLOGO: TIPOS DE AFILIACION EPS ─────────────────────────────────────────
 async function cargarTiposEpsEnFormulario() {
     const fallback = [
         { TipoEPS_ID: 1, Nombre_Tipo: 'Cotizante' },
         { TipoEPS_ID: 2, Nombre_Tipo: 'Beneficiario' }
     ];
     try {
-        const res  = await fetch('/api/tipo-eps');
+        const res  = await fetch('/api/tipo-afiliacion-eps');
         const data = await res.json();
         if (!data.ok) throw new Error(data.error);
         todosTiposEps = data.data;
     } catch (err) {
-        console.warn('Tipos EPS fallback:', err);
+        console.warn('Tipos afiliación EPS fallback:', err);
         todosTiposEps = fallback;
     }
 }
@@ -221,8 +312,8 @@ function onRegimenChange() {
     document.getElementById('errorRegimen').innerText = '';
     document.getElementById('regimen').classList.remove('invalid');
 
-    selectTipo.innerHTML = '<option value="">Seleccione el tipo de EPS...</option>';
-    selectEps.innerHTML  = '<option value="">Seleccione primero el tipo de EPS</option>';
+    selectTipo.innerHTML = '<option value="">Seleccione el tipo de afiliación...</option>';
+    selectEps.innerHTML  = '<option value="">Seleccione primero el tipo de afiliación</option>';
     selectTipo.disabled  = true;
     selectEps.disabled   = true;
     document.getElementById('eps-otro-container-creacion').style.display = 'none';
@@ -333,10 +424,11 @@ function verificarEdad() {
 
 function checkRequisitosAcudiente() {
     const tipoDoc = document.getElementById("tipoDocumento").value;
-    if (tipoDoc === "Tarjeta de identidad" || esMenor) {
+    // 3 = Tarjeta de Identidad, 4 = Registro Civil
+    if (tipoDoc === "3" || tipoDoc === "4" || esMenor) {
         acudienteSection.style.display = "block";
         document.getElementById("correoUsuarioGroup").style.display = "none";
-        if (esMenor) document.getElementById("tipoDocumento").value = "Tarjeta de identidad";
+        if (esMenor) document.getElementById("tipoDocumento").value = "3";
         replicarCorreoAcudiente();
     } else {
         acudienteSection.style.display = "none";
@@ -353,12 +445,12 @@ function checkRolEspecialista() {
     document.getElementById("contenedor_datos_medicos").style.display = esPaciente     ? "block" : "none";
 
     if (!esPaciente) {
-        document.getElementById("regimen").value                               = "";
-        document.getElementById("tipoEps").innerHTML                           = '<option value="">Seleccione primero el régimen</option>';
-        document.getElementById("tipoEps").disabled                            = true;
-        document.getElementById("eps").innerHTML                               = '<option value="">Seleccione primero el tipo de EPS</option>';
-        document.getElementById("eps").disabled                                = true;
-        document.getElementById("eps-otro-container-creacion").style.display  = 'none';
+        document.getElementById("regimen").value                              = "";
+        document.getElementById("tipoEps").innerHTML                         = '<option value="">Seleccione primero el régimen</option>';
+        document.getElementById("tipoEps").disabled                          = true;
+        document.getElementById("eps").innerHTML                             = '<option value="">Seleccione primero el tipo de afiliación</option>';
+        document.getElementById("eps").disabled                              = true;
+        document.getElementById("eps-otro-container-creacion").style.display = 'none';
     }
 }
 
@@ -390,16 +482,20 @@ function actualizarIndicador(pasoActual) {
 
 // ── PASO 1: VALIDACIÓN ─────────────────────────────────────────────────────────
 function validarPaso1() {
+    // ◄ NUEVO: Verifica si ya está enviando para abortar clics duplicados
+    const btnContinuar = document.querySelector("#step1 button");
+    if (btnContinuar && btnContinuar.disabled) return;
+
     limpiarErrores();
     let valido = true;
 
-    const nombres         = document.getElementById("nombres");
-    const apellidos       = document.getElementById("apellidos");
-    const fechaInput      = document.getElementById("fechaNacimiento");
-    const rolUsuario      = document.getElementById("rolUsuario");
-    const documento       = document.getElementById("documento");
-    const telefono        = document.getElementById("telefono");
-    const fechaISO        = leerFechaISO();
+    const nombres    = document.getElementById("nombres");
+    const apellidos  = document.getElementById("apellidos");
+    const fechaInput = document.getElementById("fechaNacimiento");
+    const rolUsuario = document.getElementById("rolUsuario");
+    const documento  = document.getElementById("documento");
+    const telefono   = document.getElementById("telefono");
+    const fechaISO   = leerFechaISO();
 
     if (nombres.value.trim().length < 2) {
         nombres.classList.add("invalid");
@@ -442,7 +538,7 @@ function validarPaso1() {
         const tipoEpsEl = document.getElementById("tipoEps");
         if (!tipoEpsEl.value) {
             tipoEpsEl.classList.add("invalid");
-            document.getElementById("errorTipoEps").innerText = "Seleccione el tipo de EPS.";
+            document.getElementById("errorTipoEps").innerText = "Seleccione el tipo de afiliación.";
             valido = false;
         }
         const epsVal = document.getElementById("eps").value;
@@ -507,7 +603,8 @@ function validarPaso1() {
 
     correoVerificacion          = correoUsado.trim().toLowerCase();
     const nombreMostrar         = document.getElementById("nombres").value;
-    const btnContinuar          = document.querySelector("#step1 button");
+    
+    // Se removió la declaración duplicada de 'btnContinuar' que ahora está arriba
     btnContinuar.disabled       = true;
     btnContinuar.innerHTML      = "Enviando código...";
 
@@ -519,20 +616,21 @@ function validarPaso1() {
     .then(r => r.json())
     .then(data => {
         btnContinuar.disabled  = false;
-        btnContinuar.innerHTML = "Continuar &#8594;";
+        btnContinuar.innerHTML = 'Continuar <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
         if (data.ok) {
             document.getElementById("emailDestino").innerText       = correoVerificacion;
             document.getElementById("nombreDestinatario").innerText = nombreMostrar;
             document.getElementById("step1").classList.remove("active");
             document.getElementById("step2").classList.add("active");
             actualizarIndicador(2);
+            iniciarTimerReenvio();
         } else {
             mostrarError("Error al enviar el código: " + (data.error || "Intenta de nuevo."));
         }
     })
     .catch(() => {
         btnContinuar.disabled  = false;
-        btnContinuar.innerHTML = "Continuar &#8594;";
+        btnContinuar.innerHTML = 'Continuar <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
         mostrarError("No se pudo conectar con el servidor. Verifica tu conexión.");
     });
 }
@@ -579,13 +677,13 @@ function verificarCodigo() {
 // ── REGISTRO DE PACIENTE ───────────────────────────────────────────────────────
 async function registrarPacienteEnBackend(usuarioId) {
     const payload = {
-        ID_Usuario:       usuarioId,
+        ID_Usuario:      usuarioId,
         Fecha_Nacimiento: leerFechaISO() || null,
-        Genero:           null,
-        Grupo_Sanguineo:  document.getElementById("grupoSanguineo")?.value       || null,
-        Alergias:         document.getElementById("alergias")?.value.trim()      || null,
-        Antecedentes:     document.getElementById("antecedentes")?.value.trim()  || null,
-        Observaciones:    document.getElementById("observaciones")?.value.trim() || null,
+        Genero:          null,
+        Grupo_Sanguineo: document.getElementById("grupoSanguineo")?.value       || null,
+        Alergias:        document.getElementById("alergias")?.value.trim()      || null,
+        Antecedentes:    document.getElementById("antecedentes")?.value.trim()  || null,
+        Observaciones:   document.getElementById("observaciones")?.value.trim() || null,
     };
     try {
         const res  = await fetch('/api/paciente', {
@@ -648,10 +746,11 @@ async function crearUsuario() {
     const confirmPassword = document.getElementById("confirmPassword");
     const mensajeFinal    = document.getElementById("mensajeFinal");
 
-    if (!validarPassword(password.value)) {
+    // Validar requisitos visuales y mostrar en rojo si fallan
+    actualizarRequisitos('submit');
+    if (!todosRequisitosOk()) {
         password.classList.add("invalid");
-        document.getElementById("errorPassword").innerText =
-            "Mínimo 8 caracteres, una mayúscula, un número y un símbolo.";
+        document.getElementById("errorPassword").innerText = "La contraseña no cumple los requisitos.";
         return;
     }
     if (password.value !== confirmPassword.value) {
@@ -680,17 +779,13 @@ async function crearUsuario() {
     const generoSelect = document.getElementById("genero");
     const generoId     = generoSelect ? parseInt(generoSelect.value, 10) || 1 : 1;
 
+    // Mapeo: value del select (1-8) → TipoDoc_ID en BD
     const tipoDocTexto = document.getElementById("tipoDocumento").value;
-    const mapaTipoDoc  = {
-        "Cedula de ciudadanía": 1,
-        "Tarjeta de identidad": 2,
-        "Cedula de extranjería": 3
-    };
-    const tipoDocId = mapaTipoDoc[tipoDocTexto] || 1;
+    const tipoDocId    = parseInt(tipoDocTexto, 10) || 1;
 
     const epsSelect = document.getElementById('eps');
-    const tipoEpsId = parseInt(document.getElementById("tipoEps").value, 10)  || null;
-    const regimenId = parseInt(document.getElementById("regimen").value, 10)   || null;
+    const tipoEpsId = parseInt(document.getElementById("tipoEps").value, 10) || null;
+    const regimenId = parseInt(document.getElementById("regimen").value, 10)  || null;
     let   epsId     = epsSelect.value === EPS_OTRO_VALUE
         ? null
         : (parseInt(epsSelect.value, 10) || null);
@@ -726,7 +821,7 @@ async function crearUsuario() {
         estado_id:           1,
         rol_id:              rolIdNumerico,
         eps_id:              epsId,
-        tipo_eps_id:         tipoEpsId,
+        tipo_eps_id:         tipoEpsId,        // ← key que lee el backend
         regimen_id:          regimenId,
         tarjeta_profesional: tarjetaProfesional || null,
         especialidad_id:     especialidadId
@@ -743,7 +838,7 @@ async function crearUsuario() {
         });
         const resultado = await respuesta.json();
 
-        if (btnFinalizar) { btnFinalizar.disabled = false; btnFinalizar.innerHTML = "Finalizar"; }
+        if (btnFinalizar) { btnFinalizar.disabled = false; btnFinalizar.innerHTML = "Crear usuario"; }
 
         if (!resultado.ok) {
             mostrarError("No se pudo crear el usuario: " +
@@ -771,12 +866,11 @@ async function crearUsuario() {
 
         document.getElementById("groupPassword").style.display = "none";
         document.getElementById("groupConfirm").style.display  = "none";
-        if (btnFinalizar) btnFinalizar.style.display            = "none";
-        mensajeFinal.innerText = "¡Usuario registrado correctamente!";
-        document.getElementById("btnIrAlLogin").style.display  = "flex";
+        if (btnFinalizar) btnFinalizar.style.display = "none";
+        mostrarAnimacionExito();
 
     } catch (errorRed) {
-        if (btnFinalizar) { btnFinalizar.disabled = false; btnFinalizar.innerHTML = "Finalizar"; }
+        if (btnFinalizar) { btnFinalizar.disabled = false; btnFinalizar.innerHTML = "Crear usuario"; }
         mostrarError("Error de conexión con el servidor. (" + errorRed.message + ")");
     }
 }

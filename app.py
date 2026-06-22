@@ -20,49 +20,40 @@ from modulo_historial.tabla_puntuacion_especialista import puntuacion_bp
 # Blueprints de usuarios
 from modulo_usuarios.routes import usuarios_bp
  
-# ── NUEVO: Blueprint de citas ─────────────────────────────────────────────────
+# Blueprint de citas
 from modulo_citas.routes import citas_bp
  
-# ── NUEVO: Blueprint de EPS (aseguramiento, afiliación, paciente) ────────────
+# Blueprint de EPS (aseguramiento, afiliación, paciente)
 from modulo_eps.routes import eps_bp
  
 from db import get_db_connection
  
 app = Flask(__name__)
 
-# Necesaria para firmar la cookie de sesión (session). Sin esto, Flask
-# no puede mantener al paciente "logueado" entre peticiones.
-# TODO: en producción, cargar esto desde una variable de entorno,
-# nunca dejarlo escrito en el código fuente.
+# Necesaria para firmar la cookie de sesión (session).
+# TODO: en producción, cargar esto desde una variable de entorno.
 app.secret_key = "CAMBIA-ESTO-POR-UNA-CLAVE-LARGA-Y-ALEATORIA"
 
 # supports_credentials=True permite que el navegador envíe/reciba la
-# cookie de sesión en las peticiones fetch (necesario para que
-# /api/paciente/perfil sepa quién está logueado).
+# cookie de sesión en las peticiones fetch.
 CORS(app, supports_credentials=True)
  
 # =============================================================================
 # REGISTRO DE BLUEPRINTS
 # =============================================================================
  
-app.register_blueprint(usuarios_bp, url_prefix='/api')
-app.register_blueprint(historial_bp,   url_prefix='/api')
-app.register_blueprint(tratamiento_bp, url_prefix='/api')
-app.register_blueprint(tabla_diag_bp,  url_prefix='/api')
+app.register_blueprint(usuarios_bp,       url_prefix='/api')
+app.register_blueprint(historial_bp,      url_prefix='/api')
+app.register_blueprint(tratamiento_bp,    url_prefix='/api')
+app.register_blueprint(tabla_diag_bp,     url_prefix='/api')
 app.register_blueprint(historial_diag_bp, url_prefix='/api')
-app.register_blueprint(puntuacion_bp,  url_prefix='/api')
- 
-# ── Citas (agenda, especialistas, multas) ─────────────────────────────────────
-app.register_blueprint(citas_bp, url_prefix='/api')
- 
-# ── EPS (tipo_eps, regimen_eps, eps, afiliacion, paciente, preguntas/respuestas) ─
-app.register_blueprint(eps_bp, url_prefix='/api')
+app.register_blueprint(puntuacion_bp,     url_prefix='/api')
+app.register_blueprint(citas_bp,          url_prefix='/api')
+app.register_blueprint(eps_bp,            url_prefix='/api')
  
  
 # =============================================================================
 # ENDPOINT AUXILIAR — Obtener Paciente_ID por Usuario_ID
-# Consumido por paciente.js y agendar.js para encontrar el Paciente_ID
-# a partir del usuario en sesión.
 # =============================================================================
  
 @app.route('/api/paciente/por-usuario/<int:usuario_id>', methods=['GET'])
@@ -85,17 +76,8 @@ def paciente_por_usuario(usuario_id):
 
 
 # =============================================================================
-# ENDPOINT — Perfil completo del paciente autenticado (datos reales)
-# Reemplaza los textos hardcodeados de paciente.html (nombre, documento,
-# teléfono, correo, fecha de nacimiento, EPS, etc.)
-#
-# IMPORTANTE: el Usuario_ID NO se recibe del cliente, se lee de la sesión
-# activa de Flask (session). Así un paciente no puede consultar los datos
-# de otro cambiando un ID en la URL o en localStorage.
-#
-# Requiere que, en tu login (modulo_usuarios/routes.py), tras validar las
-# credenciales agregues:
-#       session['usuario_id'] = usuario['Usuario_ID']
+# ENDPOINT — Perfil completo del paciente autenticado
+# El Usuario_ID se lee de la sesión activa de Flask (no del cliente).
 # =============================================================================
 
 @app.route('/api/paciente/perfil', methods=['GET'])
@@ -103,13 +85,14 @@ def perfil_paciente():
     usuario_id = session.get('usuario_id')
 
     if not usuario_id:
-        # No hay sesión activa: el frontend debe redirigir a login.
         return jsonify({"ok": False, "error": "Sesión no iniciada"}), 401
 
     con = None
     try:
         con = get_db_connection()
         cur = con.cursor()
+        # CORRECCIÓN: afiliacion no tiene Numero_Afiliado ni Estado;
+        # se usan los campos reales: Afiliacion_ID y Fecha_Afiliacion.
         cur.execute(
             """
             SELECT
@@ -120,14 +103,16 @@ def perfil_paciente():
                 u.Correo,
                 u.Telefono,
                 u.FechaNacimiento,
-                td.Nombre_Tipo_Documento AS TipoDocumento,
+                td.Nombre_Tipo_Documento  AS TipoDocumento,
                 e.Nombre_EPS              AS EPS,
-                a.Numero_Afiliado         AS NumeroAfiliado,
-                a.Estado                  AS EstadoAfiliacion
+                a.Afiliacion_ID           AS NumeroAfiliado,
+                a.Fecha_Afiliacion        AS EstadoAfiliacion,
+                tae.Nombre_Tipo           AS TipoAfiliacion
             FROM usuarios u
-            LEFT JOIN tipo_documento td ON u.TipoDoc_ID = td.TipoDoc_ID
-            LEFT JOIN afiliacion a      ON a.Usuario_ID = u.Usuario_ID
-            LEFT JOIN eps e             ON a.EPS_ID     = e.EPS_ID
+            LEFT JOIN tipo_documento     td  ON u.TipoDoc_ID  = td.TipoDoc_ID
+            LEFT JOIN afiliacion         a   ON a.Usuario_ID  = u.Usuario_ID
+            LEFT JOIN eps                e   ON a.EPS_ID      = e.EPS_ID
+            LEFT JOIN tipo_afiliacion_eps tae ON a.TipoEPS_ID = tae.TipoEPS_ID
             WHERE u.Usuario_ID = ?
             """,
             (usuario_id,)
@@ -139,8 +124,6 @@ def perfil_paciente():
 
         perfil = dict(fila)
 
-        # ── Saneamiento: ningún campo debe llegar como None/NULL al
-        # frontend, o el HTML mostraría literalmente "None" o "undefined" ──
         valores_por_defecto = {
             "Nombres":          "Paciente",
             "Apellidos":        "",
@@ -151,7 +134,8 @@ def perfil_paciente():
             "TipoDocumento":    "No registrado",
             "EPS":              "Sin afiliación",
             "NumeroAfiliado":   "No registrado",
-            "EstadoAfiliacion": "Pendiente",
+            "EstadoAfiliacion": "Sin fecha",
+            "TipoAfiliacion":   "No registrado",
         }
         for campo, defecto in valores_por_defecto.items():
             if perfil.get(campo) in (None, ""):
@@ -163,7 +147,7 @@ def perfil_paciente():
         ).upper() or "PA"
 
         perfil["NombreCompleto"] = nombre_completo
-        perfil["Iniciales"] = iniciales
+        perfil["Iniciales"]      = iniciales
 
         return jsonify({"ok": True, "perfil": perfil}), 200
 
@@ -238,9 +222,9 @@ def vista_aseguramiento():
  
 @app.route('/api/enviar-codigo', methods=['POST'])
 def enviar_codigo():
-    datos   = request.get_json()
-    correo  = datos.get('correo', '').strip().lower()
-    nombre  = datos.get('nombre', 'Usuario')
+    datos  = request.get_json()
+    correo = datos.get('correo', '').strip().lower()
+    nombre = datos.get('nombre', 'Usuario')
  
     if not correo:
         return jsonify({"ok": False, "error": "Correo requerido"}), 400
@@ -309,6 +293,7 @@ def verificar_codigo():
         del codigos_temporales[correo]
         return jsonify({"ok": True}), 200
     return jsonify({"ok": False, "error": "Código incorrecto"}), 400
+
 
 # =============================================================================
 # API — SOLICITAR CÓDIGO RECUPERACIÓN DE CONTRASEÑA
@@ -397,7 +382,7 @@ def verificar_codigo_recuperacion():
     if ingresado != esperado:
         return jsonify({"ok": False, "error": "Código incorrecto."}), 400
 
-    # No eliminamos el código aquí; se elimina al cambiar la contraseña
+    # No se elimina aquí; se elimina al cambiar la contraseña
     return jsonify({"ok": True}), 200
 
 
@@ -417,7 +402,6 @@ def cambiar_password():
     if not correo or not nueva_contrasena:
         return jsonify({"ok": False, "error": "Correo y nueva contraseña son requeridos."}), 400
 
-    # Validar política de contraseña (igual que el registro)
     errores_politica = []
     if len(nueva_contrasena) < 8:
         errores_politica.append("Mínimo 8 caracteres.")
@@ -432,7 +416,6 @@ def cambiar_password():
     if errores_politica:
         return jsonify({"ok": False, "error": " ".join(errores_politica)}), 400
 
-    # Verificar que el código fue validado previamente
     if correo not in codigos_temporales:
         return jsonify({"ok": False, "error": "Sesión de recuperación no válida o expirada."}), 400
 
@@ -457,7 +440,6 @@ def cambiar_password():
         if cur.rowcount == 0:
             return jsonify({"ok": False, "error": "No se pudo actualizar la contraseña."}), 500
 
-        # Invalidar el código una vez usada la operación exitosamente
         codigos_temporales.pop(correo, None)
 
         return jsonify({"ok": True}), 200
@@ -465,7 +447,8 @@ def cambiar_password():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
     finally:
-        if con: con.close() 
+        if con: con.close()
+ 
  
 # =============================================================================
 # INICIO

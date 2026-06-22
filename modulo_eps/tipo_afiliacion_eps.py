@@ -1,14 +1,14 @@
 # =============================================================================
-# modulo_eps/tipo_eps.py
-# CRUD para la tabla tipo_eps
+# modulo_eps/tipo_afiliacion_eps.py
+# CRUD para la tabla tipo_afiliacion_eps
 # =============================================================================
- 
+
 from db import get_db_connection
- 
- 
-def crear_tipo_eps(nombre_tipo):
+
+
+def crear_tipo_afiliacion_eps(nombre_tipo):
     """
-    Inserta un nuevo tipo de EPS en la tabla tipo_eps.
+    Inserta un nuevo tipo de EPS en la tabla tipo_afiliacion_eps.
     Retorna el ID del registro creado.
     """
     conexion = None
@@ -17,7 +17,7 @@ def crear_tipo_eps(nombre_tipo):
         conexion = get_db_connection()
         cursor = conexion.cursor()
         cursor.execute(
-            "INSERT INTO tipo_eps (Nombre_Tipo) VALUES (?)",
+            "INSERT INTO tipo_afiliacion_eps (Nombre_Tipo) VALUES (?)",
             (nombre_tipo,)
         )
         conexion.commit()
@@ -31,9 +31,9 @@ def crear_tipo_eps(nombre_tipo):
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
-def obtener_tipos_eps():
+
+
+def obtener_tipos_afiliacion_eps():
     """
     Retorna todos los tipos de EPS registrados.
     """
@@ -42,7 +42,7 @@ def obtener_tipos_eps():
     try:
         conexion = get_db_connection()
         cursor = conexion.cursor()
-        cursor.execute("SELECT * FROM tipo_eps ORDER BY Nombre_Tipo ASC")
+        cursor.execute("SELECT * FROM tipo_afiliacion_eps ORDER BY Nombre_Tipo ASC")
         columnas = [desc[0] for desc in cursor.description]
         filas = cursor.fetchall()
         return [dict(zip(columnas, fila)) for fila in filas]
@@ -53,9 +53,9 @@ def obtener_tipos_eps():
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
-def obtener_tipo_eps_por_id(tipo_eps_id):
+
+
+def obtener_tipo_afiliacion_eps_por_id(tipo_afiliacion_eps_id):
     """
     Retorna un tipo de EPS específico por su ID.
     Devuelve None si no existe.
@@ -66,8 +66,8 @@ def obtener_tipo_eps_por_id(tipo_eps_id):
         conexion = get_db_connection()
         cursor = conexion.cursor()
         cursor.execute(
-            "SELECT * FROM tipo_eps WHERE ID_Tipo_EPS = ?",
-            (tipo_eps_id,)
+            "SELECT * FROM tipo_afiliacion_eps WHERE ID_Tipo_EPS = ?",
+            (tipo_afiliacion_eps_id,)
         )
         columnas = [desc[0] for desc in cursor.description]
         fila = cursor.fetchone()
@@ -81,9 +81,9 @@ def obtener_tipo_eps_por_id(tipo_eps_id):
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
-def actualizar_tipo_eps(tipo_eps_id, nombre_tipo):
+
+
+def actualizar_tipo_afiliacion_eps(tipo_afiliacion_eps_id, nombre_tipo):
     """
     Actualiza el nombre de un tipo de EPS existente.
     Retorna True si se modificó al menos un registro, False si no se encontró.
@@ -94,8 +94,8 @@ def actualizar_tipo_eps(tipo_eps_id, nombre_tipo):
         conexion = get_db_connection()
         cursor = conexion.cursor()
         cursor.execute(
-            "UPDATE tipo_eps SET Nombre_Tipo = ? WHERE ID_Tipo_EPS = ?",
-            (nombre_tipo, tipo_eps_id)
+            "UPDATE tipo_afiliacion_eps SET Nombre_Tipo = ? WHERE ID_Tipo_EPS = ?",
+            (nombre_tipo, tipo_afiliacion_eps_id)
         )
         conexion.commit()
         return cursor.rowcount > 0
@@ -108,9 +108,9 @@ def actualizar_tipo_eps(tipo_eps_id, nombre_tipo):
             cursor.close()
         if conexion:
             conexion.close()
- 
- 
-def eliminar_tipo_eps(tipo_eps_id):
+
+
+def eliminar_tipo_afiliacion_eps(tipo_afiliacion_eps_id):
     """
     Elimina un tipo de EPS por su ID.
     Retorna True si se eliminó, False si no existía.
@@ -121,8 +121,8 @@ def eliminar_tipo_eps(tipo_eps_id):
         conexion = get_db_connection()
         cursor = conexion.cursor()
         cursor.execute(
-            "DELETE FROM tipo_eps WHERE ID_Tipo_EPS = ?",
-            (tipo_eps_id,)
+            "DELETE FROM tipo_afiliacion_eps WHERE ID_Tipo_EPS = ?",
+            (tipo_afiliacion_eps_id,)
         )
         conexion.commit()
         return cursor.rowcount > 0

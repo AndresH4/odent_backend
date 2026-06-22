@@ -595,3 +595,78 @@ button:active { transform: translateY(0); }
     .form-row { grid-template-columns: 1fr; gap: 0; }
     .container { border-radius: 14px; }
 }
+
+/* ─── REQUISITOS CONTRASEÑA ─── */
+.req-list {
+    list-style: none;
+    padding: 8px 12px;
+    margin: 6px 0 4px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    font-size: 12px;
+    line-height: 2;
+    color: #94a3b8;
+}
+.req-list li { transition: color 0.2s; }
+.req-list li.ok   { color: #10b981; font-weight: 600; }
+.req-list li.fail { color: #ef4444; font-weight: 600; }
+
+/* ─── OVERLAY ÉXITO ─── */
+.success-overlay {
+    position: fixed; inset: 0;
+    background: rgba(2,132,199,0.18);
+    backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999;
+    animation: fadeIn 0.3s ease;
+}
+.success-card {
+    background: #fff;
+    border-radius: 22px;
+    box-shadow: 0 24px 64px rgba(2,132,199,0.22);
+    padding: 44px 48px 36px;
+    text-align: center;
+    max-width: 360px; width: 90%;
+    animation: slideUp 0.45s cubic-bezier(.22,1,.36,1);
+}
+@keyframes slideUp {
+    from { opacity:0; transform: translateY(40px) scale(0.95); }
+    to   { opacity:1; transform: translateY(0) scale(1); }
+}
+.success-check-wrap {
+    width: 72px; height: 72px;
+    margin: 0 auto 20px;
+}
+.success-check-svg { width: 72px; height: 72px; }
+.check-circle {
+    stroke: #10b981; stroke-width: 2;
+    stroke-dasharray: 166; stroke-dashoffset: 166;
+    animation: stroke 0.55s ease forwards 0.1s;
+}
+.check-tick {
+    stroke: #10b981; stroke-width: 3.5;
+    stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 48; stroke-dashoffset: 48;
+    animation: stroke 0.4s ease forwards 0.65s;
+}
+@keyframes stroke {
+    to { stroke-dashoffset: 0; }
+}
+.success-title {
+    font-size: 20px; font-weight: 800;
+    color: #0f172a; margin: 0 0 6px;
+}
+.success-sub {
+    font-size: 13px; color: #64748b; margin: 0 0 22px;
+}
+.success-bar-wrap {
+    background: #e0f2fe; border-radius: 99px;
+    height: 5px; overflow: hidden;
+}
+.success-bar {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #0284c7, #10b981);
+    border-radius: 99px;
+    transition: width 2.8s linear;
+}
