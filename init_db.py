@@ -373,4 +373,4 @@ def create_database_and_tables():
             print("Conexión con SQLite cerrada de forma segura.")
 
 if __name__ == "__main__":
-    create_database_and_tables() 
+    create_database_and_tables()

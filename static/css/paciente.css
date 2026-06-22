@@ -1,9 +1,5 @@
 /* ===================================================================
-   paciente.css — Stylo Dental Pro v2.6
-   Cambios respecto a v2.5:
-     • #profile-dropdown: ancho aumentado a 28rem para acomodar
-       los nuevos campos (teléfono, documento, régimen/tipo EPS).
-     • Resto del archivo sin cambios.
+   paciente.css — Stylo Dental Pro v3.0
    =================================================================== */
 
 :root {
@@ -131,12 +127,9 @@ body {
 
 /* ===================================================================
    DROPDOWN DE PERFIL
-   ─ v2.6: ancho aumentado a 28rem para los campos nuevos.
    =================================================================== */
 #profile-dropdown {
-    /* ── CAMBIO v2.6: de w-96 (24rem) a 28rem ── */
     width:          28rem;
-
     visibility:     hidden;
     opacity:        0;
     pointer-events: none;
@@ -264,6 +257,15 @@ body {
     max-width: 440px;
 }
 
+/* Tono rojo suave para modales de advertencia/error */
+.border-red-400 { border-color: #f87171 !important; }
+.text-red-400   { color: #f87171 !important; }
+.bg-red-500     { background-color: #ef4444 !important; }
+.hover\:bg-red-600:hover { background-color: #dc2626 !important; }
+.bg-red-50      { background-color: #fff5f5 !important; }
+.text-red-500   { color: #ef4444 !important; }
+.border-red-200 { border-color: #fecaca !important; }
+
 /* ===================================================================
    INPUTS
    =================================================================== */
@@ -286,6 +288,92 @@ body {
     background-color: #ffffff;
     box-shadow:       0 0 0 6px rgba(2, 132, 199, 0.1);
     transform:        scale(1.01);
+}
+
+/* ===================================================================
+   WRAPPER DE CAMPO DE CONTRASEÑA CON ÍCONO OJO
+   =================================================================== */
+.pass-input-wrapper {
+    position: relative;
+    width:    100%;
+}
+
+.pass-input-wrapper .input-dental {
+    padding-right: 56px;
+}
+
+.pass-toggle-btn {
+    position:         absolute;
+    right:            18px;
+    top:              50%;
+    transform:        translateY(-50%);
+    background:       none;
+    border:           none;
+    cursor:           pointer;
+    color:            #94a3b8;
+    font-size:        16px;
+    padding:          4px;
+    transition:       color 0.2s ease;
+    display:          flex;
+    align-items:      center;
+    justify-content:  center;
+    z-index:          2;
+}
+
+.pass-toggle-btn:hover {
+    color: var(--primary);
+}
+
+/* ===================================================================
+   LISTA DE REQUISITOS DE CONTRASEÑA
+   =================================================================== */
+.req-item {
+    display:     flex;
+    align-items: center;
+    gap:         10px;
+    font-size:   12px;
+    font-weight: 700;
+    transition:  color 0.25s ease;
+}
+
+.req-icon {
+    display:         inline-flex;
+    align-items:     center;
+    justify-content: center;
+    width:           20px;
+    height:          20px;
+    border-radius:   50%;
+    font-size:       11px;
+    font-weight:     900;
+    flex-shrink:     0;
+    transition:      background-color 0.25s ease, color 0.25s ease;
+}
+
+.req-item.req-pending {
+    color: #94a3b8;
+}
+
+.req-item.req-pending .req-icon {
+    background-color: #e2e8f0;
+    color:            #64748b;
+}
+
+.req-item.req-ok {
+    color: #15803d;
+}
+
+.req-item.req-ok .req-icon {
+    background-color: #dcfce7;
+    color:            #15803d;
+}
+
+.req-item.req-error {
+    color: #dc2626;
+}
+
+.req-item.req-error .req-icon {
+    background-color: #fee2e2;
+    color:            #dc2626;
 }
 
 /* ===================================================================

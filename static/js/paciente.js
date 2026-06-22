@@ -1,14 +1,4 @@
-// Archivo: paciente.js  — Stylo Dental Pro v2.8
-// ─────────────────────────────────────────────────────────────────────────────
-// CAMBIOS v2.8 respecto a v2.7:
-//   • _cargarAfiliacionCompleta: consulta cruzada robusta que resuelve
-//     Régimen EPS, Tipo EPS y EPS aunque el backend no haga JOINs.
-//     Ahora obtiene EPS_ID desde /api/afiliacion y lo cruza con /api/eps
-//     para obtener Nombre_EPS y Regimen_ID, luego cruza con /api/regimen-eps
-//     y /api/tipo-eps. Cubre todos los alias posibles del backend.
-//   • Botón "Agendar Cita" cambiado a <a href="/agendar"> en el HTML
-//     para evitar que el document click listener intercepte la navegación.
-// ─────────────────────────────────────────────────────────────────────────────
+// Archivo: paciente.js  — Stylo Dental Pro v3.0
 'use strict';
 
 // ─── ESTADO GLOBAL ────────────────────────────────────────────────────────────
@@ -17,14 +7,43 @@ let _pacienteId            = null;
 let _usuarioId             = null;
 let _citasData             = [];
 let _citaParaCancelar      = null;
+let _cancelarConMulta      = false;
 let _accionPendienteSimple = null;
 let _dropdownOpen          = false;
 
 // ─── MAPA DE VISTAS ───────────────────────────────────────────────────────────
 const VISTAS_PACIENTE = {
-    inicio   : { el: 'vista-inicio',    btn: 'btn-inicio',    titulo: 'Panel de Control'   },
+    inicio   : { el: 'vista-inicio',    btn: 'btn-inicio',    titulo: 'Paciente'           },
     historial: { el: 'vista-historial', btn: 'btn-historial', titulo: 'Historial de Citas' },
     config   : { el: 'vista-config',    btn: 'btn-config',    titulo: 'Mi Perfil'          },
+};
+
+// ─── MODALES PERSONALIZADOS ───────────────────────────────────────────────────
+function _mostrarNotificacion(titulo, mensaje, tipo) {
+    const modal   = document.getElementById('modalNotificacion');
+    const content = document.getElementById('modalNotificacion-content');
+    const iconEl  = document.getElementById('notif-icon');
+    const titEl   = document.getElementById('notif-titulo');
+    const msgEl   = document.getElementById('notif-mensaje');
+
+    if (tipo === 'error') {
+        content.className = 'modal-content p-10 text-center border-t-8 border-red-400';
+        iconEl.innerHTML  = '<i class="fas fa-circle-exclamation text-red-400"></i>';
+    } else if (tipo === 'success') {
+        content.className = 'modal-content p-10 text-center border-t-8 border-green-500';
+        iconEl.innerHTML  = '<i class="fas fa-circle-check text-green-500"></i>';
+    } else {
+        content.className = 'modal-content p-10 text-center border-t-8 border-sky-500';
+        iconEl.innerHTML  = '<i class="fas fa-circle-info text-sky-500"></i>';
+    }
+
+    titEl.textContent = titulo;
+    msgEl.textContent = mensaje;
+    modal.style.display = 'flex';
+}
+
+window.cerrarModalNotificacion = function () {
+    document.getElementById('modalNotificacion').style.display = 'none';
 };
 
 // ─── SESIÓN ───────────────────────────────────────────────────────────────────
@@ -39,8 +58,6 @@ function _cargarSesion() {
     _usuarioId      = u.Usuario_ID;
 
     const nombreCompleto = `${u.Nombres || ''} ${u.Apellidos || ''}`.trim();
-
-    // ── INICIAL ÚNICA: solo la primera letra del primer nombre ────────────────
     const inicial = (u.Nombres || '').trim().charAt(0).toUpperCase() || 'P';
 
     _setText('avatar-letras',         inicial);
@@ -49,7 +66,6 @@ function _cargarSesion() {
     _setText('nombre-menu',           nombreCompleto.toUpperCase());
     _setText('doc-menu',              u.NumeroDocumento || '');
 
-    // Nodos ocultos (retrocompatibilidad)
     _setText('nombre-usuario',    nombreCompleto);
     _setText('perfil-nombres',    u.Nombres    || '');
     _setText('perfil-apellidos',  u.Apellidos  || '');
@@ -61,10 +77,8 @@ function _cargarSesion() {
     _setText('email-menu',    u.Correo   || '—');
     _setText('telefono-menu', u.Telefono || '—');
 
-    // Tipo documento + número
     _cargarTipoDocumento(u.TipoDoc_ID, u.NumeroDocumento);
 
-    // Paciente_ID → citas + EPS
     fetch(`/api/paciente/por-usuario/${_usuarioId}`)
         .then(r => r.ok ? r.json() : null)
         .then(data => {
@@ -96,20 +110,10 @@ async function _cargarTipoDocumento(tipoDocId, numeroDoc) {
     }
 }
 
-// ─── EPS COMPLETA EN 3 CAMPOS — consulta cruzada robusta ─────────────────────
-// CORRECCIÓN v2.8:
-// El problema era que el endpoint /api/afiliacion puede devolver solo los IDs
-// crudos (EPS_ID, TipoEPS_ID) sin hacer JOINs en el backend.
-// La solución es hacer la resolución completa en el frontend:
-//   1. GET /api/afiliacion       → obtiene EPS_ID y TipoEPS_ID del usuario
-//   2. GET /api/eps              → lista de EPS con Nombre_EPS y Regimen_ID
-//   3. GET /api/regimen-eps      → lista de regímenes con Nombre_Regimen
-//   4. GET /api/tipo-eps         → lista de tipos con Nombre_Tipo
-// Luego cruza por IDs para armar los 3 campos sin depender de JOINs del backend.
+// ─── EPS COMPLETA ─────────────────────────────────────────────────────────────
 async function _cargarAfiliacionCompleta() {
     if (!_usuarioId) return;
     try {
-        // Peticiones en paralelo
         const [resAfil, resEps, resRegimen, resTipo] = await Promise.all([
             fetch('/api/afiliacion'),
             fetch('/api/eps'),
@@ -117,86 +121,54 @@ async function _cargarAfiliacionCompleta() {
             fetch('/api/tipo-eps'),
         ]);
 
-        if (!resAfil.ok) {
-            console.warn('[paciente] /api/afiliacion no respondió OK');
-            return;
-        }
+        if (!resAfil.ok) { console.warn('[paciente] /api/afiliacion no respondió OK'); return; }
 
         const dataAfil    = await resAfil.json();
         const dataEps     = resEps.ok     ? await resEps.json()     : [];
         const dataRegimen = resRegimen.ok ? await resRegimen.json() : [];
         const dataTipo    = resTipo.ok    ? await resTipo.json()    : [];
 
-        // Normalizar: algunos endpoints envuelven en { ok, data } otros son arrays directos
         const listaAfil    = _normalizar(dataAfil);
         const listaEps     = _normalizar(dataEps);
         const listaRegimen = _normalizar(dataRegimen);
         const listaTipos   = _normalizar(dataTipo);
 
-        // Afiliación del usuario actual — busca por Usuario_ID o ID_Usuario
         const afil = listaAfil.find(
             a => String(a.Usuario_ID || a.ID_Usuario) === String(_usuarioId)
         );
+        if (!afil) { console.warn('[paciente] No se encontró afiliación para Usuario_ID:', _usuarioId); return; }
 
-        if (!afil) {
-            console.warn('[paciente] No se encontró afiliación para Usuario_ID:', _usuarioId);
-            return;
-        }
-
-        // ── IDs desde la afiliación (cubre distintos alias posibles) ──────────
         const epsId     = afil.EPS_ID     || afil.Id_EPS     || afil.eps_id     || null;
         const tipoEpsId = afil.TipoEPS_ID || afil.ID_Tipo_EPS || afil.tipoeps_id || null;
 
-        // ── CAMPO 3: EPS ──────────────────────────────────────────────────────
-        // Primero intentar nombre directo en la afiliación, luego cruzar con /api/eps
         let nombreEPS = afil.Nombre_EPS || afil.nombre_eps || '';
         if (!nombreEPS && epsId) {
-            const epsObj = listaEps.find(
-                e => String(e.EPS_ID || e.Id_EPS || e.eps_id) === String(epsId)
-            );
-            nombreEPS = epsObj
-                ? (epsObj.Nombre_EPS || epsObj.nombre_eps || epsObj.Nombre || '—')
-                : '—';
+            const epsObj = listaEps.find(e => String(e.EPS_ID || e.Id_EPS || e.eps_id) === String(epsId));
+            nombreEPS = epsObj ? (epsObj.Nombre_EPS || epsObj.nombre_eps || epsObj.Nombre || '—') : '—';
         }
         _setText('eps-menu',   nombreEPS || '—');
         _setText('perfil-eps', nombreEPS || '—');
 
-        // ── CAMPO 1: Régimen EPS ──────────────────────────────────────────────
-        // Ruta: afiliacion.EPS_ID → eps.Regimen_ID → regimen_eps.Descripcion
         let nombreRegimen = afil.Nombre_Regimen || afil.nombre_regimen || '';
         if (!nombreRegimen) {
-            // Obtener Regimen_ID desde la tabla eps
             let regimenId = afil.Regimen_ID || afil.ID_Regimen_EPS || afil.regimen_id || null;
             if (!regimenId && epsId) {
-                const epsObj = listaEps.find(
-                    e => String(e.EPS_ID || e.Id_EPS || e.eps_id) === String(epsId)
-                );
-                regimenId = epsObj
-                    ? (epsObj.Regimen_ID || epsObj.regimen_id || epsObj.ID_Regimen_EPS || null)
-                    : null;
+                const epsObj = listaEps.find(e => String(e.EPS_ID || e.Id_EPS || e.eps_id) === String(epsId));
+                regimenId = epsObj ? (epsObj.Regimen_ID || epsObj.regimen_id || epsObj.ID_Regimen_EPS || null) : null;
             }
             if (regimenId) {
-                const regObj = listaRegimen.find(
-                    r => String(r.Regimen_ID || r.ID_Regimen_EPS || r.regimen_id) === String(regimenId)
-                );
-                nombreRegimen = regObj
-                    ? (regObj.Descripcion || regObj.Nombre_Regimen || regObj.nombre_regimen || '—')
-                    : '—';
+                const regObj = listaRegimen.find(r => String(r.Regimen_ID || r.ID_Regimen_EPS || r.regimen_id) === String(regimenId));
+                nombreRegimen = regObj ? (regObj.Descripcion || regObj.Nombre_Regimen || regObj.nombre_regimen || '—') : '—';
             } else {
                 nombreRegimen = '—';
             }
         }
         _setText('regimen-menu', nombreRegimen);
 
-        // ── CAMPO 2: Tipo EPS ─────────────────────────────────────────────────
         let nombreTipoEPS = afil.Nombre_Tipo || afil.nombre_tipo || '';
         if (!nombreTipoEPS && tipoEpsId) {
-            const tipoObj = listaTipos.find(
-                t => String(t.TipoEPS_ID || t.ID_Tipo_EPS || t.tipoeps_id) === String(tipoEpsId)
-            );
-            nombreTipoEPS = tipoObj
-                ? (tipoObj.Nombre_Tipo || tipoObj.nombre_tipo || tipoObj.Nombre || '—')
-                : '—';
+            const tipoObj = listaTipos.find(t => String(t.TipoEPS_ID || t.ID_Tipo_EPS || t.tipoeps_id) === String(tipoEpsId));
+            nombreTipoEPS = tipoObj ? (tipoObj.Nombre_Tipo || tipoObj.nombre_tipo || tipoObj.Nombre || '—') : '—';
         }
         _setText('tipoeps-menu', nombreTipoEPS || '—');
 
@@ -205,7 +177,6 @@ async function _cargarAfiliacionCompleta() {
     }
 }
 
-// ─── HELPER: normaliza respuesta del backend (array o { ok, data }) ───────────
 function _normalizar(data) {
     if (Array.isArray(data))               return data;
     if (data && Array.isArray(data.data))  return data.data;
@@ -234,7 +205,14 @@ function _actualizarReloj() {
     const horas = ahora.getHours();
 
     const el = document.getElementById('reloj');
-    if (el) el.innerText = ahora.toLocaleTimeString('es-CO');
+    if (el) {
+        const h  = ahora.getHours();
+        const m  = String(ahora.getMinutes()).padStart(2, '0');
+        const s  = String(ahora.getSeconds()).padStart(2, '0');
+        const h12 = h % 12 || 12;
+        const ampm = h < 12 ? 'AM' : 'PM';
+        el.innerText = `${String(h12).padStart(2, '0')}:${m}:${s} ${ampm}`;
+    }
 
     const esHorarioLaboral =
         (dia >= 1 && dia <= 5 && horas >= 8 && horas < 18) ||
@@ -304,18 +282,50 @@ async function _cargarCitasPaciente() {
     }
 }
 
-// ─── RENDER TABLA PRINCIPAL (INICIO) ─────────────────────────────────────────
+// ─── HELPERS DE ESTADO ───────────────────────────────────────────────────────
+function _resolverEstado(c) {
+    const hoy = new Date().toISOString().split('T')[0];
+    const estado = (c.EstadoAgenda || '').toLowerCase();
+
+    if (estado === 'cancelado') {
+        if (c.EstadoMulta && c.EstadoMulta !== 'Sin multa') {
+            return { label: 'Cancelada con multa', clase: 'bg-amber-100 text-amber-700' };
+        }
+        return { label: 'Cancelada', clase: 'bg-red-100 text-red-600' };
+    }
+    if (estado === 'cumplida' || estado === 'ocupado' && c.Fecha < hoy) {
+        if (estado === 'ocupado' && c.Fecha < hoy) {
+            return { label: 'Cancelada con multa', clase: 'bg-amber-100 text-amber-700' };
+        }
+        return { label: 'Cumplida', clase: 'bg-green-100 text-green-700' };
+    }
+    if (estado === 'ocupado') {
+        return { label: 'Pendiente', clase: 'bg-sky-100 text-sky-700' };
+    }
+    if (estado === 'disponible') {
+        return { label: 'Pendiente', clase: 'bg-sky-100 text-sky-700' };
+    }
+    return { label: c.EstadoAgenda || '—', clase: 'bg-slate-100 text-slate-500' };
+}
+
+function _esCitaActiva(c) {
+    const hoy   = new Date().toISOString().split('T')[0];
+    const estado = (c.EstadoAgenda || '').toLowerCase();
+    return (estado === 'ocupado' || estado === 'disponible') && c.Fecha >= hoy;
+}
+
+function _esCitaHistorial(c) {
+    return !_esCitaActiva(c);
+}
+
+// ─── RENDER TABLA PRINCIPAL (INICIO) — Solo citas vigentes ──────────────────
 function _renderTablaCitas() {
     const tbody   = document.getElementById('tabla-citas-body');
     const noMsg   = document.getElementById('no-citas-msg');
     const countEl = document.getElementById('count-citas');
     if (!tbody) return;
 
-    const hoy = new Date().toISOString().split('T')[0];
-
-    const activas = _citasData.filter(c =>
-        c.EstadoAgenda === 'Ocupado' || c.EstadoAgenda === 'Disponible'
-    );
+    const activas = _citasData.filter(_esCitaActiva);
 
     if (countEl) countEl.textContent = activas.length;
 
@@ -327,7 +337,9 @@ function _renderTablaCitas() {
     noMsg?.classList.add('hidden');
 
     activas.forEach(c => {
-        const citaCompletada = c.EstadoAgenda === 'Ocupado' && c.Fecha < hoy;
+        const estadoInfo = _resolverEstado(c);
+        const esCumplida = (c.EstadoAgenda || '').toLowerCase() === 'cumplida';
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td class="p-5 font-black text-slate-700 uppercase text-xs">${c.NombrePaciente || '—'}</td>
@@ -335,57 +347,55 @@ function _renderTablaCitas() {
             <td class="p-5 font-black text-sky-600 uppercase text-[10px]">${c.Nombre_Especialidad || '—'}</td>
             <td class="p-5 text-xs font-bold">${c.Fecha}<br><span class="text-slate-400">${c.Hora_Inicio || ''}</span></td>
             <td class="p-5">
-                <span class="text-[9px] font-black uppercase px-2 py-1 rounded-full
-                    ${c.EstadoAgenda === 'Disponible' ? 'bg-green-100 text-green-700'
-                    : c.EstadoAgenda === 'Ocupado'    ? 'bg-sky-100 text-sky-700'
-                    : 'bg-red-100 text-red-700'}">
-                    ${c.EstadoAgenda}
+                <span class="text-[9px] font-black uppercase px-2 py-1 rounded-full ${estadoInfo.clase}">
+                    ${estadoInfo.label}
                 </span>
-                ${c.EstadoMulta && c.EstadoMulta !== 'Sin multa'
-                    ? `<span class="text-[9px] font-black uppercase px-2 py-1 rounded-full bg-amber-100 text-amber-700 ml-1">${c.EstadoMulta}</span>`
-                    : ''}
             </td>
             <td class="p-5 text-center">
-                ${c.EstadoAgenda === 'Ocupado' && c.Fecha >= hoy
+                ${(c.EstadoAgenda || '').toLowerCase() === 'ocupado'
                     ? `<button onclick="abrirModalCancelar(${c.Cita_ID})"
-                           class="text-[10px] bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded-xl font-black hover:bg-red-100 transition-all uppercase">
+                           class="text-[10px] bg-red-50 text-red-500 border border-red-200 px-4 py-2 rounded-xl font-black hover:bg-red-100 transition-all uppercase">
                            <i class="fas fa-ban mr-1"></i> Cancelar
                        </button>`
-                    : citaCompletada
-                        ? `<button onclick="_abrirRanking(${c.Cita_ID})"
-                               class="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-4 py-2 rounded-xl font-black hover:bg-amber-100 transition-all uppercase">
-                               <i class="fas fa-star mr-1"></i> Evaluar
-                           </button>`
-                        : '<span class="text-slate-300 text-[10px] font-bold">—</span>'
+                    : '<span class="text-slate-300 text-[10px] font-bold">—</span>'
+                }
+            </td>
+            <td class="p-5 text-center">
+                ${esCumplida
+                    ? `<button onclick="_abrirRanking(${c.Cita_ID})"
+                           class="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-4 py-2 rounded-xl font-black hover:bg-amber-100 transition-all uppercase">
+                           <i class="fas fa-star mr-1"></i> Evaluar
+                       </button>`
+                    : '<span class="text-slate-300 text-[10px] font-bold">—</span>'
                 }
             </td>`;
         tbody.appendChild(tr);
     });
 }
 
-// ─── RENDER HISTORIAL ─────────────────────────────────────────────────────────
+// ─── RENDER HISTORIAL — Solo citas no activas ─────────────────────────────────
 function _renderHistorial() {
     const tbody = document.getElementById('tabla-historial-completo');
     if (!tbody) return;
     tbody.innerHTML = '';
 
-    if (_citasData.length === 0) {
+    const historial = _citasData.filter(_esCitaHistorial);
+
+    if (historial.length === 0) {
         tbody.innerHTML = `<tr><td colspan="5" class="p-10 text-center text-slate-400 font-bold italic text-xs uppercase">Sin historial registrado.</td></tr>`;
         return;
     }
 
-    _citasData.forEach(c => {
+    historial.forEach(c => {
+        const estadoInfo = _resolverEstado(c);
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td class="p-5 text-xs font-bold">${c.Fecha}<br><span class="text-slate-400">${c.Hora_Inicio || ''}</span></td>
             <td class="p-5 font-black text-sky-600 uppercase text-[10px]">${c.Nombre_Especialidad || '—'}</td>
             <td class="p-5 text-xs text-slate-600">Dr(a). ${c.NombreEspecialista || '—'}</td>
             <td class="p-5">
-                <span class="text-[9px] font-black uppercase px-2 py-1 rounded-full
-                    ${c.EstadoAgenda === 'Disponible' ? 'bg-green-100 text-green-700'
-                    : c.EstadoAgenda === 'Ocupado'    ? 'bg-sky-100 text-sky-700'
-                    : 'bg-red-100 text-red-700'}">
-                    ${c.EstadoAgenda}
+                <span class="text-[9px] font-black uppercase px-2 py-1 rounded-full ${estadoInfo.clase}">
+                    ${estadoInfo.label}
                 </span>
             </td>
             <td class="p-5 text-center">
@@ -393,6 +403,25 @@ function _renderHistorial() {
             </td>`;
         tbody.appendChild(tr);
     });
+}
+
+// ─── LÓGICA DE CANCELACIÓN CON DETECCIÓN DE MULTA ────────────────────────────
+function _calcularMinutosRestantes(fecha, horaInicio) {
+    try {
+        const citaDateTime = new Date(`${fecha}T${horaInicio}`);
+        const ahora        = new Date();
+        return (citaDateTime - ahora) / 60000;
+    } catch {
+        return Infinity;
+    }
+}
+
+function _formatearTiempoRestante(minutos) {
+    if (minutos <= 0) return '0 minutos';
+    const h = Math.floor(minutos / 60);
+    const m = Math.round(minutos % 60);
+    if (h > 0) return `${h}h ${m}min`;
+    return `${m} minutos`;
 }
 
 // ─── CANCELAR CITA ────────────────────────────────────────────────────────────
@@ -428,41 +457,77 @@ window.abrirModalCancelar = function (citaId) {
 window.cerrarModalCancelar = function () {
     document.getElementById('modalCancelarCita').style.display = 'none';
     _citaParaCancelar = null;
+    _cancelarConMulta = false;
 };
 
 window.solicitarConfirmacionFinal = function () {
     document.getElementById('modalCancelarCita').style.display = 'none';
+
+    const cita = _citasData.find(c => c.Cita_ID === _citaParaCancelar);
+    if (!cita) return;
+
+    const minutosRestantes = _calcularMinutosRestantes(cita.Fecha, cita.Hora_Inicio);
+
+    if (minutosRestantes <= 120) {
+        // Faltan 2 horas o menos → mostrar advertencia de multa
+        _cancelarConMulta = true;
+        const tiempoTexto = _formatearTiempoRestante(minutosRestantes);
+        const tiempoEl = document.getElementById('tiempo-restante-multa');
+        if (tiempoEl) tiempoEl.textContent = tiempoTexto;
+        document.getElementById('modalAdvertenciaMulta').style.display = 'flex';
+    } else {
+        // Más de 2 horas → flujo normal sin multa
+        _cancelarConMulta = false;
+        document.getElementById('modalConfirmacionFinal').style.display = 'flex';
+    }
+};
+
+window.cerrarModalAdvertenciaMulta = function () {
+    document.getElementById('modalAdvertenciaMulta').style.display = 'none';
+    _citaParaCancelar = null;
+    _cancelarConMulta = false;
+};
+
+window.confirmarCancelacionConMulta = function () {
+    document.getElementById('modalAdvertenciaMulta').style.display = 'none';
     document.getElementById('modalConfirmacionFinal').style.display = 'flex';
 };
 
 window.cerrarConfirmacionFinal = function () {
     document.getElementById('modalConfirmacionFinal').style.display = 'none';
+    _cancelarConMulta = false;
 };
 
 window.confirmarAccionCancelado = async function () {
     if (!_citaParaCancelar) return;
     try {
-        const res  = await fetch(`/api/citas/${_citaParaCancelar}/cancelar`, { method: 'PUT' });
+        const url = _cancelarConMulta
+            ? `/api/citas/${_citaParaCancelar}/cancelar-con-multa`
+            : `/api/citas/${_citaParaCancelar}/cancelar-sin-multa`;
+
+        const res  = await fetch(url, { method: 'PUT' });
         const data = await res.json();
         document.getElementById('modalConfirmacionFinal').style.display = 'none';
+
+        const conMulta = _cancelarConMulta;
         _citaParaCancelar = null;
+        _cancelarConMulta = false;
+
         if (data.ok) {
-            alert('Cita cancelada. Se generó una multa pendiente.');
             await _cargarCitasPaciente();
+            if (conMulta) {
+                _mostrarNotificacion('Cita Cancelada con Multa', 'Su cita fue cancelada. Se generó una multa pendiente de pago.', 'info');
+            } else {
+                _mostrarNotificacion('Cita Cancelada', 'Su cita fue cancelada exitosamente sin penalización.', 'success');
+            }
         } else {
-            alert(`Error: ${data.error}`);
+            _mostrarNotificacion('Error', data.error || 'No se pudo cancelar la cita.', 'error');
         }
     } catch (err) {
         console.error('[paciente] Error cancelando cita:', err);
-        alert('Error de conexión al cancelar la cita.');
+        _mostrarNotificacion('Error de Conexión', 'No se pudo conectar al servidor. Intente de nuevo.', 'error');
     }
 };
-
-// ─── LIMPIAR CANCELADAS ───────────────────────────────────────────────────────
-function _limpiarCanceladas() {
-    _citasData = _citasData.filter(c => c.EstadoAgenda !== 'Cancelado');
-    _renderTablaCitas();
-}
 
 // ─── RANKING ──────────────────────────────────────────────────────────────────
 window._abrirRanking = async function (citaId) {
@@ -470,13 +535,13 @@ window._abrirRanking = async function (citaId) {
         const resP  = await fetch('/api/pregunta');
         const dataP = await resP.json();
         if (!dataP.ok || !dataP.data.length) {
-            alert('No hay preguntas de evaluación configuradas.');
+            _mostrarNotificacion('Sin Preguntas', 'No hay preguntas de evaluación configuradas.', 'info');
             return;
         }
         _mostrarFormRanking(citaId, dataP.data);
     } catch (err) {
         console.error('[ranking] Error cargando preguntas:', err);
-        alert('Error al cargar preguntas de evaluación.');
+        _mostrarNotificacion('Error', 'Error al cargar preguntas de evaluación.', 'error');
     }
 };
 
@@ -573,26 +638,215 @@ window._enviarRanking = async function (citaId, preguntaIds) {
             }
         }
         document.getElementById('modal-ranking-dinamico')?.remove();
-        alert('¡Gracias por tu evaluación!');
+        _mostrarNotificacion('¡Gracias!', 'Tu evaluación fue enviada correctamente.', 'success');
     } catch (err) {
         console.error('[ranking] Error enviando respuestas:', err);
         if (errEl) { errEl.textContent = 'Error de conexión. Intente de nuevo.'; errEl.style.display = 'block'; }
     }
 };
 
+// ─── VISIBILIDAD DE CONTRASEÑA ────────────────────────────────────────────────
+window.togglePassVisibility = function (inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const icon = btn.querySelector('i');
+    if (input.type === 'password') {
+        input.type = 'text';
+        if (icon) { icon.classList.remove('fa-eye'); icon.classList.add('fa-eye-slash'); }
+    } else {
+        input.type = 'password';
+        if (icon) { icon.classList.remove('fa-eye-slash'); icon.classList.add('fa-eye'); }
+    }
+};
+
+// ─── VALIDACIÓN DE POLÍTICA DE CONTRASEÑA ────────────────────────────────────
+function _cumpleRequisitos(pass) {
+    return {
+        length:  pass.length >= 8,
+        upper:   /[A-Z]/.test(pass),
+        lower:   /[a-z]/.test(pass),
+        number:  /[0-9]/.test(pass),
+        special: /[^A-Za-z0-9]/.test(pass),
+    };
+}
+
+window.validarRequisitosEnTiempoReal = function () {
+    const pass = document.getElementById('conf-pass-nueva')?.value || '';
+    const res  = _cumpleRequisitos(pass);
+
+    _aplicarEstadoRequisito('req-length',  res.length,  false);
+    _aplicarEstadoRequisito('req-upper',   res.upper,   false);
+    _aplicarEstadoRequisito('req-lower',   res.lower,   false);
+    _aplicarEstadoRequisito('req-number',  res.number,  false);
+    _aplicarEstadoRequisito('req-special', res.special, false);
+};
+
+function _aplicarEstadoRequisito(id, cumple, marcarRojo) {
+    const el   = document.getElementById(id);
+    if (!el) return;
+    const icon = el.querySelector('.req-icon');
+    if (cumple) {
+        el.className  = 'req-item req-ok';
+        if (icon) icon.textContent = '✓';
+    } else if (marcarRojo) {
+        el.className  = 'req-item req-error';
+        if (icon) icon.textContent = '-';
+    } else {
+        el.className  = 'req-item req-pending';
+        if (icon) icon.textContent = '-';
+    }
+}
+
+function _marcarRequisitosIncumplidos() {
+    const pass = document.getElementById('conf-pass-nueva')?.value || '';
+    const res  = _cumpleRequisitos(pass);
+    _aplicarEstadoRequisito('req-length',  res.length,  !res.length);
+    _aplicarEstadoRequisito('req-upper',   res.upper,   !res.upper);
+    _aplicarEstadoRequisito('req-lower',   res.lower,   !res.lower);
+    _aplicarEstadoRequisito('req-number',  res.number,  !res.number);
+    _aplicarEstadoRequisito('req-special', res.special, !res.special);
+    return res.length && res.upper && res.lower && res.number && res.special;
+}
+
+// ─── MI PERFIL — CARGA DE SELECTS EPS ────────────────────────────────────────
+let _listaEpsGlobal     = [];
+let _listaRegimenGlobal = [];
+let _listaTipoEpsGlobal = [];
+
+async function _cargarSelectsEps() {
+    try {
+        const [resEps, resRegimen, resTipo] = await Promise.all([
+            fetch('/api/eps'),
+            fetch('/api/regimen-eps'),
+            fetch('/api/tipo-eps'),
+        ]);
+
+        _listaEpsGlobal     = _normalizar(resEps.ok     ? await resEps.json()     : []);
+        _listaRegimenGlobal = _normalizar(resRegimen.ok ? await resRegimen.json() : []);
+        _listaTipoEpsGlobal = _normalizar(resTipo.ok    ? await resTipo.json()    : []);
+
+        const selEps = document.getElementById('edit-eps');
+        if (selEps) {
+            selEps.innerHTML = '<option value="">Seleccione EPS...</option>';
+            _listaEpsGlobal.forEach(e => {
+                const id  = e.EPS_ID || e.Id_EPS || e.eps_id;
+                const nom = e.Nombre_EPS || e.nombre_eps || e.Nombre || '';
+                const opt = document.createElement('option');
+                opt.value       = id;
+                opt.textContent = nom;
+                selEps.appendChild(opt);
+            });
+        }
+
+        const selTipo = document.getElementById('edit-tipo-eps');
+        if (selTipo) {
+            selTipo.innerHTML = '<option value="">Seleccione Tipo EPS...</option>';
+            _listaTipoEpsGlobal.forEach(t => {
+                const id  = t.TipoEPS_ID || t.ID_Tipo_EPS || t.tipoeps_id;
+                const nom = t.Nombre_Tipo || t.nombre_tipo || t.Nombre || '';
+                const opt = document.createElement('option');
+                opt.value       = id;
+                opt.textContent = nom;
+                selTipo.appendChild(opt);
+            });
+        }
+
+        const selRegimen = document.getElementById('edit-regimen-eps');
+        if (selRegimen) {
+            selRegimen.innerHTML = '<option value="">Se carga según EPS seleccionada</option>';
+            selRegimen.disabled  = true;
+        }
+
+    } catch (err) {
+        console.warn('[perfil] Error cargando selects EPS:', err);
+    }
+}
+
+function _actualizarRegimenSegunEps(epsId) {
+    const selRegimen = document.getElementById('edit-regimen-eps');
+    if (!selRegimen) return;
+
+    const epsObj = _listaEpsGlobal.find(e =>
+        String(e.EPS_ID || e.Id_EPS || e.eps_id) === String(epsId)
+    );
+
+    selRegimen.innerHTML  = '<option value="">Seleccione Régimen...</option>';
+    selRegimen.disabled   = true;
+
+    if (!epsObj) return;
+
+    const regimenId = epsObj.Regimen_ID || epsObj.regimen_id || epsObj.ID_Regimen_EPS || null;
+    if (!regimenId) return;
+
+    const regObj = _listaRegimenGlobal.find(r =>
+        String(r.Regimen_ID || r.ID_Regimen_EPS || r.regimen_id) === String(regimenId)
+    );
+
+    if (regObj) {
+        const id  = regObj.Regimen_ID || regObj.ID_Regimen_EPS || regObj.regimen_id;
+        const nom = regObj.Descripcion || regObj.Nombre_Regimen || regObj.nombre_regimen || '';
+        const opt = document.createElement('option');
+        opt.value       = id;
+        opt.textContent = nom;
+        opt.selected    = true;
+        selRegimen.appendChild(opt);
+        selRegimen.disabled = false;
+    }
+}
+
 // ─── MI PERFIL ────────────────────────────────────────────────────────────────
-function _precargarPerfil() {
+async function _precargarPerfil() {
     if (!_sesionPaciente) return;
-    _setVal('edit-correo',     _sesionPaciente.Correo          || '');
-    _setVal('edit-telefono',   _sesionPaciente.Telefono        || '');
-    _setVal('edit-nacimiento', _sesionPaciente.FechaNacimiento || '');
+    const nombreCompleto = `${_sesionPaciente.Nombres || ''} ${_sesionPaciente.Apellidos || ''}`.trim();
+    _setVal('edit-nombres',   nombreCompleto);
+    _setVal('edit-correo',    _sesionPaciente.Correo   || '');
+    _setVal('edit-telefono',  _sesionPaciente.Telefono || '');
     _resetearFlujoPassword();
+
+    await _cargarSelectsEps();
+
+    // Precargar valores actuales de afiliación
+    if (_usuarioId) {
+        try {
+            const resAfil = await fetch('/api/afiliacion');
+            if (resAfil.ok) {
+                const dataAfil = _normalizar(await resAfil.json());
+                const afil = dataAfil.find(
+                    a => String(a.Usuario_ID || a.ID_Usuario) === String(_usuarioId)
+                );
+                if (afil) {
+                    const epsId     = afil.EPS_ID     || afil.Id_EPS     || afil.eps_id     || '';
+                    const tipoEpsId = afil.TipoEPS_ID || afil.ID_Tipo_EPS || afil.tipoeps_id || '';
+
+                    const selEps  = document.getElementById('edit-eps');
+                    const selTipo = document.getElementById('edit-tipo-eps');
+                    if (selEps)  selEps.value  = String(epsId);
+                    if (selTipo) selTipo.value = String(tipoEpsId);
+
+                    if (epsId) _actualizarRegimenSegunEps(epsId);
+                }
+            }
+        } catch (err) {
+            console.warn('[perfil] Error precargando afiliación:', err);
+        }
+    }
+
+    const selEps = document.getElementById('edit-eps');
+    if (selEps) {
+        selEps.addEventListener('change', function () {
+            _actualizarRegimenSegunEps(this.value);
+        });
+    }
 }
 
 function _resetearFlujoPassword() {
     ['pass-actual', 'conf-pass-nueva', 'conf-pass-confirmar'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.value = '';
+        if (el) { el.value = ''; el.type = 'password'; }
+    });
+    document.querySelectorAll('.pass-toggle-btn i').forEach(icon => {
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
     });
     const step1 = document.getElementById('pass-step1');
     const step2 = document.getElementById('pass-step2');
@@ -601,6 +855,9 @@ function _resetearFlujoPassword() {
     ['error-pass-actual', 'error-pass-nueva'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
+    });
+    ['req-length', 'req-upper', 'req-lower', 'req-number', 'req-special'].forEach(id => {
+        _aplicarEstadoRequisito(id, false, false);
     });
 }
 
@@ -627,28 +884,41 @@ window.validarPasswordActual = function () {
             if (step1) step1.style.display = 'none';
             if (step2) step2.style.display = '';
         } else {
-            if (errActual) { errActual.textContent = 'Contraseña incorrecta.'; errActual.style.display = 'block'; }
+            document.getElementById('modalErrorPassword').style.display = 'flex';
         }
     })
     .catch(() => {
-        if (errActual) errActual.style.display = 'none';
-        if (step1) step1.style.display = 'none';
-        if (step2) step2.style.display = '';
+        _mostrarNotificacion('Error de Conexión', 'No se pudo verificar la contraseña.', 'error');
     });
 };
 
 window.guardarPerfilPaciente = function () {
-    const correo     = document.getElementById('edit-correo')?.value.trim();
-    const telefono   = document.getElementById('edit-telefono')?.value.trim();
-    const nacimiento = document.getElementById('edit-nacimiento')?.value;
-    const passNueva  = document.getElementById('conf-pass-nueva')?.value;
-    const passConf   = document.getElementById('conf-pass-confirmar')?.value;
-    const errNueva   = document.getElementById('error-pass-nueva');
-    const step2      = document.getElementById('pass-step2');
+    const nombreCompleto = document.getElementById('edit-nombres')?.value.trim() || '';
+    const partes         = nombreCompleto.split(' ');
+    const nombres        = partes.slice(0, Math.ceil(partes.length / 2)).join(' ');
+    const apellidos      = partes.slice(Math.ceil(partes.length / 2)).join(' ');
 
-    if (step2?.style.display !== 'none' && passNueva !== passConf) {
-        if (errNueva) errNueva.style.display = 'block';
-        return;
+    const correo    = document.getElementById('edit-correo')?.value.trim();
+    const telefono  = document.getElementById('edit-telefono')?.value.trim();
+    const passNueva = document.getElementById('conf-pass-nueva')?.value;
+    const passConf  = document.getElementById('conf-pass-confirmar')?.value;
+    const errNueva  = document.getElementById('error-pass-nueva');
+    const step2     = document.getElementById('pass-step2');
+
+    const epsId     = document.getElementById('edit-eps')?.value     || null;
+    const tipoEpsId = document.getElementById('edit-tipo-eps')?.value || null;
+    const regimenEl = document.getElementById('edit-regimen-eps');
+    const regimenId = regimenEl && !regimenEl.disabled ? (regimenEl.value || null) : null;
+
+    if (step2?.style.display !== 'none' && passNueva) {
+        const todosOk = _marcarRequisitosIncumplidos();
+        if (!todosOk) {
+            return;
+        }
+        if (passNueva !== passConf) {
+            if (errNueva) errNueva.style.display = 'block';
+            return;
+        }
     }
     if (errNueva) errNueva.style.display = 'none';
 
@@ -657,27 +927,34 @@ window.guardarPerfilPaciente = function () {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
             usuario_id: _usuarioId,
-            correo, telefono, nacimiento,
-            nuevaPass: passNueva || null
+            nombres,
+            apellidos,
+            correo,
+            telefono,
+            nuevaPass:  passNueva || null,
+            eps_id:     epsId     ? parseInt(epsId)     : null,
+            tipo_eps_id: tipoEpsId ? parseInt(tipoEpsId) : null,
+            regimen_id: regimenId ? parseInt(regimenId) : null,
         }),
     })
     .then(r => r.json())
     .then(data => {
         if (data.ok) {
             if (_sesionPaciente) {
-                _sesionPaciente.Correo          = correo;
-                _sesionPaciente.Telefono        = telefono;
-                _sesionPaciente.FechaNacimiento = nacimiento;
+                _sesionPaciente.Nombres   = nombres;
+                _sesionPaciente.Apellidos = apellidos;
+                _sesionPaciente.Correo    = correo;
+                _sesionPaciente.Telefono  = telefono;
                 sessionStorage.setItem('odent_usuario', JSON.stringify(_sesionPaciente));
             }
             _cargarSesion();
             cambiarVista('inicio');
-            alert('Perfil actualizado correctamente.');
+            _mostrarNotificacion('Perfil Actualizado', 'Tus datos han sido guardados correctamente.', 'success');
         } else {
-            alert(data.mensaje || 'No se pudo guardar. Intenta de nuevo.');
+            _mostrarNotificacion('Error', data.mensaje || 'No se pudo guardar. Intenta de nuevo.', 'error');
         }
     })
-    .catch(() => alert('Error de conexión al guardar el perfil.'));
+    .catch(() => _mostrarNotificacion('Error de Conexión', 'No se pudo guardar el perfil.', 'error'));
 };
 
 // ─── CONFIRMACIÓN SIMPLE ──────────────────────────────────────────────────────
@@ -701,9 +978,6 @@ window.ejecutarAccionSimple = function () {
         localStorage.removeItem('usuario_logueado');
         window.location.replace('/login');
     }
-    if (_accionPendienteSimple === 'limpiar') {
-        _limpiarCanceladas();
-    }
     window.cerrarModalSimple();
 };
 
@@ -719,8 +993,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }).toUpperCase();
     }
 
-    // CORRECCIÓN: el listener verifica también si el click viene del enlace
-    // de agendar para no bloquear la navegación
     document.addEventListener('click', function (e) {
         const trigger  = document.getElementById('profile-trigger');
         const dropdown = document.getElementById('profile-dropdown');
