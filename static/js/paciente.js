@@ -210,7 +210,7 @@ function _actualizarReloj() {
         const m   = String(ahora.getMinutes()).padStart(2, '0');
         const s   = String(ahora.getSeconds()).padStart(2, '0');
         const h12 = h % 12 || 12;
-        const ampm = h < 12 ? 'AM' : 'PM';
+        const ampm = h < 12 ? 'A.M.' : 'P.M.';
         el.innerText = `${String(h12).padStart(2, '0')}:${m}:${s} ${ampm}`;
     }
 
