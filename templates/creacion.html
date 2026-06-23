@@ -133,36 +133,22 @@
                 </div>
             </div>
 
-            <!-- Sección Datos de Aseguramiento (Paciente) -->
+            <!-- ═══════════════════════════════════════════════════════════════
+                 SECCIÓN DATOS DEL PACIENTE
+                 Orden: EPS → Régimen → Tipo de Afiliación
+                 La selección de EPS es INDEPENDIENTE del régimen y del tipo.
+            ════════════════════════════════════════════════════════════════ -->
             <div id="contenedor_datos_medicos" class="seccion-medica">
                 <div class="seccion-label">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
-                    Datos de Aseguramiento
+                    DATOS DEL PACIENTE
                 </div>
 
-                <!-- 1. Régimen -->
-                <div class="form-group">
-                    <label>Régimen</label>
-                    <select class="form-control" id="regimen" onchange="onRegimenChange()">
-                        <option value="">Cargando regímenes...</option>
-                    </select>
-                    <div class="error-msg" id="errorRegimen"></div>
-                </div>
-
-                <!-- 2. Tipo de EPS -->
-                <div class="form-group">
-                    <label>Tipo de EPS</label>
-                    <select class="form-control" id="tipoEps" onchange="onTipoEpsChange()" disabled>
-                        <option value="">Seleccione primero el régimen</option>
-                    </select>
-                    <div class="error-msg" id="errorTipoEps"></div>
-                </div>
-
-                <!-- 3. EPS -->
+                <!-- 1. EPS (independiente, se carga al mostrar la sección) -->
                 <div class="form-group">
                     <label>EPS</label>
-                    <select class="form-control" id="eps" onchange="manejarSeleccionEPSCreacion()" disabled>
-                        <option value="">Seleccione primero el tipo de EPS</option>
+                    <select class="form-control" id="eps" onchange="manejarSeleccionEPSCreacion()">
+                        <option value="">Cargando EPS...</option>
                     </select>
                     <div class="error-msg" id="errorEps"></div>
                 </div>
@@ -181,6 +167,24 @@
                             <div class="error-msg" id="err-eps-otro-telefono-creacion"></div>
                         </div>
                     </div>
+                </div>
+
+                <!-- 2. Régimen (informativo, no filtra EPS) -->
+                <div class="form-group">
+                    <label>Régimen</label>
+                    <select class="form-control" id="regimen">
+                        <option value="">Cargando regímenes...</option>
+                    </select>
+                    <div class="error-msg" id="errorRegimen"></div>
+                </div>
+
+                <!-- 3. Tipo de Afiliación -->
+                <div class="form-group">
+                    <label>Tipo de Afiliación</label>
+                    <select class="form-control" id="tipoEps">
+                        <option value="">Cargando tipos...</option>
+                    </select>
+                    <div class="error-msg" id="errorTipoEps"></div>
                 </div>
 
                 <!-- Campos clínicos opcionales -->
@@ -255,12 +259,14 @@
 
             <div class="error-msg" id="mensajeError" style="display:none; margin-top:10px; text-align:center;"></div>
 
-            <button onclick="validarPaso1()">
+            <button id="btnContinuar" onclick="validarPaso1()">
                 Continuar
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
             </button>
         </div>
 
+        <!-- PASO 2 -->
+        <!-- ==================== INICIO ARCHIVO: templates/creacion.html (fragmento PASO 2 corregido) ==================== -->
         <!-- PASO 2 -->
         <div class="form-step" id="step2">
             <div class="email-card">
@@ -292,18 +298,25 @@
                 <label style="text-align:center; color:#475569;">Ingresa el código que aparece arriba</label>
                 <input class="form-control" type="text" id="codigo" style="text-align: center; font-size: 22px; letter-spacing: 6px; font-weight: 700;" placeholder="_ _ _ _ _ _" maxlength="6">
                 <div style="text-align:center; margin-top: 10px;">
+                    <!-- Botón de REENVÍO: su texto e identidad están aislados del botón de verificación -->
                     <button type="button" id="btnReenviar" onclick="reenviarCodigo()" disabled
-                        style="background: #e2e8f0; color: #94a3b8; box-shadow:none; width:auto; padding: 9px 22px; font-size:13px; cursor:not-allowed;">
+                        style="background: #e2e8f0; color: #94a3b8; box-shadow:none; width:auto; padding: 9px 22px; font-size:13px; cursor:not-allowed; border-radius:10px; border:none; font-weight:700;">
                         Reenviar código (<span id="timerReenvio">10</span>s)
                     </button>
                 </div>
                 <div class="error-msg" id="errorCodigo" style="text-align: center;"></div>
             </div>
-            <button onclick="verificarCodigo()">
+
+            <!-- FIX CRÍTICO: se agrega id="btnVerificarCodigo" único para que verificarCodigo()
+                jamás vuelva a manipular por error el botón de reenvío (antes se usaba
+                document.querySelector("#step2 button"), que apuntaba al primer <button>
+                del contenedor, es decir, btnReenviar, corrompiendo su texto y su estado). -->
+            <button id="btnVerificarCodigo" onclick="verificarCodigo()">
                 Verificar código
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
             </button>
         </div>
+<!-- ==================== FIN ARCHIVO: templates/creacion.html (fragmento PASO 2 corregido) ==================== -->
 
         <!-- PASO 3 -->
         <div class="form-step" id="step3">
@@ -341,7 +354,6 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
             </button>
 
-
             <button id="btnIrAlLogin" class="btn-login-success" onclick="abrirLogin()">
                 Ir a Iniciar Sesión
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg>
@@ -352,6 +364,8 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/creacion.js') }}"></script>
+
+<!-- Overlay de éxito (animación intacta) -->
 <div id="successOverlay" class="success-overlay" style="display:none;">
     <div class="success-card">
         <div class="success-check-wrap">

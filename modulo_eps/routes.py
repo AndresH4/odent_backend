@@ -274,9 +274,6 @@ def borrar_eps(eps_id):
 
 # =============================================================================
 # AFILIACIÓN
-# Consumido por:
-#   - paciente.js._cargarAfiliacionEPS()  → GET /api/afiliacion
-#   - especialista.js.cargarPerfilClinicoPaciente() → GET /api/afiliacion
 # =============================================================================
 
 @eps_bp.route('/afiliacion', methods=['GET'])
@@ -371,9 +368,6 @@ def borrar_afiliacion(afiliacion_id):
 
 # =============================================================================
 # PACIENTE (modulo_eps)
-# Consumido por:
-#   - administrador.js.cargarPacientesEPS() → GET /api/paciente
-#   - administrador.js.renderUsuarios()     → GET /api/paciente
 # =============================================================================
 
 @eps_bp.route('/paciente', methods=['GET'])
@@ -461,8 +455,6 @@ def borrar_paciente(paciente_id):
 
 # =============================================================================
 # TABLA PREGUNTA
-# Consumido por:
-#   - paciente.js._abrirRanking() → GET /api/pregunta
 # =============================================================================
 
 @eps_bp.route('/pregunta', methods=['GET'])
@@ -540,10 +532,7 @@ def borrar_pregunta(pregunta_id):
 
 
 # =============================================================================
-# TABLA RESPUESTA (modulo_eps)
-# NOTA: El endpoint POST /api/respuesta es manejado por modulo_citas/routes.py
-# para garantizar el Cita_ID explícito desde el frontend.
-# Estos endpoints son para gestión administrativa de respuestas.
+# TABLA RESPUESTA
 # =============================================================================
 
 @eps_bp.route('/respuesta', methods=['GET'])
@@ -598,9 +587,6 @@ def borrar_respuesta(respuesta_id):
 
 # =============================================================================
 # REPORTES ESPECIALES
-# Consumido por:
-#   - administrador.js.cargarReporteAfiliados() → GET /api/reporte/afiliados-por-eps
-#   - especialista.js.cargarRespuestasFormulario() → GET /api/reporte/respuestas-paciente/<id>
 # =============================================================================
 
 @eps_bp.route('/reporte/afiliados-por-eps', methods=['GET'])

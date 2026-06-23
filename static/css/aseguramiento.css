@@ -1,168 +1,505 @@
 /* =============================================================================
-   aseguramiento.css
-   Estilos del módulo de aseguramiento de datos
+   aseguramiento.css  —  Stylo Dental · Módulo Aseguramiento
+   Refactorizado: corrige bug de superposición del botón sobre el input,
+   y refuerza el sistema visual con un buscador moderno de dos filas.
    ============================================================================= */
- 
-/* ── Validación de campos ──────────────────────────────────────────────────── */
-.input-error {
-    border: 2px solid #ef4444 !important;
-    background-color: #fef2f2 !important;
+
+/* ── Variables de módulo ───────────────────────────────────────────────────── */
+:root {
+    --aseg-accent:        #0ea5e9;
+    --aseg-accent-dark:   #0369a1;
+    --aseg-accent-light:  #e0f2fe;
+    --aseg-accent-soft:   #f0f9ff;
+    --aseg-surface:       #ffffff;
+    --aseg-border:        #e2e8f0;
+    --aseg-border-focus:  #0ea5e9;
+    --aseg-text:          #1e293b;
+    --aseg-text-muted:    #64748b;
+    --aseg-text-light:    #94a3b8;
+    --aseg-danger:        #ef4444;
+    --aseg-success:       #059669;
+    --aseg-radius:        14px;
+    --aseg-radius-sm:     9px;
+    --aseg-shadow:        0 2px 16px 0 rgba(14,165,233,.08), 0 1px 3px rgba(0,0,0,.06);
+    --aseg-shadow-card:   0 4px 24px 0 rgba(14,165,233,.10), 0 1px 4px rgba(0,0,0,.07);
 }
- 
-.error-text {
-    color: #ef4444;
-    font-size: 10px;
-    font-weight: bold;
+
+/* ── Centrado global: body actúa como columna flexbox ──────────────────────── */
+html, body {
+    min-height: 100%;
+}
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;          /* centra horizontalmente el .aseg-container  */
+    justify-content: center;      /* centra verticalmente cuando el contenido    */
+    min-height: 100vh;            /* cabe en el viewport                         */
+    padding: 32px 16px;           /* margen armónico arriba/abajo en pantallas   */
+    box-sizing: border-box;       /* grandes; en pantallas pequeñas el padding   */
+    background: #f1f5f9;          /* hace de margen superior e inferior          */
+}
+
+/* ── Contenedor principal ──────────────────────────────────────────────────── */
+.aseg-container {
+    width: 100%;
+    max-width: 700px;
+    /* margin: auto ya no es necesario — el body flex centra el bloque */
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+}
+
+/* ── Header ────────────────────────────────────────────────────────────────── */
+.aseg-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 28px 32px 22px;
+    background: linear-gradient(135deg, #0369a1 0%, #0ea5e9 100%);
+    border-radius: var(--aseg-radius) var(--aseg-radius) 0 0;
+    color: #fff;
+}
+.aseg-header-icon {
+    flex-shrink: 0;
+    width: 48px; height: 48px;
+    background: rgba(255,255,255,.18);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+}
+.aseg-header h2 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -.3px; }
+.aseg-header p  { margin: 3px 0 0; font-size: 12.5px; color: #bae6fd; font-weight: 400; }
+
+/* ── Body ──────────────────────────────────────────────────────────────────── */
+.aseg-body {
+    background: #f8fafc;
+    border: 1px solid var(--aseg-border);
+    border-top: none;
+    border-radius: 0 0 var(--aseg-radius) var(--aseg-radius);
+    padding: 24px 28px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* ── Card interna ──────────────────────────────────────────────────────────── */
+.aseg-card {
+    background: var(--aseg-surface);
+    border: 1px solid var(--aseg-border);
+    border-radius: var(--aseg-radius);
+    padding: 22px 24px;
+    box-shadow: var(--aseg-shadow);
+    animation: asegFadeUp .32s ease both;
+}
+.aseg-form-card { animation: asegFadeUp .38s .06s ease both; }
+
+/* ── Label de sección ─────────────────────────────────────────────────────── */
+.aseg-card-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .6px;
+    text-transform: uppercase;
+    color: var(--aseg-accent-dark);
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+    border-bottom: 1.5px solid var(--aseg-accent-light);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   BUSCADOR — Layout refactorizado
+   Antes: flex-row con overflow:hidden en el contenedor del input+botón
+          → botón se superponía visualmente al input en pantallas pequeñas.
+   Ahora: dos filas independientes.
+     Fila 1: selector de tipo (ancho completo)
+     Fila 2: input con ícono interno + botón alineado a la derecha con gap
+   El botón nunca está dentro del mismo contenedor overflow que el input.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.aseg-search-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+/* Selector de tipo: ancho completo con ícono prefijo */
+.aseg-tipo-group { margin-bottom: 0 !important; }
+
+.aseg-select-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.aseg-select-wrap select {
+    width: 100%;
+    padding-left: 36px !important; /* espacio para el ícono */
+}
+.aseg-select-icon {
+    position: absolute;
+    left: 12px;
+    color: var(--aseg-text-muted);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/*
+   Fila 2: input + botón lado a lado
+   → flex-row con align-items: flex-end para que el botón se alinee
+     a la base del input (teniendo en cuenta el label encima del input).
+   → gap: 12px garantiza espacio visible entre input y botón.
+   → El botón NO tiene overflow ni comparte el border-radius del input.
+*/
+.aseg-input-action-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+/* Input con ícono interno — el input SÍ tiene su propio border y border-radius */
+.aseg-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.aseg-input-icon {
+    position: absolute;
+    left: 12px;
+    color: var(--aseg-text-light);
+    pointer-events: none;
+    transition: color .2s;
+    z-index: 1;
+}
+.aseg-input-field {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 13px 9px 36px !important; /* espacio para ícono izquierdo */
+    border: 1.5px solid var(--aseg-border) !important;
+    border-radius: var(--aseg-radius-sm) !important;
+    font-size: 13px;
+    color: var(--aseg-text);
+    background: #fff;
+    transition: border-color .2s, box-shadow .2s;
+    outline: none;
+}
+.aseg-input-field:focus {
+    border-color: var(--aseg-border-focus) !important;
+    box-shadow: 0 0 0 3px rgba(14,165,233,.13) !important;
+}
+.aseg-input-field:focus + .aseg-input-icon,
+.aseg-input-wrap:focus-within .aseg-input-icon { color: var(--aseg-accent); }
+
+/*
+   Columna del botón: flex-shrink:0 evita que el botón se comprima.
+   El label ficticio "aseg-btn-spacer" hace que el botón quede alineado
+   verticalmente con el input (mismo baseline que el label del input).
+*/
+.aseg-btn-col {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+}
+.aseg-btn-spacer {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: transparent; /* invisible pero ocupa el mismo espacio que el label real */
+    margin-bottom: 5px;
+    user-select: none;
+}
+
+/* Botón de búsqueda — standalone, no dentro de overflow:hidden */
+.btn-buscar {
+    flex-shrink: 0;
+    background: linear-gradient(135deg, var(--aseg-accent-dark), var(--aseg-accent));
+    color: #fff;
+    border: none;
+    border-radius: var(--aseg-radius-sm);
+    padding: 9px 18px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+    transition: opacity .18s, transform .15s, box-shadow .15s;
+    box-shadow: 0 2px 8px rgba(14,165,233,.3);
+    height: 37px; /* misma altura que el input (9+1.5+1.5+15*1 ≈ 37px) */
+}
+.btn-buscar:hover  { opacity: .9; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(14,165,233,.35); }
+.btn-buscar:active { opacity: .8; transform: translateY(0); }
+.btn-buscar:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* ── Badge de Rol ─────────────────────────────────────────────────────────── */
+.aseg-rol-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px;
+    border-radius: 99px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .3px;
+    margin-bottom: 20px;
+    border: 1.5px solid transparent;
+    transition: all .25s ease;
+}
+.aseg-rol-badge.rol-paciente      { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.aseg-rol-badge.rol-especialista  { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+.aseg-rol-badge.rol-administrador { background: #faf5ff; color: #7c3aed; border-color: #ddd6fe; }
+
+/* ── Campo read-only de rol ───────────────────────────────────────────────── */
+.aseg-readonly-field {
+    background: #f8fafc;
+    border: 1.5px solid #e2e8f0;
+    border-radius: var(--aseg-radius-sm);
+    padding: 9px 13px;
+    font-size: 13px;
+    color: var(--aseg-text-muted);
+    font-weight: 500;
+    cursor: default;
+    user-select: none;
+}
+
+/* ── Sección condicional ──────────────────────────────────────────────────── */
+.aseg-seccion-condicional {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1.5px dashed #bfdbfe;
+    animation: asegFadeUp .28s ease both;
+}
+
+/* ── Habeas Data wrapper ──────────────────────────────────────────────────── */
+.aseg-habeas-wrap {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1.5px solid #e0f2fe;
+}
+
+/* ── Acciones ─────────────────────────────────────────────────────────────── */
+.aseg-acciones {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+}
+.btn-accion {
+    flex: 1;
+    min-width: 160px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 20px;
+    border: none;
+    border-radius: var(--aseg-radius-sm);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: .2px;
+    transition: transform .15s, box-shadow .15s, opacity .15s;
+}
+.btn-accion:hover  { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,.14); }
+.btn-accion:active { transform: translateY(0); }
+.btn-primary {
+    background: linear-gradient(135deg, var(--aseg-accent-dark) 0%, var(--aseg-accent) 100%);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(14,165,233,.3);
+}
+.btn-secondary {
+    background: linear-gradient(135deg, #475569, #64748b);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(71,85,105,.25);
+}
+.btn-accion:disabled {
+    opacity: .55;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* ── Volver ───────────────────────────────────────────────────────────────── */
+.aseg-back-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;      /* centra el contenido interno (ícono + texto) */
+    gap: 5px;
+    width: 100%;                  /* ocupa todo el ancho del .aseg-container     */
+    margin-top: 16px;
+    font-size: 12.5px;
+    color: var(--aseg-text-muted);
+    text-decoration: none;
+    font-weight: 600;
+    transition: color .18s;
+    text-align: center;           /* fallback para contextos no-flex             */
+}
+.aseg-back-link:hover { color: var(--aseg-accent); }
+
+/* ── Mensajes de error de campo ──────────────────────────────────────────── */
+.error-msg {
+    color: var(--aseg-danger);
+    font-size: 11px;
+    font-weight: 600;
     margin-top: 4px;
     display: none;
 }
- 
-/* ── Estilos de los select nativos ────────────────────────────────────────── */
-select:invalid,
-select option[value=""] {
-    color: #9ca3af;
+.input-error {
+    border: 2px solid var(--aseg-danger) !important;
+    background-color: #fef2f2 !important;
 }
- 
-option {
-    color: #374151;
-}
- 
-/* ── Placeholder ────────────────────────────────────────────────────────────── */
-::placeholder {
-    color: #9ca3af;
-    opacity: 1;
-}
- 
-/* ── Select personalizado (nueva flecha oculta la nativa en Chrome/Safari) ── */
-select.appearance-none {
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-}
- 
-/* ── Estado deshabilitado de los botones durante fetch ─────────────────────── */
-button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    pointer-events: none;
-}
- 
-/* ── Mensaje global de éxito / error ──────────────────────────────────────── */
+
+/* ── Mensaje global ──────────────────────────────────────────────────────── */
 #mensaje-global {
-    animation: fadeIn 0.3s ease;
+    animation: asegFadeUp .3s ease;
     text-align: center;
     font-weight: 600;
     font-size: 13px;
-    margin-top: 16px;
+    margin-top: 12px;
     padding: 12px 16px;
-    border-radius: 10px;
+    border-radius: var(--aseg-radius-sm);
 }
- 
 #mensaje-global.exito {
-    color: #059669;
+    color: var(--aseg-success);
     background: linear-gradient(135deg, #d1fae5, #ecfdf5);
     border: 1px solid #a7f3d0;
 }
- 
 #mensaje-global.error {
     color: #dc2626;
     background: #fef2f2;
     border: 1px solid #fecaca;
 }
- 
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-6px); }
-    to   { opacity: 1; transform: translateY(0); }
+
+/* ── Inputs / Selects (heredados de creacion.css + sobrescritos aquí) ─────── */
+.form-group { margin-bottom: 14px; }
+.form-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--aseg-text-muted);
+    margin-bottom: 5px;
+    letter-spacing: .2px;
 }
- 
-/* ── Separador de sección EPS ────────────────────────────────────────────── */
-.eps-section-divider {
-    border-top: 1px dashed #bfdbfe;
-    margin: 0.5rem 0;
+.form-group input,
+.form-group select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 13px;
+    border: 1.5px solid var(--aseg-border);
+    border-radius: var(--aseg-radius-sm);
+    font-size: 13px;
+    color: var(--aseg-text);
+    background: #fff;
+    transition: border-color .2s, box-shadow .2s;
+    outline: none;
+    appearance: auto;
 }
- 
-/* ── Contenedor EPS personalizada (animación de entrada) ─────────────────── */
-#eps-otro-container {
-    animation: fadeIn 0.25s ease;
+.form-group input:focus,
+.form-group select:focus {
+    border-color: var(--aseg-border-focus);
+    box-shadow: 0 0 0 3px rgba(14,165,233,.13);
 }
- 
-#eps-otro-container input {
-    border-color: #bae6fd;
-    background: #f0f9ff;
+.form-group select:disabled {
+    background: #f1f5f9;
+    color: var(--aseg-text-light);
+    cursor: not-allowed;
 }
- 
+.form-row { display: flex; gap: 14px; }
+.form-row .form-group { flex: 1; }
+
+/* ── Placeholder ─────────────────────────────────────────────────────────── */
+::placeholder { color: #b0bec5; opacity: 1; }
+select option[value=""] { color: #9ca3af; }
+select:invalid { color: #9ca3af; }
+option { color: var(--aseg-text); }
+
+/* ── EPS personalizada ───────────────────────────────────────────────────── */
+#eps-otro-container { animation: asegFadeUp .25s ease; }
+#eps-otro-container input { border-color: #bae6fd; background: #f0f9ff; }
 #eps-otro-container input:focus {
     border-color: #0ea5e9;
-    background-color: #ffffff;
-    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(14,165,233,.12);
 }
- 
-/* ── Botones de acción del módulo de aseguramiento ──────────────────────────*/
-.btn-accion {
-    margin-top: 0;
-}
- 
-/* ── Recuadro de autorización (estilo "verificación humana") ────────────────
-   Casilla cuadrada que se rellena con el azul de acento del módulo (#0ea5e9)
-   y muestra un check animado al hacer clic, dentro de una caja con el mismo
-   lenguaje visual que el contenedor de EPS personalizada (fondo #f0f9ff,
-   borde #bae6fd). ──────────────────────────────────────────────────────── */
+
+/* ── Recaptcha / Habeas Data ─────────────────────────────────────────────── */
 .recaptcha-autorizar {
     display: flex;
     align-items: center;
     gap: 12px;
     background: #f0f9ff;
     border: 1.5px solid #bae6fd;
-    border-radius: 10px;
+    border-radius: var(--aseg-radius-sm);
     padding: 12px 14px;
     cursor: pointer;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+    transition: border-color .2s, box-shadow .2s;
     user-select: none;
-    animation: fadeIn 0.25s ease;
 }
- 
 .recaptcha-autorizar:hover {
     border-color: #0ea5e9;
-    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+    box-shadow: 0 0 0 3px rgba(14,165,233,.12);
 }
- 
 .recaptcha-box {
     flex-shrink: 0;
-    width: 28px;
-    height: 28px;
+    width: 26px; height: 26px;
     border-radius: 5px;
     border: 2px solid #9ca3af;
-    background: #ffffff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.25s ease, border-color 0.25s ease, transform 0.15s ease;
+    background: #fff;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .25s, border-color .25s, transform .15s;
 }
- 
-.recaptcha-autorizar:active .recaptcha-box {
-    transform: scale(0.92);
-}
- 
+.recaptcha-autorizar:active .recaptcha-box { transform: scale(.92); }
 .recaptcha-box.checked {
     background: #0ea5e9;
     border-color: #0ea5e9;
-    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.18);
+    box-shadow: 0 0 0 3px rgba(14,165,233,.18);
 }
- 
 .recaptcha-check {
     opacity: 0;
-    transform: scale(0.4);
-    transition: opacity 0.18s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform: scale(.4);
+    transition: opacity .18s, transform .25s cubic-bezier(.34,1.56,.64,1);
 }
- 
-.recaptcha-box.checked .recaptcha-check {
-    opacity: 1;
-    transform: scale(1);
-}
- 
+.recaptcha-box.checked .recaptcha-check { opacity: 1; transform: scale(1); }
 .recaptcha-texto {
     font-weight: 500;
     color: #374151;
     font-size: 11.5px;
     line-height: 1.5;
+}
+
+/* ── Animaciones ─────────────────────────────────────────────────────────── */
+@keyframes asegFadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Skeleton loader ─────────────────────────────────────────────────────── */
+.aseg-skeleton {
+    background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+    background-size: 200% 100%;
+    animation: asegSkeleton 1.2s ease infinite;
+    border-radius: 6px;
+    height: 36px;
+    margin-bottom: 10px;
+}
+@keyframes asegSkeleton {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 560px) {
+    body { padding: 16px 12px; justify-content: flex-start; }
+
+    .aseg-body  { padding: 16px; }
+    .aseg-card  { padding: 16px; }
+    .form-row   { flex-direction: column; gap: 0; }
+
+    /* En móvil el botón baja debajo del input */
+    .aseg-input-action-row { flex-direction: column; align-items: stretch; }
+    .aseg-btn-col { align-items: stretch; }
+    .aseg-btn-spacer { display: none; }
+    .btn-buscar { width: 100%; justify-content: center; }
+
+    .aseg-acciones { flex-direction: column; }
+    .btn-accion    { min-width: unset; width: 100%; }
 }

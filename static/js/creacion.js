@@ -1,13 +1,18 @@
+// ==================== INICIO ARCHIVO: static/js/creacion.js ====================
 "use strict";
 
 // ── ESTADO GLOBAL ──────────────────────────────────────────────────────────────
-let correoVerificacion = "";
-let esMenor           = false;
-const EPS_OTRO_VALUE  = '__OTRO__';
+let correoVerificacion  = "";
+let esMenor             = false;
+const EPS_OTRO_VALUE    = '__OTRO__';
 
-let todasLasEPS    = [];
-let epsFiltradas   = [];
-let todosTiposEps  = [];
+let todasLasEPS   = [];
+let todosTiposEps = [];
+
+// Bandera de envío único del PASO 1 — exclusiva de validarPaso1().
+// No se mezcla con la lógica de reenvío para evitar acoplamientos que rompan
+// el cooldown del botón de reenvío.
+let _codigoEnviado = false;
 
 const acudienteSection = document.getElementById("acudienteSection");
 
@@ -84,19 +89,24 @@ function todosRequisitosOk() {
 // ── REENVÍO CÓDIGO ─────────────────────────────────────────────────────────────
 let _reenvioTimer = null;
 
+// Único punto que controla texto/estado del botón de reenvío.
+// Jamás debe ser tocado desde otra función (ver verificarCodigo()).
 function iniciarTimerReenvio() {
-    const btn  = document.getElementById("btnReenviar");
-    const span = document.getElementById("timerReenvio");
-    if (!btn || !span) return;
+    const btn = document.getElementById("btnReenviar");
+    if (!btn) return;
+
     let seg = 10;
+    clearInterval(_reenvioTimer);
+
     btn.disabled = true;
     btn.style.cssText = "background:#e2e8f0;color:#94a3b8;box-shadow:none;width:auto;padding:9px 22px;font-size:13px;cursor:not-allowed;border-radius:10px;border:none;font-weight:700;";
     btn.innerHTML = `Reenviar código (<span id="timerReenvio">${seg}</span>s)`;
-    clearInterval(_reenvioTimer);
+
     _reenvioTimer = setInterval(() => {
         seg--;
-        const s = document.getElementById("timerReenvio");
-        if (s) s.textContent = seg;
+        const span = document.getElementById("timerReenvio");
+        if (span) span.textContent = seg;
+
         if (seg <= 0) {
             clearInterval(_reenvioTimer);
             btn.disabled = false;
@@ -106,10 +116,17 @@ function iniciarTimerReenvio() {
     }, 1000);
 }
 
+// Reenvío explícito por el usuario. Solicita un nuevo código al backend
+// (el backend se encarga de sobrescribir/destruir el código anterior) y,
+// solo si el envío fue exitoso, reinicia el cooldown de 10s.
 async function reenviarCodigo() {
     const btn = document.getElementById("btnReenviar");
+    if (!btn || btn.disabled) return;
+
+    document.getElementById("errorCodigo").innerText = "";
     btn.disabled = true;
     btn.innerHTML = "Enviando...";
+
     try {
         const r = await fetch("/api/enviar-codigo", {
             method: "POST",
@@ -120,14 +137,26 @@ async function reenviarCodigo() {
             })
         });
         const d = await r.json();
-        if (!d.ok) mostrarError("No se pudo reenviar: " + (d.error || ""));
+
+        if (!d.ok) {
+            mostrarError("No se pudo reenviar: " + (d.error || ""));
+            btn.disabled = false;
+            btn.innerHTML = "Reenviar código";
+            return;
+        }
     } catch {
         mostrarError("Error de conexión al reenviar.");
+        btn.disabled = false;
+        btn.innerHTML = "Reenviar código";
+        return;
     }
+
+    // Envío exitoso: inicia el cooldown de 10s (el botón queda disabled
+    // automáticamente dentro de iniciarTimerReenvio()).
     iniciarTimerReenvio();
 }
 
-// ── ANIMACIÓN ÉXITO ────────────────────────────────────────────────────────────
+// ── ANIMACIÓN ÉXITO (intacta) ──────────────────────────────────────────────────
 function mostrarAnimacionExito() {
     const overlay = document.getElementById("successOverlay");
     if (!overlay) { abrirLogin(); return; }
@@ -139,7 +168,7 @@ function mostrarAnimacionExito() {
     setTimeout(abrirLogin, 3200);
 }
 
-// ── CAMPO FECHA: LÓGICA DE PLACEHOLDER + FORMATO MANUAL ──────────────────────
+// ── CAMPO FECHA ────────────────────────────────────────────────────────────────
 function inicializarCampoFecha() {
     const inputTexto    = document.getElementById("fechaNacimiento");
     const inputNativo   = document.getElementById("fechaNacimientoNative");
@@ -181,10 +210,10 @@ function inicializarCampoFecha() {
     });
 
     btnCalendario.addEventListener("click", () => {
-        inputNativo.style.position    = 'absolute';
-        inputNativo.style.opacity     = '0';
-        inputNativo.style.width       = '1px';
-        inputNativo.style.height      = '1px';
+        inputNativo.style.position      = 'absolute';
+        inputNativo.style.opacity       = '0';
+        inputNativo.style.width         = '1px';
+        inputNativo.style.height        = '1px';
         inputNativo.style.pointerEvents = 'auto';
         inputNativo.showPicker ? inputNativo.showPicker() : inputNativo.click();
     });
@@ -235,7 +264,7 @@ document.addEventListener("DOMContentLoaded", () => {
     cargarTodasLasEPS();
 });
 
-// ── CATÁLOGO: REGÍMENES ────────────────────────────────────────────────────────
+// ── CATÁLOGO: REGÍMENES (solo informativo, no filtra EPS) ─────────────────────
 async function cargarRegimenesEnFormulario() {
     const select   = document.getElementById("regimen");
     const fallback = [
@@ -246,7 +275,7 @@ async function cargarRegimenesEnFormulario() {
     const poblar = (lista) => {
         select.innerHTML = '<option value="">Seleccione el régimen...</option>';
         lista.forEach(r => {
-            const opt = document.createElement('option');
+            const opt       = document.createElement('option');
             opt.value       = r.Regimen_ID || r.ID_Regimen_EPS;
             opt.textContent = r.Descripcion || r.Nombre_Regimen;
             select.appendChild(opt);
@@ -264,102 +293,76 @@ async function cargarRegimenesEnFormulario() {
     }
 }
 
-// ── CATÁLOGO: TIPOS DE AFILIACION EPS ─────────────────────────────────────────
+// ── CATÁLOGO: TIPOS DE AFILIACIÓN ─────────────────────────────────────────────
 async function cargarTiposEpsEnFormulario() {
+    const select   = document.getElementById("tipoEps");
     const fallback = [
         { TipoEPS_ID: 1, Nombre_Tipo: 'Cotizante' },
         { TipoEPS_ID: 2, Nombre_Tipo: 'Beneficiario' }
     ];
+
+    const poblar = (lista) => {
+        select.innerHTML = '<option value="">Seleccione el tipo de afiliación...</option>';
+        lista.forEach(t => {
+            const opt       = document.createElement('option');
+            opt.value       = t.TipoEPS_ID || t.ID_Tipo_EPS;
+            opt.textContent = t.Nombre_Tipo;
+            select.appendChild(opt);
+        });
+        todosTiposEps = lista;
+    };
+
     try {
         const res  = await fetch('/api/tipo-afiliacion-eps');
         const data = await res.json();
         if (!data.ok) throw new Error(data.error);
-        todosTiposEps = data.data;
+        poblar(data.data);
     } catch (err) {
         console.warn('Tipos afiliación EPS fallback:', err);
-        todosTiposEps = fallback;
+        poblar(fallback);
     }
 }
 
-// ── CATÁLOGO: TODAS LAS EPS ────────────────────────────────────────────────────
+// ── CATÁLOGO: TODAS LAS EPS (independiente de régimen) ────────────────────────
 async function cargarTodasLasEPS() {
+    const select   = document.getElementById('eps');
     const fallback = [
-        { ID_EPS: 1, Nombre_EPS: 'Compensar',   Regimen_ID: 1 },
-        { ID_EPS: 2, Nombre_EPS: 'Salud Total',  Regimen_ID: 1 },
-        { ID_EPS: 3, Nombre_EPS: 'NuevaEPS',     Regimen_ID: 1 },
-        { ID_EPS: 4, Nombre_EPS: 'Famisanar',    Regimen_ID: 1 },
-        { ID_EPS: 5, Nombre_EPS: 'Sanitas',      Regimen_ID: 1 },
-        { ID_EPS: 6, Nombre_EPS: 'CapitalSalud', Regimen_ID: 2 },
-        { ID_EPS: 7, Nombre_EPS: 'Sura',         Regimen_ID: 1 },
+        { ID_EPS: 1, Nombre_EPS: 'Compensar'   },
+        { ID_EPS: 2, Nombre_EPS: 'Salud Total'  },
+        { ID_EPS: 3, Nombre_EPS: 'NuevaEPS'     },
+        { ID_EPS: 4, Nombre_EPS: 'Famisanar'    },
+        { ID_EPS: 5, Nombre_EPS: 'Sanitas'      },
+        { ID_EPS: 6, Nombre_EPS: 'CapitalSalud' },
+        { ID_EPS: 7, Nombre_EPS: 'Sura'         },
     ];
+
+    const poblar = (lista) => {
+        select.innerHTML = '<option value="">Seleccione la EPS...</option>';
+        lista.forEach(eps => {
+            const opt       = document.createElement('option');
+            opt.value       = eps.ID_EPS || eps.EPS_ID;
+            opt.textContent = eps.Nombre_EPS;
+            select.appendChild(opt);
+        });
+        const optOtro       = document.createElement('option');
+        optOtro.value       = EPS_OTRO_VALUE;
+        optOtro.textContent = 'Otro';
+        select.appendChild(optOtro);
+        todasLasEPS = lista;
+    };
+
     try {
         const res  = await fetch('/api/eps');
         const data = await res.json();
         if (!data.ok) throw new Error(data.error);
-        todasLasEPS = data.data;
+        poblar(data.data);
     } catch (err) {
         console.warn('EPS fallback:', err);
-        todasLasEPS = fallback;
+        poblar(fallback);
     }
 }
 
-// ── CASCADING: RÉGIMEN → TIPO EPS → EPS ───────────────────────────────────────
-function onRegimenChange() {
-    const regimenId  = document.getElementById('regimen').value;
-    const selectTipo = document.getElementById('tipoEps');
-    const selectEps  = document.getElementById('eps');
-
-    document.getElementById('errorRegimen').innerText = '';
-    document.getElementById('regimen').classList.remove('invalid');
-
-    selectTipo.innerHTML = '<option value="">Seleccione el tipo de afiliación...</option>';
-    selectEps.innerHTML  = '<option value="">Seleccione primero el tipo de afiliación</option>';
-    selectTipo.disabled  = true;
-    selectEps.disabled   = true;
-    document.getElementById('eps-otro-container-creacion').style.display = 'none';
-
-    if (!regimenId) return;
-
-    todosTiposEps.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value       = t.TipoEPS_ID || t.ID_Tipo_EPS;
-        opt.textContent = t.Nombre_Tipo;
-        selectTipo.appendChild(opt);
-    });
-    selectTipo.disabled = false;
-
-    epsFiltradas = todasLasEPS.filter(e => String(e.Regimen_ID) === String(regimenId));
-}
-
-function onTipoEpsChange() {
-    const selectEps  = document.getElementById('eps');
-    const selectTipo = document.getElementById('tipoEps');
-
-    document.getElementById('errorTipoEps').innerText = '';
-    selectTipo.classList.remove('invalid');
-
-    selectEps.innerHTML = '<option value="">Seleccione la EPS...</option>';
-    selectEps.disabled  = true;
-    document.getElementById('eps-otro-container-creacion').style.display = 'none';
-
-    if (!selectTipo.value) return;
-
-    const lista = epsFiltradas.length > 0 ? epsFiltradas : todasLasEPS;
-    lista.forEach(eps => {
-        const opt = document.createElement('option');
-        opt.value       = eps.ID_EPS || eps.EPS_ID;
-        opt.textContent = eps.Nombre_EPS;
-        selectEps.appendChild(opt);
-    });
-
-    const optOtro = document.createElement('option');
-    optOtro.value       = EPS_OTRO_VALUE;
-    optOtro.textContent = 'Otro';
-    selectEps.appendChild(optOtro);
-
-    selectEps.disabled = false;
-}
-
+// ── SELECCIÓN EPS PERSONALIZADA ────────────────────────────────────────────────
 function manejarSeleccionEPSCreacion() {
     const epsSelect     = document.getElementById('eps');
     const otroContainer = document.getElementById('eps-otro-container-creacion');
@@ -387,7 +390,7 @@ async function cargarRolesEnFormulario() {
     const poblarRoles = (lista) => {
         selectRol.innerHTML = '<option value="">Seleccione un rol</option>';
         lista.forEach(rol => {
-            const opt = document.createElement("option");
+            const opt       = document.createElement("option");
             opt.value       = rol.Rol_ID || rol.Nombre_Rol;
             opt.textContent = rol.Nombre_Rol || rol.Descripcion;
             selectRol.appendChild(opt);
@@ -424,7 +427,6 @@ function verificarEdad() {
 
 function checkRequisitosAcudiente() {
     const tipoDoc = document.getElementById("tipoDocumento").value;
-    // 3 = Tarjeta de Identidad, 4 = Registro Civil
     if (tipoDoc === "3" || tipoDoc === "4" || esMenor) {
         acudienteSection.style.display = "block";
         document.getElementById("correoUsuarioGroup").style.display = "none";
@@ -445,12 +447,10 @@ function checkRolEspecialista() {
     document.getElementById("contenedor_datos_medicos").style.display = esPaciente     ? "block" : "none";
 
     if (!esPaciente) {
-        document.getElementById("regimen").value                              = "";
-        document.getElementById("tipoEps").innerHTML                         = '<option value="">Seleccione primero el régimen</option>';
-        document.getElementById("tipoEps").disabled                          = true;
-        document.getElementById("eps").innerHTML                             = '<option value="">Seleccione primero el tipo de afiliación</option>';
-        document.getElementById("eps").disabled                              = true;
-        document.getElementById("eps-otro-container-creacion").style.display = 'none';
+        document.getElementById("regimen").value                               = "";
+        document.getElementById("tipoEps").value                               = "";
+        document.getElementById("eps").value                                   = "";
+        document.getElementById("eps-otro-container-creacion").style.display  = 'none';
     }
 }
 
@@ -482,9 +482,10 @@ function actualizarIndicador(pasoActual) {
 
 // ── PASO 1: VALIDACIÓN ─────────────────────────────────────────────────────────
 function validarPaso1() {
-    // ◄ NUEVO: Verifica si ya está enviando para abortar clics duplicados
-    const btnContinuar = document.querySelector("#step1 button");
+    // Bloqueo de envío único del PASO 1 (independiente del reenvío del PASO 2)
+    const btnContinuar = document.getElementById("btnContinuar");
     if (btnContinuar && btnContinuar.disabled) return;
+    if (_codigoEnviado) return;
 
     limpiarErrores();
     let valido = true;
@@ -529,18 +530,6 @@ function validarPaso1() {
     const esPaciente = (rolVal === "3" || rolVal === "Paciente");
 
     if (esPaciente) {
-        const regimenEl = document.getElementById("regimen");
-        if (!regimenEl.value) {
-            regimenEl.classList.add("invalid");
-            document.getElementById("errorRegimen").innerText = "Seleccione un régimen.";
-            valido = false;
-        }
-        const tipoEpsEl = document.getElementById("tipoEps");
-        if (!tipoEpsEl.value) {
-            tipoEpsEl.classList.add("invalid");
-            document.getElementById("errorTipoEps").innerText = "Seleccione el tipo de afiliación.";
-            valido = false;
-        }
         const epsVal = document.getElementById("eps").value;
         if (!epsVal) {
             document.getElementById("eps").classList.add("invalid");
@@ -559,6 +548,20 @@ function validarPaso1() {
                 document.getElementById('err-eps-otro-telefono-creacion').innerText = 'Ingrese el teléfono de la nueva EPS.';
                 valido = false;
             }
+        }
+
+        const regimenEl = document.getElementById("regimen");
+        if (!regimenEl.value) {
+            regimenEl.classList.add("invalid");
+            document.getElementById("errorRegimen").innerText = "Seleccione un régimen.";
+            valido = false;
+        }
+
+        const tipoEpsEl = document.getElementById("tipoEps");
+        if (!tipoEpsEl.value) {
+            tipoEpsEl.classList.add("invalid");
+            document.getElementById("errorTipoEps").innerText = "Seleccione el tipo de afiliación.";
+            valido = false;
         }
     }
 
@@ -601,12 +604,11 @@ function validarPaso1() {
 
     if (!valido) return;
 
-    correoVerificacion          = correoUsado.trim().toLowerCase();
-    const nombreMostrar         = document.getElementById("nombres").value;
-    
-    // Se removió la declaración duplicada de 'btnContinuar' que ahora está arriba
-    btnContinuar.disabled       = true;
-    btnContinuar.innerHTML      = "Enviando código...";
+    correoVerificacion = correoUsado.trim().toLowerCase();
+    const nombreMostrar = document.getElementById("nombres").value;
+
+    btnContinuar.disabled  = true;
+    btnContinuar.innerHTML = "Enviando código...";
 
     fetch("/api/enviar-codigo", {
         method:  "POST",
@@ -615,9 +617,9 @@ function validarPaso1() {
     })
     .then(r => r.json())
     .then(data => {
-        btnContinuar.disabled  = false;
-        btnContinuar.innerHTML = 'Continuar <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
         if (data.ok) {
+            _codigoEnviado = true;
+
             document.getElementById("emailDestino").innerText       = correoVerificacion;
             document.getElementById("nombreDestinatario").innerText = nombreMostrar;
             document.getElementById("step1").classList.remove("active");
@@ -625,6 +627,8 @@ function validarPaso1() {
             actualizarIndicador(2);
             iniciarTimerReenvio();
         } else {
+            btnContinuar.disabled  = false;
+            btnContinuar.innerHTML = 'Continuar <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
             mostrarError("Error al enviar el código: " + (data.error || "Intenta de nuevo."));
         }
     })
@@ -636,6 +640,12 @@ function validarPaso1() {
 }
 
 // ── PASO 2: VERIFICAR CÓDIGO ───────────────────────────────────────────────────
+// FIX CRÍTICO: antes se usaba document.querySelector("#step2 button"), que
+// devolvía el PRIMER <button> del contenedor (btnReenviar) en lugar del botón
+// real de verificación. Esto provocaba que, al verificar, se sobrescribiera el
+// texto y el estado disabled del botón de REENVÍO (mostrando "Verificando..."
+// y luego "Verificar código" sobre btnReenviar, rompiendo además el cooldown
+// de 10s). Ahora se referencia explícitamente el botón por su id único.
 function verificarCodigo() {
     const ingresado   = document.getElementById("codigo").value.trim();
     const errorCodigo = document.getElementById("errorCodigo");
@@ -645,7 +655,7 @@ function verificarCodigo() {
         return;
     }
 
-    const btnVerificar     = document.querySelector("#step2 button");
+    const btnVerificar = document.getElementById("btnVerificarCodigo");
     btnVerificar.disabled  = true;
     btnVerificar.innerHTML = "Verificando...";
 
@@ -657,19 +667,20 @@ function verificarCodigo() {
     .then(r => r.json())
     .then(data => {
         btnVerificar.disabled  = false;
-        btnVerificar.innerHTML = "Verificar código ✓";
+        btnVerificar.innerHTML = 'Verificar código <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
         if (data.ok) {
+            clearInterval(_reenvioTimer);
             document.getElementById("step2").classList.remove("active");
             document.getElementById("step3").classList.add("active");
             actualizarIndicador(3);
         } else {
-            errorCodigo.innerText = "Código incorrecto. Inténtalo de nuevo.";
+            errorCodigo.innerText = data.error || "Código incorrecto. Inténtalo de nuevo.";
             document.getElementById("codigo").classList.add("invalid");
         }
     })
     .catch(() => {
         btnVerificar.disabled  = false;
-        btnVerificar.innerHTML = "Verificar código ✓";
+        btnVerificar.innerHTML = 'Verificar código <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
         document.getElementById("errorCodigo").innerText = "Error de conexión. Intenta de nuevo.";
     });
 }
@@ -677,13 +688,13 @@ function verificarCodigo() {
 // ── REGISTRO DE PACIENTE ───────────────────────────────────────────────────────
 async function registrarPacienteEnBackend(usuarioId) {
     const payload = {
-        ID_Usuario:      usuarioId,
+        ID_Usuario:       usuarioId,
         Fecha_Nacimiento: leerFechaISO() || null,
-        Genero:          null,
-        Grupo_Sanguineo: document.getElementById("grupoSanguineo")?.value       || null,
-        Alergias:        document.getElementById("alergias")?.value.trim()      || null,
-        Antecedentes:    document.getElementById("antecedentes")?.value.trim()  || null,
-        Observaciones:   document.getElementById("observaciones")?.value.trim() || null,
+        Genero:           null,
+        Grupo_Sanguineo:  document.getElementById("grupoSanguineo")?.value       || null,
+        Alergias:         document.getElementById("alergias")?.value.trim()      || null,
+        Antecedentes:     document.getElementById("antecedentes")?.value.trim()  || null,
+        Observaciones:    document.getElementById("observaciones")?.value.trim() || null,
     };
     try {
         const res  = await fetch('/api/paciente', {
@@ -744,9 +755,7 @@ async function crearUsuario() {
 
     const password        = document.getElementById("password");
     const confirmPassword = document.getElementById("confirmPassword");
-    const mensajeFinal    = document.getElementById("mensajeFinal");
 
-    // Validar requisitos visuales y mostrar en rojo si fallan
     actualizarRequisitos('submit');
     if (!todosRequisitosOk()) {
         password.classList.add("invalid");
@@ -779,7 +788,6 @@ async function crearUsuario() {
     const generoSelect = document.getElementById("genero");
     const generoId     = generoSelect ? parseInt(generoSelect.value, 10) || 1 : 1;
 
-    // Mapeo: value del select (1-8) → TipoDoc_ID en BD
     const tipoDocTexto = document.getElementById("tipoDocumento").value;
     const tipoDocId    = parseInt(tipoDocTexto, 10) || 1;
 
@@ -821,7 +829,7 @@ async function crearUsuario() {
         estado_id:           1,
         rol_id:              rolIdNumerico,
         eps_id:              epsId,
-        tipo_eps_id:         tipoEpsId,        // ← key que lee el backend
+        tipo_eps_id:         tipoEpsId,
         regimen_id:          regimenId,
         tarjeta_profesional: tarjetaProfesional || null,
         especialidad_id:     especialidadId
@@ -850,23 +858,17 @@ async function crearUsuario() {
         const esPaciente = (rolIdNumerico === 3 || rolTexto === "Paciente");
 
         if (esPaciente && usuarioId) {
-            mostrarProgreso("Registrando datos del paciente...");
+            mostrarProgreso("Guardando datos clínicos del paciente...");
             const resPaciente = await registrarPacienteEnBackend(usuarioId);
             if (!resPaciente.ok) {
-                mostrarError("Usuario creado, pero no se pudieron guardar los datos clínicos: " + resPaciente.error);
-            }
-            if (epsId && tipoEpsId) {
-                mostrarProgreso("Registrando afiliación a EPS...");
-                const resAfiliacion = await registrarAfiliacionEnBackend(usuarioId, epsId, tipoEpsId);
-                if (!resAfiliacion.ok) {
-                    mostrarError("Usuario creado, pero no se pudo registrar la afiliación: " + resAfiliacion.error);
-                }
+                console.warn("Datos clínicos opcionales no guardados:", resPaciente.error);
             }
         }
 
         document.getElementById("groupPassword").style.display = "none";
         document.getElementById("groupConfirm").style.display  = "none";
         if (btnFinalizar) btnFinalizar.style.display = "none";
+
         mostrarAnimacionExito();
 
     } catch (errorRed) {
@@ -887,3 +889,4 @@ function togglePassword(id) {
     const input = document.getElementById(id);
     if (input) input.type = input.type === "password" ? "text" : "password";
 }
+// ==================== FIN ARCHIVO: static/js/creacion.js ====================
