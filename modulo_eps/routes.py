@@ -5,14 +5,15 @@
 #   from modulo_eps.routes import eps_bp
 #   app.register_blueprint(eps_bp, url_prefix='/api')
 #
-# Esto expone:
-#   GET  /api/afiliacion                           ← cargarAfiliacionEPS() en paciente.js
-#   GET  /api/afiliacion                           ← cargarPerfilClinicoPaciente() en especialista.js
-#   GET  /api/paciente                             ← cargarPacientesEPS() en administrador.js
-#   GET  /api/pregunta                             ← _abrirRanking() en paciente.js
-#   GET  /api/reporte/afiliados-por-eps            ← cargarReporteAfiliados() en administrador.js
-#   GET  /api/reporte/respuestas-paciente/<id>     ← cargarRespuestasFormulario() en especialista.js
-#   GET  /api/reporte/ranking-especialistas        ← ranking dashboard
+# CAMBIOS REQ 7:
+#   - GET  /api/pregunta?activas=true  → filtra solo preguntas con Activa=1
+#   - PUT  /api/pregunta/<id>          → persiste campo Activa (activa/inactiva)
+#   - POST /api/pregunta/<id>/toggle   → invierte estado Activa directamente
+#
+# CAMBIOS REQ 1/2:
+#   - GET  /api/reporte/ranking-especialistas  → consulta real a BD con promedio
+#     y total de evaluaciones (privacidad: no expone identidad de pacientes)
+#   - GET  /api/estadisticas-ranking           → métricas globales del sistema
 # =============================================================================
 
 from flask import Blueprint, jsonify, request
@@ -39,13 +40,14 @@ from .tipo_afiliacion_eps import (
 )
 from .tabla_pregunta import (
     crear_pregunta, obtener_preguntas, obtener_pregunta_por_id,
-    actualizar_pregunta, eliminar_pregunta,
+    actualizar_pregunta, eliminar_pregunta, togglear_activa,
 )
 from .tabla_respuesta import (
     crear_respuesta, obtener_respuestas, obtener_respuesta_por_id,
     obtener_respuestas_por_paciente, obtener_ranking_especialistas,
     actualizar_respuesta, eliminar_respuesta,
 )
+from db import get_db_connection
 
 eps_bp = Blueprint("eps", __name__)
 
@@ -203,19 +205,13 @@ def nueva_eps():
     body = request.get_json()
     if not body:
         return jsonify({"ok": False, "error": "Cuerpo JSON requerido"}), 400
-
     nombre_eps  = body.get('Nombre_EPS')
     tipo_eps_id = body.get('ID_Tipo_EPS')
     nit         = body.get('NIT')
     telefono    = body.get('Telefono')
     direccion   = body.get('Direccion')
-
     if not nombre_eps or not tipo_eps_id:
-        return jsonify({
-            "ok": False,
-            "error": "Los campos Nombre_EPS e ID_Tipo_EPS son requeridos"
-        }), 400
-
+        return jsonify({"ok": False, "error": "Los campos Nombre_EPS e ID_Tipo_EPS son requeridos"}), 400
     try:
         nuevo_id = crear_eps(nombre_eps, tipo_eps_id, nit, telefono, direccion)
         return jsonify({"ok": True, "data": {"ID_EPS": nuevo_id}}), 201
@@ -239,19 +235,13 @@ def editar_eps(eps_id):
     body = request.get_json()
     if not body:
         return jsonify({"ok": False, "error": "Cuerpo JSON requerido"}), 400
-
     nombre_eps  = body.get('Nombre_EPS')
     tipo_eps_id = body.get('ID_Tipo_EPS')
     nit         = body.get('NIT')
     telefono    = body.get('Telefono')
     direccion   = body.get('Direccion')
-
     if not nombre_eps or not tipo_eps_id:
-        return jsonify({
-            "ok": False,
-            "error": "Los campos Nombre_EPS e ID_Tipo_EPS son requeridos"
-        }), 400
-
+        return jsonify({"ok": False, "error": "Los campos Nombre_EPS e ID_Tipo_EPS son requeridos"}), 400
     try:
         modificado = actualizar_eps(eps_id, nombre_eps, tipo_eps_id, nit, telefono, direccion)
         if not modificado:
@@ -290,25 +280,16 @@ def nueva_afiliacion():
     body = request.get_json()
     if not body:
         return jsonify({"ok": False, "error": "Cuerpo JSON requerido"}), 400
-
     usuario_id       = body.get('ID_Usuario')
     eps_id           = body.get('ID_EPS')
     tipo_eps_id      = body.get('ID_Tipo_EPS')
     fecha_afiliacion = body.get('Fecha_Afiliacion')
     numero_afiliado  = body.get('Numero_Afiliado')
     estado           = body.get('Estado')
-
     if not all([usuario_id, eps_id, tipo_eps_id, fecha_afiliacion]):
-        return jsonify({
-            "ok": False,
-            "error": "Los campos ID_Usuario, ID_EPS, ID_Tipo_EPS y Fecha_Afiliacion son requeridos"
-        }), 400
-
+        return jsonify({"ok": False, "error": "ID_Usuario, ID_EPS, ID_Tipo_EPS y Fecha_Afiliacion son requeridos"}), 400
     try:
-        nuevo_id = crear_afiliacion(
-            usuario_id, eps_id, tipo_eps_id,
-            fecha_afiliacion, numero_afiliado, estado
-        )
+        nuevo_id = crear_afiliacion(usuario_id, eps_id, tipo_eps_id, fecha_afiliacion, numero_afiliado, estado)
         return jsonify({"ok": True, "data": {"ID_Afiliacion": nuevo_id}}), 201
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -330,24 +311,15 @@ def editar_afiliacion(afiliacion_id):
     body = request.get_json()
     if not body:
         return jsonify({"ok": False, "error": "Cuerpo JSON requerido"}), 400
-
     eps_id           = body.get('ID_EPS')
     tipo_eps_id      = body.get('ID_Tipo_EPS')
     fecha_afiliacion = body.get('Fecha_Afiliacion')
     numero_afiliado  = body.get('Numero_Afiliado')
     estado           = body.get('Estado')
-
     if not all([eps_id, tipo_eps_id, fecha_afiliacion]):
-        return jsonify({
-            "ok": False,
-            "error": "Los campos ID_EPS, ID_Tipo_EPS y Fecha_Afiliacion son requeridos"
-        }), 400
-
+        return jsonify({"ok": False, "error": "ID_EPS, ID_Tipo_EPS y Fecha_Afiliacion son requeridos"}), 400
     try:
-        modificado = actualizar_afiliacion(
-            afiliacion_id, eps_id, tipo_eps_id,
-            fecha_afiliacion, numero_afiliado, estado
-        )
+        modificado = actualizar_afiliacion(afiliacion_id, eps_id, tipo_eps_id, fecha_afiliacion, numero_afiliado, estado)
         if not modificado:
             return jsonify({"ok": False, "error": "Afiliación no encontrada"}), 404
         return jsonify({"ok": True, "mensaje": "Afiliación actualizada correctamente"}), 200
@@ -384,7 +356,6 @@ def nuevo_paciente():
     body = request.get_json()
     if not body:
         return jsonify({"ok": False, "error": "Cuerpo JSON requerido"}), 400
-
     usuario_id       = body.get('ID_Usuario')
     fecha_nacimiento = body.get('Fecha_Nacimiento')
     genero           = body.get('Genero')
@@ -392,15 +363,10 @@ def nuevo_paciente():
     alergias         = body.get('Alergias')
     antecedentes     = body.get('Antecedentes')
     observaciones    = body.get('Observaciones')
-
     if not usuario_id:
         return jsonify({"ok": False, "error": "El campo ID_Usuario es requerido"}), 400
-
     try:
-        nuevo_id = registrar_paciente(
-            usuario_id, fecha_nacimiento, genero,
-            grupo_sanguineo, alergias, antecedentes, observaciones
-        )
+        nuevo_id = registrar_paciente(usuario_id, fecha_nacimiento, genero, grupo_sanguineo, alergias, antecedentes, observaciones)
         return jsonify({"ok": True, "data": {"ID_Paciente": nuevo_id}}), 201
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -422,18 +388,11 @@ def editar_paciente(paciente_id):
     body = request.get_json()
     if not body:
         return jsonify({"ok": False, "error": "Cuerpo JSON requerido"}), 400
-
-    fecha_nacimiento = body.get('Fecha_Nacimiento')
-    genero           = body.get('Genero')
-    grupo_sanguineo  = body.get('Grupo_Sanguineo')
-    alergias         = body.get('Alergias')
-    antecedentes     = body.get('Antecedentes')
-    observaciones    = body.get('Observaciones')
-
     try:
         modificado = actualizar_paciente(
-            paciente_id, fecha_nacimiento, genero,
-            grupo_sanguineo, alergias, antecedentes, observaciones
+            paciente_id, body.get('Fecha_Nacimiento'), body.get('Genero'),
+            body.get('Grupo_Sanguineo'), body.get('Alergias'),
+            body.get('Antecedentes'), body.get('Observaciones')
         )
         if not modificado:
             return jsonify({"ok": False, "error": "Paciente no encontrado"}), 404
@@ -454,11 +413,15 @@ def borrar_paciente(paciente_id):
 
 
 # =============================================================================
-# TABLA PREGUNTA
+# REQ 7 — TABLA PREGUNTA (CRUD completo + toggle de estado Activa)
 # =============================================================================
 
 @eps_bp.route('/pregunta', methods=['GET'])
 def listar_preguntas():
+    """
+    REQ 7: Si activas=true devuelve solo las preguntas Activa=1,
+    garantizando que la encuesta del paciente refleje cambios CRUD en tiempo real.
+    """
     solo_activas = request.args.get('activas', 'false').lower() == 'true'
     try:
         datos = obtener_preguntas(solo_activas=solo_activas)
@@ -472,14 +435,11 @@ def nueva_pregunta():
     body = request.get_json()
     if not body:
         return jsonify({"ok": False, "error": "Cuerpo JSON requerido"}), 400
-
     texto_pregunta = body.get('Texto_Pregunta')
     orden          = body.get('Orden')
     activa         = body.get('Activa', 1)
-
     if not texto_pregunta:
         return jsonify({"ok": False, "error": "El campo Texto_Pregunta es requerido"}), 400
-
     try:
         nuevo_id = crear_pregunta(texto_pregunta, orden, activa)
         return jsonify({"ok": True, "data": {"ID_Pregunta": nuevo_id}}), 201
@@ -500,22 +460,40 @@ def ver_pregunta(pregunta_id):
 
 @eps_bp.route('/pregunta/<int:pregunta_id>', methods=['PUT'])
 def editar_pregunta(pregunta_id):
+    """REQ 7: Persiste Activa junto con Texto_Pregunta."""
     body = request.get_json()
     if not body:
         return jsonify({"ok": False, "error": "Cuerpo JSON requerido"}), 400
-
     texto_pregunta = body.get('Texto_Pregunta')
     orden          = body.get('Orden')
     activa         = body.get('Activa', 1)
-
     if not texto_pregunta:
         return jsonify({"ok": False, "error": "El campo Texto_Pregunta es requerido"}), 400
-
     try:
         modificado = actualizar_pregunta(pregunta_id, texto_pregunta, orden, activa)
         if not modificado:
             return jsonify({"ok": False, "error": "Pregunta no encontrada"}), 404
         return jsonify({"ok": True, "mensaje": "Pregunta actualizada correctamente"}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@eps_bp.route('/pregunta/<int:pregunta_id>/toggle', methods=['POST'])
+def toggle_pregunta(pregunta_id):
+    """
+    REQ 7: Invierte el estado Activa de la pregunta (activar/desactivar).
+    Cambio instantáneo en BD; la próxima consulta del paciente reflejará
+    el nuevo estado sin recarga adicional.
+    """
+    try:
+        nuevo_estado = togglear_activa(pregunta_id)
+        if nuevo_estado is None:
+            return jsonify({"ok": False, "error": "Pregunta no encontrada"}), 404
+        return jsonify({
+            "ok":     True,
+            "Activa": nuevo_estado,
+            "mensaje": "Pregunta " + ("activada" if nuevo_estado == 1 else "desactivada")
+        }), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -560,11 +538,9 @@ def editar_respuesta(respuesta_id):
     body = request.get_json()
     if not body:
         return jsonify({"ok": False, "error": "Cuerpo JSON requerido"}), 400
-
     texto_respuesta = body.get('Texto_Respuesta')
     if not texto_respuesta:
         return jsonify({"ok": False, "error": "El campo Texto_Respuesta es requerido"}), 400
-
     try:
         modificado = actualizar_respuesta(respuesta_id, texto_respuesta)
         if not modificado:
@@ -586,6 +562,68 @@ def borrar_respuesta(respuesta_id):
 
 
 # =============================================================================
+# REQ 1 — REPORTE: RANKING DE ESPECIALISTAS
+# Privacidad: expone promedio y total de evaluaciones por especialista.
+# NO expone identidad de pacientes ni sus respuestas individuales.
+# =============================================================================
+
+@eps_bp.route('/reporte/ranking-especialistas', methods=['GET'])
+def reporte_ranking_especialistas():
+    """
+    REQ 1: Calcula promedio de puntuación de cada especialista a partir
+    de respuesta_ranking. Ordena de mayor a menor promedio.
+    Columna 'Total_Evaluaciones' cuenta respuestas totales (anónimas).
+    """
+    try:
+        datos = obtener_ranking_especialistas()
+        return jsonify({"ok": True, "data": datos}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# =============================================================================
+# REQ 2 — ESTADÍSTICAS GENERALES DEL SISTEMA
+# Conecta las tarjetas/contadores del panel de administración.
+# =============================================================================
+
+@eps_bp.route('/estadisticas-ranking', methods=['GET'])
+def estadisticas_ranking():
+    """
+    REQ 2: Devuelve métricas globales:
+      - total_especialistas_evaluados : cantidad de especialistas con ≥1 evaluación
+      - total_evaluaciones            : total de respuestas individuales en el sistema
+      - promedio_general              : promedio combinado de todos los especialistas
+    """
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+
+        cur.execute("""
+            SELECT
+                COUNT(DISTINCT ag.Especialista_ID)          AS total_especialistas_evaluados,
+                COUNT(rr.Respuesta_ID)                      AS total_evaluaciones,
+                ROUND(AVG(CAST(rr.Respuesta AS REAL)), 2)   AS promedio_general
+            FROM respuesta_ranking rr
+            INNER JOIN cita   c  ON rr.Cita_ID   = c.Cita_ID
+            INNER JOIN agenda ag ON c.Agenda_ID  = ag.Agenda_ID
+        """)
+        row = cur.fetchone()
+        return jsonify({
+            "ok": True,
+            "data": {
+                "total_especialistas_evaluados": int(row['total_especialistas_evaluados'] or 0),
+                "total_evaluaciones":            int(row['total_evaluaciones'] or 0),
+                "promedio_general":              float(row['promedio_general'] or 0.0),
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if con: con.close()
+
+
+# =============================================================================
 # REPORTES ESPECIALES
 # =============================================================================
 
@@ -603,19 +641,7 @@ def reporte_respuestas_paciente(paciente_id):
     try:
         datos = obtener_respuestas_por_paciente(paciente_id)
         if not datos:
-            return jsonify({
-                "ok": False,
-                "error": "No se encontraron respuestas para el paciente indicado"
-            }), 404
-        return jsonify({"ok": True, "data": datos}), 200
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-@eps_bp.route('/reporte/ranking-especialistas', methods=['GET'])
-def reporte_ranking_especialistas():
-    try:
-        datos = obtener_ranking_especialistas()
+            return jsonify({"ok": False, "error": "No se encontraron respuestas para el paciente indicado"}), 404
         return jsonify({"ok": True, "data": datos}), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
