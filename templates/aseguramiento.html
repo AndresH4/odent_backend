@@ -43,12 +43,6 @@
                 Buscar Usuario
             </div>
 
-            <!--
-                CORRECCIÓN BUG UI: antes el select y el input+botón estaban dentro de un
-                flex-row sin ancho controlado, haciendo que el botón se superpusiera al input.
-                Nuevo layout: dos filas — (1) selector de tipo, (2) input + botón separados
-                visualmente con gap, sin overflow:hidden sobre el contenedor padre.
-            -->
             <div class="aseg-search-layout">
 
                 <!-- Fila 1: selector de tipo de búsqueda -->
@@ -70,12 +64,15 @@
                     </div>
                 </div>
 
-                <!-- Fila 2: campo de valor + botón (sólo visible tras seleccionar tipo) -->
+                <!-- Fila 2: campo de valor + botón
+                     FIX #2: align-items:center en el row y margin-top en btn-col
+                     para que el botón quede alineado con el input sin depender
+                     del spacer fantasma (que se desplazaba al aparecer error-msg).
+                -->
                 <div class="aseg-input-action-row" id="filtro-input-group" style="display:none;">
                     <div class="form-group" style="flex:1; margin-bottom:0;">
                         <label id="filtro-input-label">Valor</label>
                         <div class="aseg-input-wrap">
-                            <!-- Icono dinámico dentro del input -->
                             <svg class="aseg-input-icon" id="filtro-input-icon"
                                  xmlns="http://www.w3.org/2000/svg" width="15" height="15"
                                  viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -96,9 +93,9 @@
                         <div class="error-msg" id="err-busqueda"></div>
                     </div>
 
-                    <!-- Botón separado — ya NO dentro del mismo wrapper del input -->
+                    <!-- Botón separado: ya no usa aseg-btn-spacer.
+                         La alineación se logra con margin-top en .aseg-btn-col (ver CSS). -->
                     <div class="aseg-btn-col">
-                        <label class="aseg-btn-spacer">&nbsp;</label>
                         <button class="btn-buscar" id="btn-buscar" onclick="buscarUsuario()">
                             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15"
                                  viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -167,7 +164,8 @@
                 </div>
                 <div class="form-group">
                     <label for="num-doc">Número de documento</label>
-                    <input type="text" id="num-doc" maxlength="15" placeholder="Número de documento">
+                    <!-- FIX #3: maxlength reducido de 15 → 10 -->
+                    <input type="text" id="num-doc" maxlength="10" placeholder="Número de documento">
                     <div class="error-msg" id="err-num-doc"></div>
                 </div>
             </div>
@@ -175,7 +173,8 @@
             <div class="form-row">
                 <div class="form-group">
                     <label for="telefono">Teléfono</label>
-                    <input type="text" id="telefono" maxlength="15" placeholder="Número de teléfono">
+                    <!-- FIX #3: maxlength reducido de 15 → 10 -->
+                    <input type="text" id="telefono" maxlength="10" placeholder="Número de teléfono">
                     <div class="error-msg" id="err-telefono"></div>
                 </div>
                 <div class="form-group">
@@ -326,14 +325,23 @@
 
     </div><!-- /aseg-body -->
 
-    <a href="administrador.html" class="aseg-back-link">
-        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
-             fill="none" stroke="currentColor" stroke-width="2.5"
-             stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="15 18 9 12 15 6"/>
-        </svg>
-        Volver al panel
-    </a>
+    <!--
+        FIX #1: El <a> está dentro de un wrapper dedicado (.aseg-back-wrapper)
+        que tiene su propio padding, borde superior y fondo.
+        El wrapper NO tiene onclick ni href, por lo que hacer clic en la zona
+        vacía alrededor del enlace no genera ninguna navegación.
+        Solo el <a> en sí mismo es la zona interactiva.
+    -->
+    <div class="aseg-back-wrapper">
+        <a href="administrador.html" class="aseg-back-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2.5"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            Volver al panel
+        </a>
+    </div>
 
 </div>
 

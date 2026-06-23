@@ -1,10 +1,7 @@
 /* =============================================================================
    aseguramiento.css  —  Stylo Dental · Módulo Aseguramiento
-   Refactorizado: corrige bug de superposición del botón sobre el input,
-   y refuerza el sistema visual con un buscador moderno de dos filas.
    ============================================================================= */
 
-/* ── Variables de módulo ───────────────────────────────────────────────────── */
 :root {
     --aseg-accent:        #0ea5e9;
     --aseg-accent-dark:   #0369a1;
@@ -24,30 +21,24 @@
     --aseg-shadow-card:   0 4px 24px 0 rgba(14,165,233,.10), 0 1px 4px rgba(0,0,0,.07);
 }
 
-/* ── Centrado global: body actúa como columna flexbox ──────────────────────── */
-html, body {
-    min-height: 100%;
-}
+html, body { min-height: 100%; }
 body {
     display: flex;
     flex-direction: column;
-    align-items: center;          /* centra horizontalmente el .aseg-container  */
-    justify-content: center;      /* centra verticalmente cuando el contenido    */
-    min-height: 100vh;            /* cabe en el viewport                         */
-    padding: 32px 16px;           /* margen armónico arriba/abajo en pantallas   */
-    box-sizing: border-box;       /* grandes; en pantallas pequeñas el padding   */
-    background: #f1f5f9;          /* hace de margen superior e inferior          */
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 32px 16px;
+    box-sizing: border-box;
+    background: #f1f5f9;
 }
 
-/* ── Contenedor principal ──────────────────────────────────────────────────── */
 .aseg-container {
     width: 100%;
-    max-width: 700px;
-    /* margin: auto ya no es necesario — el body flex centra el bloque */
+    max-width: 780px;
     font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
 }
 
-/* ── Header ────────────────────────────────────────────────────────────────── */
 .aseg-header {
     display: flex;
     align-items: center;
@@ -68,7 +59,6 @@ body {
 .aseg-header h2 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -.3px; }
 .aseg-header p  { margin: 3px 0 0; font-size: 12.5px; color: #bae6fd; font-weight: 400; }
 
-/* ── Body ──────────────────────────────────────────────────────────────────── */
 .aseg-body {
     background: #f8fafc;
     border: 1px solid var(--aseg-border);
@@ -80,7 +70,6 @@ body {
     gap: 20px;
 }
 
-/* ── Card interna ──────────────────────────────────────────────────────────── */
 .aseg-card {
     background: var(--aseg-surface);
     border: 1px solid var(--aseg-border);
@@ -91,7 +80,6 @@ body {
 }
 .aseg-form-card { animation: asegFadeUp .38s .06s ease both; }
 
-/* ── Label de sección ─────────────────────────────────────────────────────── */
 .aseg-card-label {
     display: flex;
     align-items: center;
@@ -106,23 +94,23 @@ body {
     border-bottom: 1.5px solid var(--aseg-accent-light);
 }
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   BUSCADOR — Layout refactorizado
-   Antes: flex-row con overflow:hidden en el contenedor del input+botón
-          → botón se superponía visualmente al input en pantallas pequeñas.
-   Ahora: dos filas independientes.
-     Fila 1: selector de tipo (ancho completo)
-     Fila 2: input con ícono interno + botón alineado a la derecha con gap
-   El botón nunca está dentro del mismo contenedor overflow que el input.
-   ══════════════════════════════════════════════════════════════════════════ */
-
+/* ── Buscador ─────────────────────────────────────────────────────────────── */
 .aseg-search-layout {
     display: flex;
     flex-direction: column;
     gap: 14px;
 }
 
-/* Selector de tipo: ancho completo con ícono prefijo */
+/* Label del buscador — vive fuera del flex row para no alterar alturas */
+.aseg-search-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--aseg-text-muted);
+    margin-bottom: 5px;
+    letter-spacing: .2px;
+}
+
 .aseg-tipo-group { margin-bottom: 0 !important; }
 
 .aseg-select-wrap {
@@ -130,10 +118,7 @@ body {
     display: flex;
     align-items: center;
 }
-.aseg-select-wrap select {
-    width: 100%;
-    padding-left: 36px !important; /* espacio para el ícono */
-}
+.aseg-select-wrap select { width: 100%; padding-left: 36px !important; }
 .aseg-select-icon {
     position: absolute;
     left: 12px;
@@ -143,19 +128,17 @@ body {
 }
 
 /*
-   Fila 2: input + botón lado a lado
-   → flex-row con align-items: flex-end para que el botón se alinee
-     a la base del input (teniendo en cuenta el label encima del input).
-   → gap: 12px garantiza espacio visible entre input y botón.
-   → El botón NO tiene overflow ni comparte el border-radius del input.
+   FIX alineación botón Buscar:
+   El label y el error-msg están FUERA del flex row.
+   El row solo contiene aseg-input-wrap + aseg-btn-col como hermanos directos
+   de la misma altura → align-items:center los centra perfectamente.
 */
 .aseg-input-action-row {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: 12px;
 }
 
-/* Input con ícono interno — el input SÍ tiene su propio border y border-radius */
 .aseg-input-wrap {
     position: relative;
     display: flex;
@@ -172,7 +155,7 @@ body {
 .aseg-input-field {
     width: 100%;
     box-sizing: border-box;
-    padding: 9px 13px 9px 36px !important; /* espacio para ícono izquierdo */
+    padding: 9px 13px 9px 36px !important;
     border: 1.5px solid var(--aseg-border) !important;
     border-radius: var(--aseg-radius-sm) !important;
     font-size: 13px;
@@ -185,29 +168,14 @@ body {
     border-color: var(--aseg-border-focus) !important;
     box-shadow: 0 0 0 3px rgba(14,165,233,.13) !important;
 }
-.aseg-input-field:focus + .aseg-input-icon,
 .aseg-input-wrap:focus-within .aseg-input-icon { color: var(--aseg-accent); }
 
-/*
-   Columna del botón: flex-shrink:0 evita que el botón se comprima.
-   El label ficticio "aseg-btn-spacer" hace que el botón quede alineado
-   verticalmente con el input (mismo baseline que el label del input).
-*/
 .aseg-btn-col {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
 }
-.aseg-btn-spacer {
-    display: block;
-    font-size: 12px;
-    font-weight: 600;
-    color: transparent; /* invisible pero ocupa el mismo espacio que el label real */
-    margin-bottom: 5px;
-    user-select: none;
-}
 
-/* Botón de búsqueda — standalone, no dentro de overflow:hidden */
 .btn-buscar {
     flex-shrink: 0;
     background: linear-gradient(135deg, var(--aseg-accent-dark), var(--aseg-accent));
@@ -224,7 +192,7 @@ body {
     white-space: nowrap;
     transition: opacity .18s, transform .15s, box-shadow .15s;
     box-shadow: 0 2px 8px rgba(14,165,233,.3);
-    height: 37px; /* misma altura que el input (9+1.5+1.5+15*1 ≈ 37px) */
+    height: 37px;
 }
 .btn-buscar:hover  { opacity: .9; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(14,165,233,.35); }
 .btn-buscar:active { opacity: .8; transform: translateY(0); }
@@ -248,7 +216,6 @@ body {
 .aseg-rol-badge.rol-especialista  { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
 .aseg-rol-badge.rol-administrador { background: #faf5ff; color: #7c3aed; border-color: #ddd6fe; }
 
-/* ── Campo read-only de rol ───────────────────────────────────────────────── */
 .aseg-readonly-field {
     background: #f8fafc;
     border: 1.5px solid #e2e8f0;
@@ -261,7 +228,6 @@ body {
     user-select: none;
 }
 
-/* ── Sección condicional ──────────────────────────────────────────────────── */
 .aseg-seccion-condicional {
     margin-top: 20px;
     padding-top: 20px;
@@ -269,7 +235,6 @@ body {
     animation: asegFadeUp .28s ease both;
 }
 
-/* ── Habeas Data wrapper ──────────────────────────────────────────────────── */
 .aseg-habeas-wrap {
     margin-top: 20px;
     padding-top: 20px;
@@ -318,24 +283,32 @@ body {
     box-shadow: none !important;
 }
 
-/* ── Volver ───────────────────────────────────────────────────────────────── */
-.aseg-back-link {
+/* ── Volver al panel ──────────────────────────────────────────────────────── */
+.aseg-back-wrapper {
+    width: 100%;
+    margin-top: 0;
+    padding: 14px 0 6px;
     display: flex;
+    justify-content: center;
+}
+.aseg-back-link {
+    display: inline-flex;
     align-items: center;
-    justify-content: center;      /* centra el contenido interno (ícono + texto) */
     gap: 5px;
-    width: 100%;                  /* ocupa todo el ancho del .aseg-container     */
-    margin-top: 16px;
+    padding: 7px 16px;
     font-size: 12.5px;
     color: var(--aseg-text-muted);
     text-decoration: none;
     font-weight: 600;
-    transition: color .18s;
-    text-align: center;           /* fallback para contextos no-flex             */
+    border-radius: var(--aseg-radius-sm);
+    transition: color .18s, background .18s;
 }
-.aseg-back-link:hover { color: var(--aseg-accent); }
+.aseg-back-link:hover {
+    color: var(--aseg-accent);
+    background: var(--aseg-accent-light);
+}
 
-/* ── Mensajes de error de campo ──────────────────────────────────────────── */
+/* ── Errores ─────────────────────────────────────────────────────────────── */
 .error-msg {
     color: var(--aseg-danger);
     font-size: 11px;
@@ -369,7 +342,7 @@ body {
     border: 1px solid #fecaca;
 }
 
-/* ── Inputs / Selects (heredados de creacion.css + sobrescritos aquí) ─────── */
+/* ── Inputs / Selects ─────────────────────────────────────────────────────── */
 .form-group { margin-bottom: 14px; }
 .form-group label {
     display: block;
@@ -406,7 +379,6 @@ body {
 .form-row { display: flex; gap: 14px; }
 .form-row .form-group { flex: 1; }
 
-/* ── Placeholder ─────────────────────────────────────────────────────────── */
 ::placeholder { color: #b0bec5; opacity: 1; }
 select option[value=""] { color: #9ca3af; }
 select:invalid { color: #9ca3af; }
@@ -489,17 +461,13 @@ option { color: var(--aseg-text); }
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 560px) {
     body { padding: 16px 12px; justify-content: flex-start; }
-
     .aseg-body  { padding: 16px; }
     .aseg-card  { padding: 16px; }
     .form-row   { flex-direction: column; gap: 0; }
-
-    /* En móvil el botón baja debajo del input */
     .aseg-input-action-row { flex-direction: column; align-items: stretch; }
-    .aseg-btn-col { align-items: stretch; }
-    .aseg-btn-spacer { display: none; }
+    .aseg-btn-col { align-items: stretch; margin-top: 8px; }
     .btn-buscar { width: 100%; justify-content: center; }
-
     .aseg-acciones { flex-direction: column; }
     .btn-accion    { min-width: unset; width: 100%; }
+    .aseg-back-link { width: 100%; justify-content: center; }
 }
