@@ -1,46 +1,11 @@
 """
 modulo_usuarios/routes.py — Stylo Dental (versión fusionada)
-=============================================================
-Blueprint de usuarios con creación TRANSACCIONAL y atómica.
-
-Endpoints completos:
-  • POST /auth/login                           — Autenticación con hash werkzeug
-  • GET  /roles                                — Catálogo de roles
-  • GET  /roles/reporte                        — Reporte usuarios por rol
-  • GET  /usuarios                             — Lista de usuarios
-  • POST /usuarios                             — Crear usuario (transaccional atómico)
-  • GET|PUT|DELETE /usuarios/<id>              — CRUD individual (PUT requiere
-  •                                               ContrasenaActual validada contra BD)
-  • POST /usuarios/verificar-password          — Verificar contraseña actual (paso 1)
-  • POST /usuarios/cambiar-password            — Cambiar contraseña con validación completa
-  • GET  /generos                              — Catálogo de géneros
-  • GET  /generos/reporte                      — Reporte por género
-  • GET  /tipos_documento                      — Catálogo de tipos de documento
-  • GET  /estados_usuario                      — Catálogo de estados
-  • GET  /acciones_aseguramiento               — Catálogo de acciones
-  • GET|POST /administradores                  — CRUD administradores
-  • GET  /administradores/activos              — Administradores activos
-  • GET|POST /auditoria                        — CRUD auditoría
-  • GET  /auditoria/usuario/<id>               — Auditoría por usuario
-  • GET  /auditoria/reporte/acciones           — Reporte acciones
-  • GET  /auditoria/reporte/fecha              — Reporte por fecha
-  • GET  /tipo-afiliacion-eps                  — Tipos de afiliación EPS
-  • GET|POST /eps                              — CRUD EPS
-  • GET  /regimen-eps                          — Regímenes EPS
-  • POST /paciente                             — Crear/actualizar paciente
-  • PUT  /paciente/<id>                        — Actualizar paciente
-  • POST /afiliacion                           — Crear/actualizar afiliación
-  • GET  /afiliacion                           — Listar afiliaciones
-  • GET  /afiliacion/por-usuario/<uid>         — Afiliación activa con Regimen_ID
-  • PUT  /afiliacion/<id>                      — Actualizar afiliación por ID
-  • POST /actualizar-perfil-paciente           — Actualizar perfil completo del paciente
-  • GET  /vista/crear_usuario                  — Vista HTML
 """
 
 from flask import Blueprint, request, jsonify, render_template
 import sqlite3
+import os
 import re
-from db import get_db_connection
 from modulo_usuarios import (
     usuario, rol, genero, tipo_documento, estado_usuario,
     administrador, aseguramiento_datos, accion_aseguramiento
@@ -49,19 +14,19 @@ from datetime import date
 
 usuarios_bp = Blueprint('usuarios_bp', __name__)
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH  = os.path.join(BASE_DIR, 'odent.db')
+
+
+def _get_conn():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
 
 # ─── POLÍTICA DE CONTRASEÑA ───────────────────────────────────────────────────
 
 def _validar_politica_password(password):
-    """
-    Valida que la contraseña cumpla:
-      - Mínimo 8 caracteres
-      - Al menos una letra mayúscula
-      - Al menos una letra minúscula
-      - Al menos un número
-      - Al menos un carácter especial
-    Retorna (True, '') si cumple, o (False, mensaje) si no cumple.
-    """
     if len(password) < 8:
         return False, 'La contraseña debe tener al menos 8 caracteres.'
     if not re.search(r'[A-Z]', password):
@@ -76,9 +41,6 @@ def _validar_politica_password(password):
 
 
 def _verificar_password_contra_hash(hash_bd, password_ingresada):
-    """
-    Soporta hashes werkzeug (scrypt/pbkdf2) y contraseñas legacy en texto plano.
-    """
     from werkzeug.security import check_password_hash
     if hash_bd.startswith('scrypt:') or hash_bd.startswith('pbkdf2:'):
         return check_password_hash(hash_bd, password_ingresada)
@@ -93,7 +55,7 @@ def _verificar_password_contra_hash(hash_bd, password_ingresada):
 def login():
     from werkzeug.security import check_password_hash
 
-    datos = request.get_json(silent=True) or {}
+    datos      = request.get_json(silent=True) or {}
     correo     = (datos.get('correo') or '').strip().lower()
     contrasena = datos.get('contrasena') or ''
 
@@ -102,9 +64,8 @@ def login():
 
     conexion = None
     try:
-        conexion = get_db_connection()
-        conexion.row_factory = sqlite3.Row
-        cursor = conexion.cursor()
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
 
         cursor.execute("SELECT * FROM usuarios WHERE LOWER(Correo) = ?", (correo,))
         fila = cursor.fetchone()
@@ -113,8 +74,6 @@ def login():
             return jsonify({"ok": False, "error": "Correo o contraseña incorrectos"}), 401
 
         hash_bd = fila['Contrasena']
-
-        # Soporte dual: hash werkzeug (scrypt/pbkdf2) vs texto plano legacy
         if hash_bd.startswith('scrypt:') or hash_bd.startswith('pbkdf2:'):
             autenticado = check_password_hash(hash_bd, contrasena)
         else:
@@ -162,9 +121,8 @@ def login():
 def get_roles():
     conexion = None
     try:
-        conexion = get_db_connection()
-        conexion.row_factory = sqlite3.Row
-        cursor = conexion.cursor()
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
         cursor.execute("SELECT Rol_ID, Descripcion AS Nombre_Rol FROM rol")
         filas = cursor.fetchall()
         return jsonify([dict(fila) for fila in filas]), 200
@@ -186,7 +144,257 @@ def get_reporte_roles():
 
 @usuarios_bp.route('/usuarios', methods=['GET'])
 def get_usuarios():
-    return jsonify(usuario.read_all_usuarios())
+    conexion = None
+    try:
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
+        cursor.execute("""
+            SELECT
+                u.Usuario_ID         AS Usuario_ID,
+                esp.Especialista_ID  AS Especialista_ID,
+                pac.Paciente_ID      AS Paciente_ID,
+                u.Nombres,
+                u.Apellidos,
+                u.TipoDoc_ID,
+                u.NumeroDocumento,
+                u.Correo,
+                u.Telefono,
+                u.Estado_ID,
+                u.Rol_ID,
+                u.FechaNacimiento
+            FROM usuarios u
+            LEFT JOIN especialista esp ON esp.Usuario_ID = u.Usuario_ID
+            LEFT JOIN paciente pac ON pac.Usuario_ID = u.Usuario_ID
+            ORDER BY u.Apellidos
+        """)
+        filas = cursor.fetchall()
+        return jsonify([dict(f) for f in filas]), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conexion:
+            conexion.close()
+
+
+# =============================================================================
+# USUARIOS — GET por ID
+# =============================================================================
+
+@usuarios_bp.route('/usuarios/<int:id>', methods=['GET', 'PUT', 'DELETE'])
+def crud_usuario(id):
+
+    if request.method == 'GET':
+        conexion = None
+        try:
+            conexion = _get_conn()
+            cursor   = conexion.cursor()
+            cursor.execute("""
+                SELECT
+                    u.Usuario_ID,
+                    u.Nombres,
+                    u.Apellidos,
+                    u.TipoDoc_ID,
+                    td.Nombre_Tipo_Documento,
+                    u.NumeroDocumento,
+                    u.Correo,
+                    u.Telefono,
+                    u.Estado_ID,
+                    u.Rol_ID,
+                    u.FechaNacimiento
+                FROM usuarios u
+                LEFT JOIN tipo_documento td ON td.TipoDoc_ID = u.TipoDoc_ID
+                WHERE u.Usuario_ID = ?
+            """, (id,))
+            fila = cursor.fetchone()
+            if not fila:
+                return jsonify({"error": "No encontrado"}), 404
+            return jsonify(dict(fila)), 200
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+        finally:
+            if conexion:
+                conexion.close()
+
+    if request.method == 'PUT':
+        from werkzeug.security import generate_password_hash
+
+        datos    = request.get_json(silent=True) or {}
+        conexion = None
+        try:
+            conexion = _get_conn()
+            cursor   = conexion.cursor()
+
+            contrasena_actual = datos.get('ContrasenaActual')
+
+            if contrasena_actual and contrasena_actual != '_skip_':
+                cursor.execute(
+                    "SELECT Contrasena FROM usuarios WHERE Usuario_ID = ?", (id,)
+                )
+                fila_pwd = cursor.fetchone()
+                if not fila_pwd:
+                    return jsonify({"ok": False, "error": "Usuario no encontrado."}), 404
+                if not _verificar_password_contra_hash(
+                    fila_pwd['Contrasena'], contrasena_actual
+                ):
+                    return jsonify({
+                        "ok": False,
+                        "error": "La contraseña actual es incorrecta."
+                    }), 401
+
+            campos  = []
+            valores = []
+
+            nombres    = (datos.get('Nombres')   or '').strip()
+            apellidos  = (datos.get('Apellidos') or '').strip()
+            correo     = (datos.get('Correo')    or '').strip()
+            telefono   = (datos.get('Telefono')  or '').strip()
+            estado_id  = datos.get('Estado_ID')
+            nueva_pass = datos.get('nuevaPass') or datos.get('NuevaPass')
+
+            if nombres:   campos.append("Nombres = ?");   valores.append(nombres)
+            if apellidos: campos.append("Apellidos = ?"); valores.append(apellidos)
+            if correo:    campos.append("Correo = ?");    valores.append(correo)
+            if telefono:  campos.append("Telefono = ?");  valores.append(telefono)
+            if estado_id is not None:
+                campos.append("Estado_ID = ?"); valores.append(int(estado_id))
+
+            if nueva_pass:
+                valida, msg_pwd = _validar_politica_password(nueva_pass)
+                if not valida:
+                    return jsonify({"ok": False, "error": msg_pwd}), 400
+                campos.append("Contrasena = ?")
+                valores.append(generate_password_hash(nueva_pass, method='scrypt'))
+
+            if not campos:
+                return jsonify({"ok": False, "error": "No hay campos para actualizar."}), 400
+
+            valores.append(id)
+            cursor.execute(
+                f"UPDATE usuarios SET {', '.join(campos)} WHERE Usuario_ID = ?",
+                tuple(valores)
+            )
+            if cursor.rowcount == 0:
+                return jsonify({"ok": False, "error": "Usuario no encontrado."}), 404
+
+            conexion.commit()
+            return jsonify({"ok": True, "mensaje": "Perfil actualizado correctamente."}), 200
+
+        except Exception as e:
+            if conexion:
+                try: conexion.rollback()
+                except Exception: pass
+            return jsonify({"ok": False, "error": str(e)}), 500
+        finally:
+            if conexion: conexion.close()
+
+    if request.method == 'DELETE':
+        res = usuario.delete_usuario(id)
+        return jsonify(res), (200 if res.get('ok') else 400)
+
+
+# =============================================================================
+# VERIFICAR CONTRASEÑA
+# =============================================================================
+
+@usuarios_bp.route('/usuarios/verificar-password', methods=['POST'])
+def verificar_password():
+    datos             = request.get_json(silent=True) or {}
+    usuario_id        = datos.get('usuario_id')
+    contrasena_actual = datos.get('contrasena_actual')
+
+    if not usuario_id:
+        return jsonify({"ok": False, "error": "usuario_id es obligatorio."}), 400
+    if not contrasena_actual:
+        return jsonify({"ok": False, "error": "contrasena_actual es obligatoria."}), 400
+
+    conexion = None
+    try:
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
+        cursor.execute(
+            "SELECT Contrasena FROM usuarios WHERE Usuario_ID = ?", (usuario_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"ok": False, "error": "Usuario no encontrado."}), 404
+
+        if _verificar_password_contra_hash(row['Contrasena'], contrasena_actual):
+            return jsonify({"ok": True}), 200
+        return jsonify({"ok": False, "error": "Contraseña incorrecta."}), 401
+
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if conexion:
+            conexion.close()
+
+
+# =============================================================================
+# CAMBIAR CONTRASEÑA
+# =============================================================================
+
+@usuarios_bp.route('/usuarios/cambiar-password', methods=['POST'])
+def cambiar_password():
+    from werkzeug.security import generate_password_hash
+
+    datos                = request.get_json(silent=True) or {}
+    usuario_id           = datos.get('usuario_id')
+    contrasena_actual    = datos.get('contrasena_actual')
+    contrasena_nueva     = datos.get('contrasena_nueva')
+    contrasena_confirmar = datos.get('contrasena_confirmar')
+
+    if not usuario_id:
+        return jsonify({"ok": False, "error": "usuario_id es obligatorio."}), 400
+    if not contrasena_actual:
+        return jsonify({
+            "ok": False,
+            "error": "contrasena_actual es obligatoria para cambiar la contraseña."
+        }), 400
+    if not contrasena_nueva:
+        return jsonify({"ok": False, "error": "contrasena_nueva es obligatoria."}), 400
+    if not contrasena_confirmar:
+        return jsonify({"ok": False, "error": "contrasena_confirmar es obligatoria."}), 400
+    if contrasena_nueva != contrasena_confirmar:
+        return jsonify({"ok": False, "error": "Las contraseñas nuevas no coinciden."}), 400
+
+    valida, msg = _validar_politica_password(contrasena_nueva)
+    if not valida:
+        return jsonify({"ok": False, "error": msg}), 400
+
+    conexion = None
+    try:
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
+
+        cursor.execute(
+            "SELECT Contrasena FROM usuarios WHERE Usuario_ID = ?", (usuario_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"ok": False, "error": "Usuario no encontrado."}), 404
+
+        if not _verificar_password_contra_hash(row['Contrasena'], contrasena_actual):
+            return jsonify({"ok": False, "error": "La contraseña actual es incorrecta."}), 401
+
+        nuevo_hash = generate_password_hash(contrasena_nueva, method='scrypt')
+        cursor.execute(
+            "UPDATE usuarios SET Contrasena = ? WHERE Usuario_ID = ?",
+            (nuevo_hash, usuario_id)
+        )
+        if cursor.rowcount == 0:
+            return jsonify({"ok": False, "error": "No se pudo actualizar la contraseña."}), 500
+
+        conexion.commit()
+        return jsonify({"ok": True, "mensaje": "Contraseña actualizada correctamente."}), 200
+
+    except Exception as e:
+        if conexion:
+            try: conexion.rollback()
+            except Exception: pass
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if conexion:
+            conexion.close()
 
 
 # =============================================================================
@@ -256,7 +464,8 @@ def add_usuario():
 
     conexion = None
     try:
-        conexion = get_db_connection()
+        conexion = sqlite3.connect(DB_PATH)
+        conexion.row_factory = sqlite3.Row
         conexion.isolation_level = None
         conexion.execute("PRAGMA foreign_keys = ON")
         cursor = conexion.cursor()
@@ -317,7 +526,6 @@ def add_usuario():
             cursor.execute(
                 "INSERT INTO administrador (Usuario_ID) VALUES (?)", (usuario_id,)
             )
-
         elif rol_id == 2:
             cursor.execute(
                 "INSERT INTO especialista (Usuario_ID, Tarjeta_Profesional) VALUES (?, ?)",
@@ -332,7 +540,6 @@ def add_usuario():
                        VALUES (?, ?)""",
                     (especialista_id, int(especialidad_id))
                 )
-
         elif rol_id == 3:
             cursor.execute(
                 "INSERT INTO paciente (Usuario_ID) VALUES (?)", (usuario_id,)
@@ -358,200 +565,6 @@ def add_usuario():
             try: conexion.execute("ROLLBACK")
             except Exception: pass
         return jsonify({"ok": False, "error": f"Transacción revertida: {str(e)}"}), 400
-    finally:
-        if conexion:
-            conexion.close()
-
-
-# =============================================================================
-# USUARIOS — GET / PUT / DELETE por ID
-# PUT /usuarios/<id> — consumido por especialista.js en guardarPerfilCompleto()
-# Requiere 'ContrasenaActual' en el body, validada con check_password_hash
-# (o comparación directa para hashes legacy en texto plano) contra el
-# registro real en odent.db ANTES de aplicar cualquier cambio.
-# =============================================================================
-
-@usuarios_bp.route('/usuarios/<int:id>', methods=['GET', 'PUT', 'DELETE'])
-def crud_usuario(id):
-    if request.method == 'GET':
-        data = usuario.read_usuario_by_id(id)
-        return jsonify(data) if data else (jsonify({"error": "No encontrado"}), 404)
-
-    if request.method == 'PUT':
-        datos    = request.get_json(silent=True) or {}
-        conexion = None
-        try:
-            conexion = get_db_connection()
-            conexion.row_factory = sqlite3.Row
-            cursor = conexion.cursor()
-
-            contrasena_actual = datos.get('ContrasenaActual')
-            if not contrasena_actual:
-                return jsonify({
-                    "ok": False,
-                    "error": "La contraseña actual es obligatoria para guardar cambios."
-                }), 400
-
-            cursor.execute("SELECT Contrasena FROM usuarios WHERE Usuario_ID = ?", (id,))
-            fila_pwd = cursor.fetchone()
-            if not fila_pwd:
-                return jsonify({"ok": False, "error": "Usuario no encontrado."}), 404
-
-            if not _verificar_password_contra_hash(fila_pwd['Contrasena'], contrasena_actual):
-                return jsonify({"ok": False, "error": "La contraseña actual es incorrecta."}), 401
-
-            campos  = []
-            valores = []
-
-            nombres   = (datos.get('Nombres') or '').strip()
-            apellidos = (datos.get('Apellidos') or '').strip()
-            correo    = (datos.get('Correo') or '').strip()
-            telefono  = (datos.get('Telefono') or '').strip()
-
-            if nombres:   campos.append("Nombres = ?");   valores.append(nombres)
-            if apellidos: campos.append("Apellidos = ?"); valores.append(apellidos)
-            if correo:    campos.append("Correo = ?");    valores.append(correo)
-            if telefono:  campos.append("Telefono = ?");  valores.append(telefono)
-
-            if not campos:
-                return jsonify({"ok": False, "error": "No hay campos para actualizar."}), 400
-
-            valores.append(id)
-            cursor.execute(
-                f"UPDATE usuarios SET {', '.join(campos)} WHERE Usuario_ID = ?",
-                tuple(valores)
-            )
-            if cursor.rowcount == 0:
-                return jsonify({"ok": False, "error": "Usuario no encontrado."}), 404
-
-            conexion.commit()
-            return jsonify({"ok": True, "mensaje": "Perfil actualizado correctamente."}), 200
-
-        except Exception as e:
-            if conexion:
-                try: conexion.rollback()
-                except Exception: pass
-            return jsonify({"ok": False, "error": str(e)}), 500
-        finally:
-            if conexion: conexion.close()
-
-    if request.method == 'DELETE':
-        res = usuario.delete_usuario(id)
-        return jsonify(res), (200 if res.get('ok') else 400)
-
-
-# =============================================================================
-# VERIFICAR CONTRASEÑA  —  POST /usuarios/verificar-password
-# Consumido por especialista.js en validarPasswordActual() (paso 1 del flujo
-# de cambio de contraseña). Verifica que la contraseña actual coincida con BD.
-# =============================================================================
-
-@usuarios_bp.route('/usuarios/verificar-password', methods=['POST'])
-def verificar_password():
-    datos             = request.get_json(silent=True) or {}
-    usuario_id        = datos.get('usuario_id')
-    contrasena_actual = datos.get('contrasena_actual')
-
-    if not usuario_id:
-        return jsonify({"ok": False, "error": "usuario_id es obligatorio."}), 400
-    if not contrasena_actual:
-        return jsonify({"ok": False, "error": "contrasena_actual es obligatoria."}), 400
-
-    conexion = None
-    try:
-        conexion = get_db_connection()
-        conexion.row_factory = sqlite3.Row
-        cursor = conexion.cursor()
-
-        cursor.execute(
-            "SELECT Contrasena FROM usuarios WHERE Usuario_ID = ?", (usuario_id,)
-        )
-        row = cursor.fetchone()
-        if not row:
-            return jsonify({"ok": False, "error": "Usuario no encontrado."}), 404
-
-        if _verificar_password_contra_hash(row['Contrasena'], contrasena_actual):
-            return jsonify({"ok": True}), 200
-        return jsonify({"ok": False, "error": "Contraseña incorrecta."}), 401
-
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-    finally:
-        if conexion:
-            conexion.close()
-
-
-# =============================================================================
-# CAMBIAR CONTRASEÑA  —  POST /usuarios/cambiar-password
-# Consumido por especialista.js en guardarPerfilCompleto() cuando el
-# especialista ha completado el flujo de dos pasos de cambio de contraseña.
-# Valida la política, verifica la contraseña actual y actualiza en BD.
-# La contraseña actual es OBLIGATORIA — no se puede cambiar sin verificarla.
-# =============================================================================
-
-@usuarios_bp.route('/usuarios/cambiar-password', methods=['POST'])
-def cambiar_password():
-    from werkzeug.security import generate_password_hash
-
-    datos                = request.get_json(silent=True) or {}
-    usuario_id           = datos.get('usuario_id')
-    contrasena_actual    = datos.get('contrasena_actual')
-    contrasena_nueva     = datos.get('contrasena_nueva')
-    contrasena_confirmar = datos.get('contrasena_confirmar')
-
-    # Validaciones de presencia — la contraseña actual es OBLIGATORIA
-    if not usuario_id:
-        return jsonify({"ok": False, "error": "usuario_id es obligatorio."}), 400
-    if not contrasena_actual:
-        return jsonify({
-            "ok": False,
-            "error": "contrasena_actual es obligatoria para cambiar la contraseña."
-        }), 400
-    if not contrasena_nueva:
-        return jsonify({"ok": False, "error": "contrasena_nueva es obligatoria."}), 400
-    if not contrasena_confirmar:
-        return jsonify({"ok": False, "error": "contrasena_confirmar es obligatoria."}), 400
-    if contrasena_nueva != contrasena_confirmar:
-        return jsonify({"ok": False, "error": "Las contraseñas nuevas no coinciden."}), 400
-
-    # Validar política de seguridad de la contraseña nueva
-    valida, msg = _validar_politica_password(contrasena_nueva)
-    if not valida:
-        return jsonify({"ok": False, "error": msg}), 400
-
-    conexion = None
-    try:
-        conexion = get_db_connection()
-        conexion.row_factory = sqlite3.Row
-        cursor = conexion.cursor()
-
-        cursor.execute(
-            "SELECT Contrasena FROM usuarios WHERE Usuario_ID = ?", (usuario_id,)
-        )
-        row = cursor.fetchone()
-        if not row:
-            return jsonify({"ok": False, "error": "Usuario no encontrado."}), 404
-
-        if not _verificar_password_contra_hash(row['Contrasena'], contrasena_actual):
-            return jsonify({"ok": False, "error": "La contraseña actual es incorrecta."}), 401
-
-        # Guardar la nueva contraseña hasheada (scrypt)
-        nuevo_hash = generate_password_hash(contrasena_nueva, method='scrypt')
-        cursor.execute(
-            "UPDATE usuarios SET Contrasena = ? WHERE Usuario_ID = ?",
-            (nuevo_hash, usuario_id)
-        )
-        if cursor.rowcount == 0:
-            return jsonify({"ok": False, "error": "No se pudo actualizar la contraseña."}), 500
-
-        conexion.commit()
-        return jsonify({"ok": True, "mensaje": "Contraseña actualizada correctamente."}), 200
-
-    except Exception as e:
-        if conexion:
-            try: conexion.rollback()
-            except Exception: pass
-        return jsonify({"ok": False, "error": str(e)}), 500
     finally:
         if conexion:
             conexion.close()
@@ -653,9 +666,8 @@ def vista_creacion_usuario():
 def get_tipo_afiliacion_eps():
     conexion = None
     try:
-        conexion = get_db_connection()
-        conexion.row_factory = sqlite3.Row
-        cursor = conexion.cursor()
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
         cursor.execute(
             "SELECT TipoEPS_ID AS ID_Tipo_EPS, Nombre_Tipo FROM tipo_afiliacion_eps ORDER BY TipoEPS_ID"
         )
@@ -677,9 +689,8 @@ def crud_eps():
     if request.method == 'GET':
         conexion = None
         try:
-            conexion = get_db_connection()
-            conexion.row_factory = sqlite3.Row
-            cursor = conexion.cursor()
+            conexion = _get_conn()
+            cursor   = conexion.cursor()
             cursor.execute(
                 "SELECT EPS_ID AS ID_EPS, Nombre_EPS, Telefono_EPS, Regimen_ID FROM eps ORDER BY EPS_ID"
             )
@@ -691,7 +702,7 @@ def crud_eps():
             if conexion:
                 conexion.close()
 
-    datos = request.get_json(silent=True) or {}
+    datos       = request.get_json(silent=True) or {}
     nombre_eps  = (datos.get('Nombre_EPS') or '').strip()
     tipo_eps_id = datos.get('ID_Tipo_EPS')
     telefono    = (datos.get('Telefono') or '').strip()
@@ -703,8 +714,8 @@ def crud_eps():
 
     conexion = None
     try:
-        conexion = get_db_connection()
-        cursor = conexion.cursor()
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
         cursor.execute(
             "INSERT INTO eps (Nombre_EPS, Telefono_EPS, Regimen_ID) VALUES (?, ?, ?)",
             (nombre_eps, telefono or 'N/A', int(tipo_eps_id))
@@ -727,9 +738,8 @@ def crud_eps():
 def get_regimen_eps():
     conexion = None
     try:
-        conexion = get_db_connection()
-        conexion.row_factory = sqlite3.Row
-        cursor = conexion.cursor()
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
         cursor.execute(
             """SELECT Regimen_ID AS ID_Regimen_EPS, Descripcion AS Nombre_Regimen
                FROM regimen_eps ORDER BY Regimen_ID"""
@@ -749,7 +759,7 @@ def get_regimen_eps():
 
 @usuarios_bp.route('/paciente', methods=['POST'])
 def crear_paciente():
-    datos = request.get_json(silent=True) or {}
+    datos           = request.get_json(silent=True) or {}
     usuario_id      = datos.get('ID_Usuario')
     grupo_sanguineo = (datos.get('Grupo_Sanguineo') or '').strip() or None
     alergias        = (datos.get('Alergias') or '').strip() or None
@@ -761,15 +771,12 @@ def crear_paciente():
 
     conexion = None
     try:
-        conexion = get_db_connection()
-        conexion.row_factory = sqlite3.Row
-        cursor = conexion.cursor()
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
 
         cursor.execute("SELECT Paciente_ID FROM paciente WHERE Usuario_ID = ?", (usuario_id,))
         existente = cursor.fetchone()
         if existente:
-            # La tabla base solo tiene Usuario_ID; los campos extra son opcionales
-            # y se intentan actualizar si la tabla los tiene (graceful degradation)
             try:
                 cursor.execute(
                     """UPDATE paciente
@@ -778,7 +785,7 @@ def crear_paciente():
                     (grupo_sanguineo, alergias, antecedentes, observaciones, existente["Paciente_ID"])
                 )
             except Exception:
-                pass  # columnas opcionales pueden no existir en BD base
+                pass
             conexion.commit()
             return jsonify({"ok": True, "data": {"ID_Paciente": existente["Paciente_ID"]}}), 200
 
@@ -789,7 +796,6 @@ def crear_paciente():
                 (usuario_id, grupo_sanguineo, alergias, antecedentes, observaciones)
             )
         except Exception:
-            # Fallback para BD base sin columnas adicionales
             cursor.execute(
                 "INSERT INTO paciente (Usuario_ID) VALUES (?)", (usuario_id,)
             )
@@ -807,9 +813,8 @@ def crear_paciente():
 def actualizar_paciente(id):
     conexion = None
     try:
-        conexion = get_db_connection()
-        conexion.row_factory = sqlite3.Row
-        cursor = conexion.cursor()
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
         cursor.execute("SELECT Paciente_ID FROM paciente WHERE Paciente_ID = ?", (id,))
         fila = cursor.fetchone()
         if not fila:
@@ -828,7 +833,7 @@ def actualizar_paciente(id):
 
 @usuarios_bp.route('/afiliacion', methods=['POST'])
 def crear_afiliacion():
-    datos = request.get_json(silent=True) or {}
+    datos          = request.get_json(silent=True) or {}
     usuario_id     = datos.get('ID_Usuario')
     eps_id         = datos.get('ID_EPS')
     regimen_eps_id = datos.get('ID_Tipo_EPS') or datos.get('ID_Regimen_EPS')
@@ -842,9 +847,8 @@ def crear_afiliacion():
 
     conexion = None
     try:
-        conexion = get_db_connection()
-        conexion.row_factory = sqlite3.Row
-        cursor = conexion.cursor()
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
 
         cursor.execute(
             "SELECT Afiliacion_ID FROM afiliacion WHERE Usuario_ID = ?", (usuario_id,)
@@ -879,9 +883,8 @@ def crear_afiliacion():
 def get_afiliacion():
     conexion = None
     try:
-        conexion = get_db_connection()
-        conexion.row_factory = sqlite3.Row
-        cursor = conexion.cursor()
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
         cursor.execute(
             "SELECT Afiliacion_ID, Usuario_ID, EPS_ID, TipoEPS_ID, Fecha_Afiliacion FROM afiliacion"
         )
@@ -894,20 +897,12 @@ def get_afiliacion():
             conexion.close()
 
 
-# =============================================================================
-# AFILIACIÓN POR USUARIO — para el módulo de Aseguramiento de Datos
-# GET /afiliacion/por-usuario/<usuario_id>
-# Retorna la afiliación activa con Regimen_ID obtenido por JOIN con eps.
-# Llamado por cargarDatosPaciente() en aseguramiento.js.
-# =============================================================================
-
 @usuarios_bp.route('/afiliacion/por-usuario/<int:usuario_id>', methods=['GET'])
 def get_afiliacion_por_usuario(usuario_id):
     conexion = None
     try:
-        conexion = get_db_connection()
-        conexion.row_factory = sqlite3.Row
-        cursor = conexion.cursor()
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
         cursor.execute(
             """
             SELECT
@@ -937,7 +932,7 @@ def get_afiliacion_por_usuario(usuario_id):
 
 @usuarios_bp.route('/afiliacion/<int:id>', methods=['PUT'])
 def actualizar_afiliacion(id):
-    datos = request.get_json(silent=True) or {}
+    datos          = request.get_json(silent=True) or {}
     eps_id         = datos.get('ID_EPS')
     regimen_eps_id = datos.get('ID_Tipo_EPS') or datos.get('ID_Regimen_EPS')
     fecha          = datos.get('Fecha_Afiliacion') or date.today().isoformat()
@@ -949,8 +944,8 @@ def actualizar_afiliacion(id):
 
     conexion = None
     try:
-        conexion = get_db_connection()
-        cursor = conexion.cursor()
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
         cursor.execute(
             """UPDATE afiliacion
                SET EPS_ID = ?, TipoEPS_ID = ?, Fecha_Afiliacion = ?
@@ -969,9 +964,7 @@ def actualizar_afiliacion(id):
 
 
 # =============================================================================
-# ACTUALIZAR PERFIL PACIENTE  —  POST /actualizar-perfil-paciente
-# Actualiza datos personales, EPS/afiliación y opcionalmente la contraseña.
-# Si se envía nuevaPass, se valida la política y se hashea con scrypt.
+# ACTUALIZAR PERFIL PACIENTE
 # =============================================================================
 
 @usuarios_bp.route('/actualizar-perfil-paciente', methods=['POST'])
@@ -984,6 +977,7 @@ def actualizar_perfil_paciente():
     telefono          = datos.get('telefono')
     nacimiento        = datos.get('nacimiento')
     nueva_pass        = datos.get('nuevaPass')
+    contrasena_actual = datos.get('contrasena_actual') or datos.get('ContrasenaActual')
     nombres           = datos.get('nombres')
     apellidos         = datos.get('apellidos')
     documento         = datos.get('documento')
@@ -996,9 +990,8 @@ def actualizar_perfil_paciente():
 
     conexion = None
     try:
-        conexion = get_db_connection()
-        conexion.row_factory = sqlite3.Row
-        cursor = conexion.cursor()
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
 
         campos  = []
         valores = []
@@ -1010,7 +1003,22 @@ def actualizar_perfil_paciente():
         if correo:            campos.append("Correo = ?");          valores.append(correo)
         if telefono:          campos.append("Telefono = ?");        valores.append(telefono)
         if nacimiento:        campos.append("FechaNacimiento = ?"); valores.append(nacimiento)
+
         if nueva_pass:
+            if not contrasena_actual:
+                return jsonify({
+                    "ok": False,
+                    "error": "Debes ingresar tu contraseña actual para cambiarla."
+                }), 400
+
+            cursor.execute("SELECT Contrasena FROM usuarios WHERE Usuario_ID = ?", (usuario_id,))
+            fila_pwd = cursor.fetchone()
+            if not fila_pwd:
+                return jsonify({"ok": False, "error": "Usuario no encontrado."}), 404
+
+            if not _verificar_password_contra_hash(fila_pwd['Contrasena'], contrasena_actual):
+                return jsonify({"ok": False, "error": "La contraseña actual es incorrecta."}), 401
+
             ok, msg = _validar_politica_password(nueva_pass)
             if not ok:
                 return jsonify({"ok": False, "error": msg}), 400
@@ -1055,6 +1063,121 @@ def actualizar_perfil_paciente():
         conexion.commit()
         return jsonify({"ok": True, "mensaje": "Perfil actualizado correctamente."}), 200
 
+    except Exception as e:
+        if conexion:
+            try: conexion.rollback()
+            except Exception: pass
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if conexion:
+            conexion.close()
+
+
+# =============================================================================
+# MULTAS — GET todas (Administrador)
+# =============================================================================
+
+@usuarios_bp.route('/multas', methods=['GET'])
+def get_multas():
+    conexion = None
+    try:
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
+        cursor.execute("""
+            SELECT
+                m.Multa_ID,
+                m.Cita_ID,
+                u.Nombres || ' ' || u.Apellidos   AS NombrePaciente,
+                u.NumeroDocumento,
+                td.Nombre_Tipo_Documento,
+                c.Motivo_Consulta                 AS Concepto,
+                a.Fecha,
+                a.Hora_Inicio,
+                em.Nombre_Estado                  AS EstadoMulta,
+                m.EstadoMulta_ID
+            FROM multa m
+            JOIN cita c       ON c.Cita_ID         = m.Cita_ID
+            JOIN agenda a     ON a.Agenda_ID        = c.Agenda_ID
+            JOIN paciente p   ON p.Paciente_ID      = c.Paciente_ID
+            JOIN usuarios u   ON u.Usuario_ID       = p.Usuario_ID
+            LEFT JOIN tipo_documento td ON td.TipoDoc_ID = u.TipoDoc_ID
+            JOIN estado_multa em ON em.EstadoMulta_ID = m.EstadoMulta_ID
+            ORDER BY m.Multa_ID DESC
+        """)
+        filas = cursor.fetchall()
+        return jsonify({"ok": True, "data": [dict(f) for f in filas]}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if conexion:
+            conexion.close()
+
+
+# =============================================================================
+# MULTAS — GET por paciente (Paciente)
+# =============================================================================
+
+@usuarios_bp.route('/multas/paciente/<int:paciente_id>', methods=['GET'])
+def get_multas_paciente(paciente_id):
+    conexion = None
+    try:
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
+        cursor.execute("""
+            SELECT
+                m.Multa_ID,
+                m.Cita_ID,
+                c.Motivo_Consulta  AS Concepto,
+                a.Fecha,
+                a.Hora_Inicio,
+                esp.Nombres || ' ' || esp.Apellidos AS NombreEspecialista,
+                esp2.Nombre_Especialidad,
+                em.Nombre_Estado   AS EstadoMulta,
+                m.EstadoMulta_ID
+            FROM multa m
+            JOIN cita c              ON c.Cita_ID          = m.Cita_ID
+            JOIN agenda a            ON a.Agenda_ID         = c.Agenda_ID
+            JOIN especialista e      ON e.Especialista_ID   = a.Especialista_ID
+            JOIN usuarios esp        ON esp.Usuario_ID      = e.Usuario_ID
+            LEFT JOIN especialista_especialidad ee  ON ee.Especialista_ID  = e.Especialista_ID
+            LEFT JOIN especialidad esp2             ON esp2.Especialidad_ID = ee.Especialidad_ID
+            JOIN estado_multa em     ON em.EstadoMulta_ID  = m.EstadoMulta_ID
+            WHERE c.Paciente_ID = ?
+            ORDER BY m.Multa_ID DESC
+        """, (paciente_id,))
+        filas = cursor.fetchall()
+        return jsonify({"ok": True, "data": [dict(f) for f in filas]}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if conexion:
+            conexion.close()
+
+
+# =============================================================================
+# MULTAS — PUT marcar como pagada (Administrador)
+# =============================================================================
+
+@usuarios_bp.route('/multas/<int:multa_id>/pagar', methods=['PUT'])
+def pagar_multa(multa_id):
+    conexion = None
+    try:
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
+        cursor.execute(
+            "SELECT Multa_ID, EstadoMulta_ID FROM multa WHERE Multa_ID = ?", (multa_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"ok": False, "error": "Multa no encontrada."}), 404
+        if row['EstadoMulta_ID'] == 2:
+            return jsonify({"ok": False, "error": "La multa ya está marcada como Pagada."}), 409
+
+        cursor.execute(
+            "UPDATE multa SET EstadoMulta_ID = 2 WHERE Multa_ID = ?", (multa_id,)
+        )
+        conexion.commit()
+        return jsonify({"ok": True, "mensaje": f"Multa #{multa_id} marcada como Pagada."}), 200
     except Exception as e:
         if conexion:
             try: conexion.rollback()

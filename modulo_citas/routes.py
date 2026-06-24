@@ -7,7 +7,7 @@ Endpoints REST. Integra todas las funcionalidades de ambas versiones:
   • POST /api/usuarios                          — Crear usuario
   • GET  /api/paciente/por-usuario/<uid>        — Resolver Paciente_ID desde Usuario_ID
   • GET  /api/especialistas                     — Lista de especialistas con especialidad
-  • GET  /api/especialista/perfil/<usuario_id>  — Perfil completo del especialista (NUEVO)
+  • GET  /api/especialista/perfil/<usuario_id>  — Perfil completo del especialista
   • GET  /api/agenda                            — Slots de agenda (filtrable)
   • POST /api/agenda                            — Crear slot de agenda
   • DELETE /api/agenda/<id>                     — Eliminar slot disponible
@@ -33,13 +33,7 @@ Endpoints REST. Integra todas las funcionalidades de ambas versiones:
   • PUT  /api/config-ranking                    — REQ 8/9: Actualizar configuración
   • POST /api/verificar-password                — Verificar contraseña del usuario
   • POST /api/actualizar-perfil-paciente        — Actualizar datos del paciente
-
-NOTA DE FUSIÓN:
-  Este archivo reemplaza por completo la versión anterior de
-  modulo_citas/routes.py (la que usaba "especialistas" en plural y
-  Estado_ID/Estado_Envio inconsistentes con init_db.py). Esa versión
-  quedó OBSOLETA y fue eliminada porque no coincidía con el esquema
-  real de odent.db y duplicaba el mismo Blueprint 'citas_bp'.
+  • GET  /api/paciente/<id>/encuestas-pendientes — Encuestas pendientes del paciente (NUEVO)
 """
 
 from flask import Blueprint, request, jsonify
@@ -48,10 +42,23 @@ from datetime import date, datetime, timedelta
 import re
 import threading
 import logging
+import os
+import sqlite3
 
 logger = logging.getLogger("stylo_dental_smtp")
 
 citas_bp = Blueprint('citas_bp', __name__)
+
+# ─── Ruta absoluta a odent.db (REQ: evitar BD fantasma) ──────────────────────
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH  = os.path.join(BASE_DIR, 'odent.db')
+
+
+def _get_conn():
+    """Conexión directa con ruta absoluta garantizada."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -189,10 +196,6 @@ def _garantizar_historial_clinico(cur, cita_id, diagnosticos=None,
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _crear_promedio(cur, especialista_id: int) -> float:
-    """
-    Recalcula el promedio matemático acumulado del especialista basado en
-    la totalidad de sus respuestas en respuesta_ranking.
-    """
     cur.execute("""
         SELECT ROUND(AVG(CAST(rr.Respuesta AS REAL)), 2) AS Promedio,
                COUNT(rr.Respuesta_ID)                    AS Total
@@ -211,14 +214,9 @@ def _crear_promedio(cur, especialista_id: int) -> float:
 
 @citas_bp.route('/config-ranking', methods=['GET'])
 def get_config_ranking():
-    """
-    Devuelve la configuración de envío automático de encuestas.
-    REQ 8: Horas_Envio  — retraso en horas desde la finalización de consulta.
-    REQ 9: Estado_Envio — 1=ACTIVO (envía correos), 0=INACTIVO (kill-switch).
-    """
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("SELECT Config_ID, Horas_Envio, Estado_Envio FROM config_ranking LIMIT 1")
         row = cur.fetchone()
@@ -237,11 +235,6 @@ def get_config_ranking():
 
 @citas_bp.route('/config-ranking', methods=['PUT'])
 def put_config_ranking():
-    """
-    Actualiza Horas_Envio y/o Estado_Envio.
-    REQ 8: horas_envio  → cuántas horas esperar antes de enviar el correo.
-    REQ 9: estado_envio → kill-switch: 0=INACTIVO detiene TODO envío.
-    """
     datos        = request.get_json(silent=True) or {}
     horas_envio  = datos.get('Horas_Envio')
     estado_envio = datos.get('Estado_Envio')
@@ -251,7 +244,7 @@ def put_config_ranking():
 
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("SELECT Config_ID FROM config_ranking LIMIT 1")
         if not cur.fetchone():
@@ -356,7 +349,7 @@ def _despachar_correo_encuesta(cita_id: int, correo_paciente: str,
 
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         # Re-verificar el kill-switch DESPUÉS del retraso (REQ 9)
         cur.execute("SELECT Estado_Envio FROM config_ranking LIMIT 1")
@@ -400,7 +393,7 @@ def _despachar_correo_encuesta(cita_id: int, correo_paciente: str,
 def get_usuarios():
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("""
             SELECT u.Usuario_ID, u.Nombres, u.Apellidos, u.NumeroDocumento,
@@ -422,7 +415,7 @@ def get_usuarios():
 def get_paciente_por_usuario(usuario_id):
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("""
             SELECT p.Paciente_ID, p.Usuario_ID, u.Nombres, u.Apellidos,
@@ -448,7 +441,7 @@ def get_paciente_por_usuario(usuario_id):
 def get_especialistas():
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("""
             SELECT e.Especialista_ID,
@@ -472,18 +465,13 @@ def get_especialistas():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PERFIL DEL ESPECIALISTA  —  GET /api/especialista/perfil/<usuario_id>
-# (NUEVO) Consumido por especialista.js → _cargarPerfilRealDesdeBD().
-# Hidrata el dropdown de perfil, el avatar y la sección "Mi Perfil" con
-# datos 100% reales de odent.db. Antes de este endpoint, ese fetch en el
-# frontend siempre fallaba (404) y el perfil quedaba solo con los datos
-# parciales que venían en sessionStorage desde el login.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/especialista/perfil/<int:usuario_id>', methods=['GET'])
 def get_perfil_especialista(usuario_id):
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("""
             SELECT
@@ -566,7 +554,7 @@ def crear_usuario():
 
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("""
             INSERT INTO usuarios
@@ -592,7 +580,6 @@ def crear_usuario():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # AGENDA  —  GET /api/agenda?especialista_id=&fecha=
-# Devuelve únicamente disponibilidades reales registradas en la BD.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/agenda', methods=['GET'])
@@ -601,7 +588,7 @@ def get_agenda():
     fecha  = request.args.get('fecha')
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         sql = """
             SELECT a.Agenda_ID, a.Especialista_ID,
@@ -634,7 +621,6 @@ def get_agenda():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CREAR SLOT DE AGENDA  —  POST /api/agenda
-# INSERT real en SQLite + commit. Devuelve Agenda_ID para render inmediato.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/agenda', methods=['POST'])
@@ -657,7 +643,7 @@ def crear_agenda():
 
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute(
             "SELECT Especialista_ID FROM especialista WHERE Especialista_ID = ?", (esp_id,)
@@ -687,14 +673,13 @@ def crear_agenda():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ELIMINAR SLOT DE AGENDA  —  DELETE /api/agenda/<agenda_id>
-# Solo elimina slots con estado "Disponible" (EstadoAgenda_ID = 1).
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/agenda/<int:agenda_id>', methods=['DELETE'])
 def eliminar_agenda(agenda_id):
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute(
             "SELECT Agenda_ID, EstadoAgenda_ID FROM agenda WHERE Agenda_ID = ?",
@@ -725,7 +710,7 @@ def get_citas():
     especialista_id = request.args.get('especialista_id')
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         sql = """
             SELECT c.Cita_ID, c.Motivo_Consulta, c.Encuesta_Enviada,
@@ -777,7 +762,7 @@ def crear_cita():
 
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         con.execute("PRAGMA foreign_keys = ON")
         cur = con.cursor()
         cur.execute("BEGIN TRANSACTION")
@@ -858,14 +843,13 @@ def crear_cita():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CITA INDIVIDUAL  —  GET /api/citas/<id>
-# Incluye TipoDocumento para hidratar el modal de Reporte Profesional.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>', methods=['GET'])
 def get_cita(cita_id):
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("""
             SELECT c.Cita_ID, c.Motivo_Consulta, c.Encuesta_Enviada,
@@ -907,7 +891,7 @@ def get_cita(cita_id):
 def marcar_en_proceso(cita_id):
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("SELECT Agenda_ID FROM cita WHERE Cita_ID = ?", (cita_id,))
         row = cur.fetchone()
@@ -937,18 +921,13 @@ def marcar_en_proceso(cita_id):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # REQ 3 — ATENDER CITA  —  PUT /api/citas/<id>/atender
-# El especialista hace clic en "ATENDER": registra el inicio de atención.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>/atender', methods=['PUT'])
 def atender_cita(cita_id):
-    """
-    Registra el inicio de atención de una cita.
-    Asegura EstadoAgenda_ID = 2 (Ocupado/En atención).
-    """
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("""
             SELECT c.Cita_ID, a.EstadoAgenda_ID, a.Agenda_ID
@@ -989,7 +968,7 @@ def marcar_atendido(cita_id):
 
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         con.execute("PRAGMA foreign_keys = ON")
         cur = con.cursor()
         cur.execute("BEGIN TRANSACTION")
@@ -1002,19 +981,26 @@ def marcar_atendido(cita_id):
 
         agenda_id = row['Agenda_ID']
 
-        cur.execute("""
-            SELECT EstadoAgenda_ID FROM estado_agenda
-            WHERE LOWER(Nombre_Estado) LIKE '%cumplid%'
-               OR LOWER(Nombre_Estado) LIKE '%atenid%'
-               OR LOWER(Nombre_Estado) LIKE '%atend%'
-            LIMIT 1
-        """)
-        estado_fila = cur.fetchone()
-        nuevo_estado_id = estado_fila['EstadoAgenda_ID'] if estado_fila else 4
+        # ── REQ 1: UPDATE real con commit — estado Cumplida (4) ──────────────
+        cur.execute(
+            "UPDATE agenda SET EstadoAgenda_ID = 4 WHERE Agenda_ID = ?",
+            (agenda_id,)
+        )
+
+        # ── REQ 1: Registrar fecha/hora de finalización real ─────────────────
+        fecha_hora_fin = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # Verificar si la columna FechaAtencion existe; si no, la añadimos
+        cur.execute("PRAGMA table_info(cita)")
+        columnas_cita = [col[1] for col in cur.fetchall()]
+        if 'FechaAtencion' not in columnas_cita:
+            try:
+                cur.execute("ALTER TABLE cita ADD COLUMN FechaAtencion TEXT")
+            except Exception:
+                pass
 
         cur.execute(
-            "UPDATE agenda SET EstadoAgenda_ID = ? WHERE Agenda_ID = ?",
-            (nuevo_estado_id, agenda_id)
+            "UPDATE cita SET FechaAtencion = ? WHERE Cita_ID = ?",
+            (fecha_hora_fin, cita_id)
         )
 
         historial_id = _garantizar_historial_clinico(
@@ -1029,6 +1015,7 @@ def marcar_atendido(cita_id):
             "ok": True,
             "status": "Cita marcada como Atendida.",
             "Historial_ID": historial_id,
+            "FechaAtencion": fecha_hora_fin,
         })
 
     except Exception as exc:
@@ -1048,7 +1035,7 @@ def marcar_atendido(cita_id):
 def finalizar_consulta(cita_id):
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
 
         cur.execute("""
@@ -1059,7 +1046,8 @@ def finalizar_consulta(cita_id):
                 a.EstadoAgenda_ID,
                 up.Correo                          AS CorreoPaciente,
                 up.Nombres || ' ' || up.Apellidos  AS NombrePaciente,
-                ue.Nombres || ' ' || ue.Apellidos  AS NombreEspecialista
+                ue.Nombres || ' ' || ue.Apellidos  AS NombreEspecialista,
+                p.Paciente_ID
             FROM cita c
             JOIN agenda a      ON a.Agenda_ID    = c.Agenda_ID
             JOIN paciente p    ON p.Paciente_ID  = c.Paciente_ID
@@ -1077,12 +1065,65 @@ def finalizar_consulta(cita_id):
                 'Solo se puede finalizar una cita en estado Disponible u Ocupado.'
             )
 
+        # ── REQ 1: UPDATE estado + FechaAtencion + commit real ───────────────
+        fecha_hora_fin = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
         cur.execute(
             "UPDATE agenda SET EstadoAgenda_ID = 4 WHERE Agenda_ID = ?",
             (row['Agenda_ID'],)
         )
+
+        # Añadir columna si no existe
+        cur.execute("PRAGMA table_info(cita)")
+        columnas_cita = [col[1] for col in cur.fetchall()]
+        if 'FechaAtencion' not in columnas_cita:
+            try:
+                cur.execute("ALTER TABLE cita ADD COLUMN FechaAtencion TEXT")
+            except Exception:
+                pass
+
+        cur.execute(
+            "UPDATE cita SET FechaAtencion = ? WHERE Cita_ID = ?",
+            (fecha_hora_fin, cita_id)
+        )
+
+        # ── REQ 3: Vincular con ranking — marcar encuesta pendiente ──────────
+        # Obtener preguntas activas para crear registros pendientes
+        cur.execute(
+            "SELECT Preguntas_ID FROM preguntas_ranking WHERE Activa = 1 ORDER BY Preguntas_ID"
+        )
+        preguntas_activas = cur.fetchall()
+
+        # Verificar/crear tabla encuesta_pendiente si no existe
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS encuesta_pendiente (
+                Pendiente_ID  INTEGER PRIMARY KEY AUTOINCREMENT,
+                Cita_ID       INT NOT NULL,
+                Paciente_ID   INT NOT NULL,
+                Fecha_Creacion TEXT NOT NULL,
+                Completada    INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (Cita_ID)     REFERENCES cita(Cita_ID),
+                FOREIGN KEY (Paciente_ID) REFERENCES paciente(Paciente_ID)
+            )
+        """)
+
+        # Insertar encuesta pendiente solo si no existe ya
+        cur.execute(
+            "SELECT Pendiente_ID FROM encuesta_pendiente WHERE Cita_ID = ?", (cita_id,)
+        )
+        if not cur.fetchone():
+            cur.execute("""
+                INSERT INTO encuesta_pendiente (Cita_ID, Paciente_ID, Fecha_Creacion, Completada)
+                VALUES (?, ?, ?, 0)
+            """, (cita_id, row['Paciente_ID'], fecha_hora_fin))
+            logger.info(
+                "[RANKING] Encuesta pendiente creada para cita %d, paciente %d",
+                cita_id, row['Paciente_ID']
+            )
+
         con.commit()
 
+        # ── REQ 8/9: Leer configuración de envío ─────────────────────────────
         cur.execute("SELECT Horas_Envio, Estado_Envio FROM config_ranking LIMIT 1")
         cfg = cur.fetchone()
         horas_envio  = cfg['Horas_Envio']  if cfg else 2
@@ -1096,6 +1137,7 @@ def finalizar_consulta(cita_id):
                 "ok": True,
                 "status": "Consulta finalizada. Envío de encuesta desactivado (kill-switch).",
                 "correo_enviado": False,
+                "FechaAtencion": fecha_hora_fin,
             })
 
         correo_paciente     = row['CorreoPaciente']
@@ -1129,12 +1171,63 @@ def finalizar_consulta(cita_id):
             "ok": True,
             "status": f"Consulta finalizada. {correo_msg}",
             "correo_enviado": bool(correo_paciente),
+            "FechaAtencion": fecha_hora_fin,
         })
 
     except Exception as exc:
         if con:
             try: con.rollback()
             except Exception: pass
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REQ 3 — ENCUESTAS PENDIENTES DEL PACIENTE  (NUEVO)
+# GET /api/paciente/<id>/encuestas-pendientes
+# Consumido por el panel del paciente para mostrar notificación visual.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/paciente/<int:paciente_id>/encuestas-pendientes', methods=['GET'])
+def get_encuestas_pendientes(paciente_id):
+    con = None
+    try:
+        con = _get_conn()
+        cur = con.cursor()
+
+        # Crear tabla si no existe (primera ejecución)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS encuesta_pendiente (
+                Pendiente_ID  INTEGER PRIMARY KEY AUTOINCREMENT,
+                Cita_ID       INT NOT NULL,
+                Paciente_ID   INT NOT NULL,
+                Fecha_Creacion TEXT NOT NULL,
+                Completada    INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        con.commit()
+
+        cur.execute("""
+            SELECT ep.Pendiente_ID, ep.Cita_ID, ep.Fecha_Creacion,
+                   c.Motivo_Consulta,
+                   ue.Nombres || ' ' || ue.Apellidos AS NombreEspecialista,
+                   a.Fecha AS FechaCita
+            FROM encuesta_pendiente ep
+            JOIN cita c         ON c.Cita_ID       = ep.Cita_ID
+            JOIN agenda a       ON a.Agenda_ID      = c.Agenda_ID
+            JOIN especialista e ON e.Especialista_ID = a.Especialista_ID
+            JOIN usuarios ue    ON ue.Usuario_ID    = e.Usuario_ID
+            WHERE ep.Paciente_ID = ? AND ep.Completada = 0
+            ORDER BY ep.Fecha_Creacion DESC
+        """, (paciente_id,))
+        pendientes = _rows_to_list(cur)
+        return _json_ok({
+            "ok": True,
+            "total": len(pendientes),
+            "pendientes": pendientes
+        })
+    except Exception as exc:
         return _json_error(str(exc), 500)
     finally:
         if con: con.close()
@@ -1148,7 +1241,7 @@ def finalizar_consulta(cita_id):
 def cancelar_cita(cita_id):
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("SELECT Agenda_ID FROM cita WHERE Cita_ID = ?", (cita_id,))
         row = cur.fetchone()
@@ -1174,7 +1267,7 @@ def cancelar_cita(cita_id):
 def cancelar_cita_sin_multa(cita_id):
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("""
             SELECT c.Agenda_ID, a.Fecha, a.Hora_Inicio
@@ -1208,7 +1301,7 @@ def cancelar_cita_sin_multa(cita_id):
 def cancelar_cita_con_multa(cita_id):
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("""
             SELECT c.Agenda_ID FROM cita c
@@ -1238,7 +1331,7 @@ def cancelar_cita_con_multa(cita_id):
 def get_citas_paciente(paciente_id):
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("""
             SELECT c.Cita_ID, c.Motivo_Consulta, c.Encuesta_Enviada,
@@ -1273,16 +1366,24 @@ def get_citas_paciente(paciente_id):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CITAS POR ESPECIALISTA  —  GET /api/especialista/<id>/citas
+# REQ 1: incluye FechaAtencion para calcular "Atendidos Hoy" en tiempo real
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/especialista/<int:especialista_id>/citas', methods=['GET'])
 def get_citas_especialista(especialista_id):
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
-        cur.execute("""
+
+        # Verificar si columna FechaAtencion existe
+        cur.execute("PRAGMA table_info(cita)")
+        columnas_cita = [col[1] for col in cur.fetchall()]
+        fecha_atencion_col = "c.FechaAtencion" if 'FechaAtencion' in columnas_cita else "NULL AS FechaAtencion"
+
+        cur.execute(f"""
             SELECT c.Cita_ID, c.Motivo_Consulta, c.Encuesta_Enviada,
+                   {fecha_atencion_col},
                    a.Fecha, a.Hora_Inicio,
                    a.Hora_Final AS Hora_Fin,
                    ea.Nombre_Estado AS EstadoAgenda,
@@ -1321,7 +1422,7 @@ def get_citas_especialista(especialista_id):
 def get_multas():
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("""
             SELECT m.Multa_ID, m.Cita_ID,
@@ -1347,7 +1448,7 @@ def get_multas():
 def pagar_multa(multa_id):
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("UPDATE multa SET EstadoMulta_ID = 2 WHERE Multa_ID = ?", (multa_id,))
         if cur.rowcount == 0:
@@ -1365,7 +1466,7 @@ def pagar_multa(multa_id):
 def multa_activa(paciente_id):
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("""
             SELECT m.Multa_ID FROM multa m
@@ -1398,7 +1499,7 @@ def crear_historial_clinico():
 
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("SELECT Cita_ID FROM cita WHERE Cita_ID = ?", (cita_id,))
         if not cur.fetchone():
@@ -1427,7 +1528,7 @@ def crear_historial_clinico():
 def get_historial_clinico(cita_id):
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
 
         cur.execute(
@@ -1513,7 +1614,7 @@ def crear_respuesta_ranking():
 
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
 
         cur.execute("SELECT Estado_Envio FROM config_ranking LIMIT 1")
@@ -1583,6 +1684,33 @@ def crear_respuesta_ranking():
                 especialista_id, nuevo_promedio
             )
 
+        # ── Marcar encuesta pendiente como completada si todas las preguntas respondidas
+        cur.execute(
+            "SELECT COUNT(*) AS total FROM preguntas_ranking WHERE Activa = 1"
+        )
+        total_preguntas = cur.fetchone()['total']
+        cur.execute(
+            "SELECT COUNT(*) AS respondidas FROM respuesta_ranking WHERE Cita_ID = ?",
+            (cita_id_final,)
+        )
+        total_respondidas = cur.fetchone()['respondidas']
+
+        if total_respondidas >= total_preguntas:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS encuesta_pendiente (
+                    Pendiente_ID  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Cita_ID       INT NOT NULL,
+                    Paciente_ID   INT NOT NULL,
+                    Fecha_Creacion TEXT NOT NULL,
+                    Completada    INTEGER NOT NULL DEFAULT 0
+                )
+            """)
+            cur.execute(
+                "UPDATE encuesta_pendiente SET Completada = 1 WHERE Cita_ID = ?",
+                (cita_id_final,)
+            )
+            logger.info("[RANKING] Encuesta completada para cita %d", cita_id_final)
+
         con.commit()
         return _json_ok({"ok": True, "Respuesta_ID": respuesta_id}, 201)
 
@@ -1610,7 +1738,7 @@ def verificar_password():
 
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         cur.execute("SELECT Contrasena FROM usuarios WHERE Usuario_ID = ?", (usuario_id,))
         row = cur.fetchone()
@@ -1658,7 +1786,7 @@ def actualizar_perfil_paciente():
 
     con = None
     try:
-        con = get_db_connection()
+        con = _get_conn()
         cur = con.cursor()
         campos  = []
         valores = []

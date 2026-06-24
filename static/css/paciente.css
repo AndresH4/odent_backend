@@ -1,5 +1,5 @@
 /* ===================================================================
-   paciente.css — Stylo Dental Pro v3.0
+   paciente.css — Stylo Dental Pro v3.1
    =================================================================== */
 
 :root {
@@ -231,7 +231,8 @@ body {
     padding:         30px;
 }
 
-.modal-overlay.flex {
+.modal-overlay.flex,
+.modal-overlay[style*="flex"] {
     display:   flex;
     animation: modalFade 0.5s cubic-bezier(0.23, 1, 0.32, 1);
 }
@@ -253,18 +254,77 @@ body {
     border:        1px solid rgba(255,255,255,0.5);
 }
 
-#modalConfirmarSimple .modal-content {
-    max-width: 440px;
+/* ===================================================================
+   MODAL REPORTE CLÍNICO PACIENTE — mismas clases que especialista
+   =================================================================== */
+.reporte-clinico-body {
+    padding: 32px;
+    background: #f8fafc;
 }
+.reporte-clinico-card {
+    background:    #ffffff;
+    border-radius: 28px;
+    padding:       28px;
+    border:        1px solid #e2e8f0;
+    box-shadow:    0 2px 8px rgba(0,0,0,0.04);
+    margin-bottom: 20px;
+}
+.reporte-clinico-card:last-child { margin-bottom: 0; }
 
-/* Tono rojo suave para modales de advertencia/error */
-.border-red-400 { border-color: #f87171 !important; }
-.text-red-400   { color: #f87171 !important; }
-.bg-red-500     { background-color: #ef4444 !important; }
-.hover\:bg-red-600:hover { background-color: #dc2626 !important; }
-.bg-red-50      { background-color: #fff5f5 !important; }
-.text-red-500   { color: #ef4444 !important; }
-.border-red-200 { border-color: #fecaca !important; }
+.reporte-section-label {
+    display:        flex;
+    align-items:    center;
+    gap:            8px;
+    font-size:      10px;
+    font-weight:    900;
+    text-transform: uppercase;
+    letter-spacing: 0.35em;
+    margin-bottom:  16px;
+}
+.reporte-section-label.sky    { color: #0284c7; }
+.reporte-section-label.amber  { color: #d97706; }
+.reporte-section-label.emerald{ color: #059669; }
+.reporte-section-label.slate  { color: #475569; }
+
+.reporte-dato-mini {
+    font-size:      9px;
+    font-weight:    900;
+    color:          #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-bottom:  4px;
+}
+.reporte-dato-valor {
+    font-size:   14px;
+    font-weight: 800;
+    color:       #0f172a;
+    line-height: 1.3;
+}
+.reporte-dato-valor.muted { color: #64748b; font-weight: 600; }
+
+.report-value-readonly {
+    color:          #0f172a;
+    font-weight:    600;
+    font-size:      14px;
+    line-height:    1.65;
+    padding:        14px 16px;
+    background:     #f8fafc;
+    border-radius:  18px;
+    border:         1px solid #e2e8f0;
+    border-left:    5px solid var(--primary);
+    white-space:    pre-wrap;
+    word-break:     break-word;
+    user-select:    text;
+    pointer-events: auto;
+}
+.report-value-readonly:empty::before {
+    content:     'Sin información registrada';
+    color:       #94a3b8;
+    font-style:  italic;
+    font-weight: 500;
+}
+#rep-pac-prescripcion.report-value-readonly { border-left-color: #10b981; }
+#rep-pac-evolucion.report-value-readonly    { border-left-color: #f59e0b; }
 
 /* ===================================================================
    INPUTS
@@ -291,7 +351,7 @@ body {
 }
 
 /* ===================================================================
-   WRAPPER DE CAMPO DE CONTRASEÑA CON ÍCONO OJO
+   WRAPPER CONTRASEÑA CON ÍCONO OJO
    =================================================================== */
 .pass-input-wrapper {
     position: relative;
@@ -349,32 +409,12 @@ body {
     transition:      background-color 0.25s ease, color 0.25s ease;
 }
 
-.req-item.req-pending {
-    color: #94a3b8;
-}
-
-.req-item.req-pending .req-icon {
-    background-color: #e2e8f0;
-    color:            #64748b;
-}
-
-.req-item.req-ok {
-    color: #15803d;
-}
-
-.req-item.req-ok .req-icon {
-    background-color: #dcfce7;
-    color:            #15803d;
-}
-
-.req-item.req-error {
-    color: #dc2626;
-}
-
-.req-item.req-error .req-icon {
-    background-color: #fee2e2;
-    color:            #dc2626;
-}
+.req-item.req-pending          { color: #94a3b8; }
+.req-item.req-pending .req-icon { background-color: #e2e8f0; color: #64748b; }
+.req-item.req-ok               { color: #15803d; }
+.req-item.req-ok .req-icon     { background-color: #dcfce7; color: #15803d; }
+.req-item.req-error            { color: #dc2626; }
+.req-item.req-error .req-icon  { background-color: #fee2e2; color: #dc2626; }
 
 /* ===================================================================
    LABELS / DATA

@@ -78,7 +78,6 @@
                     <i class="fas fa-chevron-down text-sm text-slate-300 ml-4 group-hover:text-sky-600 transition-colors"></i>
                 </button>
 
-                <!-- DROPDOWN PERFIL -->
                 <div id="profile-dropdown" class="absolute top-full right-0 mt-6 w-96 bg-white rounded-[2.5rem] shadow-[0_30px_70px_rgba(0,0,0,0.2)] border border-slate-50 p-10">
                     <div class="text-center pb-8 border-b border-slate-100">
                         <div id="avatar-grande" class="w-24 h-24 bg-sky-50 text-sky-600 rounded-3xl flex items-center justify-center text-4xl font-black uppercase mx-auto mb-5 border-4 border-white shadow-xl"></div>
@@ -409,7 +408,6 @@
                                     </button>
                                 </div>
                             </div>
-                            <!-- Lista de requisitos -->
                             <div id="lista-requisitos-esp" class="bg-slate-50 rounded-2xl p-5 border border-slate-200">
                                 <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Requisitos de la contraseña</p>
                                 <ul class="space-y-2">
@@ -488,10 +486,10 @@
         </div>
     </div>
 
-    <!-- MODAL: REPORTE PROFESIONAL -->
+    <!-- MODAL: REPORTE PROFESIONAL (Especialista) -->
     <div id="modalReporte" class="modal-overlay">
         <div class="modal-content overflow-hidden" style="max-width:860px;">
-            <div class="bg-gradient-to-r from-sky-700 to-sky-900 p-12 flex justify-between items-start text-white">
+            <div class="bg-gradient-to-r from-sky-700 to-sky-900 p-12 flex justify-between items-start text-white rounded-t-[45px]">
                 <div>
                     <div class="flex items-center gap-4 mb-3">
                         <div class="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center border border-white/20">
@@ -509,23 +507,24 @@
                 </button>
             </div>
 
-            <div class="p-12 bg-slate-50/50">
-                <div class="bg-white rounded-[2rem] p-8 mb-8 border border-slate-100 shadow-sm">
-                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-5 flex items-center gap-2">
-                        <i class="fas fa-user-circle text-sky-500"></i> Paciente
+            <div class="reporte-clinico-body">
+                <!-- Datos del paciente -->
+                <div class="reporte-clinico-card">
+                    <p class="reporte-section-label slate">
+                        <i class="fas fa-user-circle"></i> Información del Paciente
                     </p>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div class="md:col-span-1">
-                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Nombre Completo</p>
-                            <p id="rep-paciente" class="font-black text-slate-800 text-base uppercase tracking-tight"></p>
+                            <p class="reporte-dato-mini">Nombre Completo</p>
+                            <p id="rep-paciente" class="reporte-dato-valor uppercase"></p>
                         </div>
                         <div>
-                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tipo de Documento</p>
-                            <p id="rep-tipo-doc" class="font-bold text-slate-700 text-sm">—</p>
+                            <p class="reporte-dato-mini">Tipo de Documento</p>
+                            <p id="rep-tipo-doc" class="reporte-dato-valor muted">—</p>
                         </div>
                         <div>
-                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Número de Documento</p>
-                            <p id="rep-num-doc" class="font-bold text-slate-700 text-sm">—</p>
+                            <p class="reporte-dato-mini">Número de Documento</p>
+                            <p id="rep-num-doc" class="reporte-dato-valor muted">—</p>
                         </div>
                     </div>
                     <div class="mt-4 pt-4 border-t border-slate-100">
@@ -533,29 +532,32 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                    <div class="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
-                        <p class="text-[10px] font-black text-sky-600 uppercase tracking-[0.3em] mb-4 flex items-center gap-2">
+                <!-- Diagnóstico y Evolución -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div class="reporte-clinico-card">
+                        <p class="reporte-section-label sky">
                             <i class="fas fa-stethoscope"></i> Diagnóstico
                         </p>
                         <div id="rep-diagnostico" class="report-value-readonly min-h-[60px]"></div>
                     </div>
-                    <div class="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
-                        <p class="text-[10px] font-black text-amber-600 uppercase tracking-[0.3em] mb-4 flex items-center gap-2">
+                    <div class="reporte-clinico-card">
+                        <p class="reporte-section-label amber">
                             <i class="fas fa-chart-line"></i> Evolución Clínica
                         </p>
                         <div id="rep-evolucion" class="report-value-readonly min-h-[60px] max-h-40 overflow-y-auto"></div>
                     </div>
                 </div>
 
-                <div class="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm mb-8">
-                    <p class="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em] mb-4 flex items-center gap-2">
+                <!-- Tratamiento -->
+                <div class="reporte-clinico-card" style="margin-top:20px;">
+                    <p class="reporte-section-label emerald">
                         <i class="fas fa-pills"></i> Tratamiento y Plan a Seguir
                     </p>
-                    <div id="rep-prescripcion" class="report-value-readonly min-h-[60px] max-h-48 overflow-y-auto border-l-emerald-500"></div>
+                    <div id="rep-prescripcion" class="report-value-readonly min-h-[60px] max-h-48 overflow-y-auto"></div>
                 </div>
 
-                <div class="flex items-center justify-between">
+                <!-- Footer -->
+                <div class="flex items-center justify-between mt-6">
                     <div class="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3">
                         <i class="fas fa-lock text-amber-500 text-sm"></i>
                         <p class="text-amber-700 text-[10px] font-black uppercase tracking-widest">Documento de solo lectura — No editable</p>

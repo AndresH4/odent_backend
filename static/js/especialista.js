@@ -1,9 +1,8 @@
-// especialista.js v10.0 — Integración total Backend-Frontend
-// REQ 1: avatar inicial primer nombre | REQ 2: perfil simplificado (sin documento)
-// REQ 3: contraseña con flujo paso a paso, validada contra hash real en BD
-// REQ 5: agenda real | REQ 6: reloj idéntico al de paciente.js
-// REQ 7: Finalizar Consulta — UPDATE + commit en BD y reflejo instantáneo en
-//        "Atendidos Hoy" únicamente cuando el backend confirma persistencia.
+// especialista.js v13.0
+// REQ 1: Atendidos Hoy usa FechaAtencion real de BD (no solo campo Fecha)
+// REQ 2: Fix maquetación inputs agenda — clase .has-value para placeholder
+// REQ 3: Notificación visual encuestas pendientes al finalizar consulta
+// REQ HC: irAHistoriaClinica redirige a /historial/paciente/<id>?cita_id=<id>
 'use strict';
 
 let indexActualGlobal     = null;
@@ -64,24 +63,30 @@ function filtrarTablaSeccion(tbodyId, query) {
     }
 }
 
-// REQ 1: Extrae ÚNICAMENTE la primera letra del PRIMER NOMBRE — 1 sola letra en mayúscula
 function _obtenerInicial(primerNombre) {
     const limpio = (primerNombre || '').trim();
     return limpio ? limpio.charAt(0).toUpperCase() : 'E';
 }
 
-// ─── SMART PICKERS (REQ 5) ───────────────────────────────────────────────────
+// ─── SMART PICKERS ────────────────────────────────────────────────────────────
 function dispararPicker(wrapper) {
     const input = wrapper.querySelector('input');
     if (!input) return;
     try { input.showPicker(); } catch (e) { input.focus(); input.click(); }
 }
+
 function actualizarPlaceholderVisual(input) {
     if (!input) return;
     const placeholder = document.getElementById(`${input.id}-placeholder`);
-    if (!placeholder) return;
-    placeholder.style.display = input.value ? 'none' : 'flex';
+    if (input.value) {
+        input.classList.add('has-value');
+        if (placeholder) placeholder.style.display = 'none';
+    } else {
+        input.classList.remove('has-value');
+        if (placeholder) placeholder.style.display = 'flex';
+    }
 }
+
 function inicializarPlaceholdersAgenda() {
     ['agenda-fecha', 'agenda-hora-inicio', 'agenda-hora-fin'].forEach(id => {
         const input = document.getElementById(id);
@@ -102,7 +107,7 @@ window.onclick = (e) => {
     }
 };
 
-// ─── RELOJ (REQ 6) — idéntico al de paciente.js ──────────────────────────────
+// ─── RELOJ ────────────────────────────────────────────────────────────────────
 function actualizarReloj() {
     const ahora = new Date();
     const dia   = ahora.getDay();
@@ -110,10 +115,10 @@ function actualizarReloj() {
 
     const el = document.getElementById('reloj');
     if (el) {
-        const h   = ahora.getHours();
-        const m   = String(ahora.getMinutes()).padStart(2, '0');
-        const s   = String(ahora.getSeconds()).padStart(2, '0');
-        const h12 = h % 12 || 12;
+        const h    = ahora.getHours();
+        const m    = String(ahora.getMinutes()).padStart(2, '0');
+        const s    = String(ahora.getSeconds()).padStart(2, '0');
+        const h12  = h % 12 || 12;
         const ampm = h < 12 ? 'A.M.' : 'P.M.';
         el.innerText = `${String(h12).padStart(2, '0')}:${m}:${s} ${ampm}`;
     }
@@ -150,7 +155,6 @@ const cargarInfoSesion = () => {
         if (u.Rol_ID !== 2) { window.location.replace('/login'); return; }
         usuarioSesionActual = u;
 
-        // REQ 1: render inmediato con 1 sola letra del PRIMER NOMBRE
         const nombreCompleto = `${u.Nombres || ''} ${u.Apellidos || ''}`.trim();
         const inicial        = _obtenerInicial(u.Nombres);
         _inyectarCampo('doctor-nombre-display', nombreCompleto || 'Especialista');
@@ -173,7 +177,7 @@ function _inyectarCampo(id, val, esInput = false) {
         : (el.innerText = val);
 }
 
-// ─── REQ 2: PERFIL 100% REAL DESDE BD ────────────────────────────────────────
+// ─── PERFIL REAL DESDE BD ─────────────────────────────────────────────────────
 async function _cargarPerfilRealDesdeBD(usuarioId) {
     try {
         const res = await fetch(`/api/especialista/perfil/${usuarioId}`);
@@ -183,7 +187,6 @@ async function _cargarPerfilRealDesdeBD(usuarioId) {
 
         const p = data.perfil;
 
-        // Actualizar sesión local con datos reales
         if (usuarioSesionActual) {
             Object.assign(usuarioSesionActual, {
                 Especialista_ID:     p.Especialista_ID     || usuarioSesionActual.Especialista_ID,
@@ -199,26 +202,21 @@ async function _cargarPerfilRealDesdeBD(usuarioId) {
             sessionStorage.setItem('odent_usuario', JSON.stringify(usuarioSesionActual));
         }
 
-        // REQ 1: Encabezado superior — 1 sola letra del PRIMER NOMBRE real
         _inyectarCampo('doctor-nombre-display', p.NombreCompleto);
         _inyectarCampo('doctor-avatar',         _obtenerInicial(p.Nombres));
         _inyectarCampo('avatar-grande',         _obtenerInicial(p.Nombres));
+        _inyectarCampo('nombre-menu',           p.NombreCompleto);
+        _inyectarCampo('esp-menu',              p.Especialidad);
+        _inyectarCampo('email-menu',            p.Correo);
+        _inyectarCampo('tel-menu',              p.Telefono);
+        _inyectarCampo('especialidad-menu',     p.Especialidad);
+        _inyectarCampo('tarjeta-menu',          p.Tarjeta_Profesional);
 
-        // Menú desplegable
-        _inyectarCampo('nombre-menu',       p.NombreCompleto);
-        _inyectarCampo('esp-menu',          p.Especialidad);
-        _inyectarCampo('email-menu',        p.Correo);
-        _inyectarCampo('tel-menu',          p.Telefono);
-        _inyectarCampo('especialidad-menu', p.Especialidad);
-        _inyectarCampo('tarjeta-menu',      p.Tarjeta_Profesional);
-
-        // Documento en el menú dropdown (solo lectura) — formato "Tipo: Número"
         const docConcatenado = (p.TipoDocumento && p.NumeroDocumento && p.TipoDocumento !== '—' && p.NumeroDocumento !== '—')
             ? `${p.TipoDocumento}: ${p.NumeroDocumento}`
             : (p.NumeroDocumento || '—');
         _inyectarCampo('doc-menu-concat', docConcatenado);
 
-        // Sección "Mi Perfil" — Nombres, Apellidos, Teléfono, Correo
         _inyectarCampo('conf-nombres',   p.Nombres,   true);
         _inyectarCampo('conf-apellidos', p.Apellidos, true);
         _inyectarCampo('conf-email',     p.Correo,    true);
@@ -232,13 +230,22 @@ async function _cargarPerfilRealDesdeBD(usuarioId) {
 
 // ─── RESOLUCIÓN DE ESTADO ─────────────────────────────────────────────────────
 function _resolverEstadoCita(c) {
-    const hoy = new Date().toISOString().split('T')[0];
-    const ea  = (c.EstadoAgenda || '').toLowerCase();
+    const ea = (c.EstadoAgenda || '').toLowerCase();
     if (ea === 'cancelado' || ea === 'cancelada') return 'Cancelada';
     if (ea === 'en proceso' || ea === 'atendiendo') return 'En proceso';
-    if (ea === 'ocupado' && c.Fecha < hoy) return 'Atendido';
     if (ea === 'cumplida' || ea === 'atendido') return 'Atendido';
+    if (c.FechaAtencion) return 'Atendido';
     return 'Pendiente';
+}
+
+function _esAtendidoHoy(cita) {
+    if (cita.estado !== 'Atendido') return false;
+    const hoy = new Date().toISOString().split('T')[0];
+    if (cita.FechaAtencion) {
+        const fechaAtencion = cita.FechaAtencion.split(' ')[0];
+        return fechaAtencion === hoy;
+    }
+    return cita.fecha === hoy;
 }
 
 // ─── CARGA DE CITAS ───────────────────────────────────────────────────────────
@@ -253,21 +260,22 @@ const cargarDatosEspecialista = async () => {
         const data = await res.json();
         if (Array.isArray(data)) {
             historialTotal = data.map(c => ({
-                Cita_ID:      c.Cita_ID,
-                nombre:       c.NombrePaciente      || '—',
-                tipoDoc:      c.TipoDocumento        || 'DOC',
-                numDoc:       c.NumeroDocumento      || '—',
-                telefono:     c.TelefonoPaciente     || '—',
-                especialidad: c.Nombre_Especialidad  || '—',
-                hora:         c.Hora_Inicio          || '—',
-                fecha:        c.Fecha                || '—',
-                motivo:       c.Motivo_Consulta      || '—',
-                estado:       _resolverEstadoCita(c),
-                EstadoAgenda: c.EstadoAgenda,
-                evolucion:    c.evolucion            || '',
-                prescripcion: c.prescripcion         || '',
-                cie10:        c.cie10                || '',
-                fechaAtencion:c.fechaAtencion        || '',
+                Cita_ID:       c.Cita_ID,
+                Paciente_ID:   c.Paciente_ID   || null,   // ← asegurar Paciente_ID
+                nombre:        c.NombrePaciente || '—',
+                tipoDoc:       c.TipoDocumento  || 'DOC',
+                numDoc:        c.NumeroDocumento || '—',
+                telefono:      c.TelefonoPaciente || '—',
+                especialidad:  c.Nombre_Especialidad || '—',
+                hora:          c.Hora_Inicio    || '—',
+                fecha:         c.Fecha          || '—',
+                motivo:        c.Motivo_Consulta || '—',
+                estado:        _resolverEstadoCita(c),
+                EstadoAgenda:  c.EstadoAgenda,
+                FechaAtencion: c.FechaAtencion  || null,
+                evolucion:     c.evolucion      || '',
+                prescripcion:  c.prescripcion   || '',
+                cie10:         c.cie10          || '',
             }));
             _renderTodas();
             await _cargarAgendaEspecialista(especialistaId);
@@ -282,7 +290,7 @@ const cargarDatosEspecialista = async () => {
     _renderTodas();
 };
 
-// ─── CARGA DE AGENDA (REQ 5) ──────────────────────────────────────────────────
+// ─── CARGA DE AGENDA ──────────────────────────────────────────────────────────
 async function _cargarAgendaEspecialista(especialistaId) {
     try {
         const res = await fetch(`/api/agenda?especialista_id=${especialistaId}`);
@@ -309,8 +317,9 @@ function _actualizarStats() {
     const noCanceladas = historialTotal.filter(c => c.estado !== 'Cancelada');
     const total        = noCanceladas.length;
     const pendientes   = noCanceladas.filter(c => c.estado === 'Pendiente').length;
-    const atendidosHoy = noCanceladas.filter(c => c.estado === 'Atendido' && c.fecha === hoy).length;
-    const futuras      = noCanceladas
+    const atendidosHoy = noCanceladas.filter(c => _esAtendidoHoy(c)).length;
+
+    const futuras = noCanceladas
         .filter(c => (c.estado === 'Pendiente' || c.estado === 'En proceso') && c.fecha >= hoy)
         .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
     const proxima = futuras[0] || null;
@@ -334,7 +343,7 @@ function _renderTablaInicio(filtro) {
     const mapa = {
         todos:     { lista: historialTotal.filter(c => c.estado !== 'Cancelada'), titulo: 'Total Pacientes' },
         Pendiente: { lista: historialTotal.filter(c => c.estado === 'Pendiente'), titulo: 'Por Atender' },
-        Atendido:  { lista: historialTotal.filter(c => c.estado === 'Atendido' && c.fecha === hoy), titulo: 'Atendidos Hoy' },
+        Atendido:  { lista: historialTotal.filter(c => _esAtendidoHoy(c)), titulo: 'Atendidos Hoy' },
         proxima:   {
             lista: (() => {
                 const f = historialTotal.filter(c => (c.estado === 'Pendiente' || c.estado === 'En proceso') && c.fecha >= hoy)
@@ -514,9 +523,6 @@ const abrirEmpezarCita = async (indice) => {
         if (!cita) return;
         citaActualEmpezar = indice;
 
-        localStorage.setItem('pacienteActivoDoc', cita.numDoc);
-        localStorage.setItem('citaActivaId', cita.Cita_ID || '');
-
         const set = (id, val) => { const e = document.getElementById(id); if (e) e.innerText = val || '—'; };
         set('empezar-nombre-modal', cita.nombre);
         set('empezar-nombre-dato',  cita.nombre);
@@ -552,11 +558,6 @@ const cerrarEmpezarCita = () => {
 };
 
 // ─── FINALIZAR CONSULTA ───────────────────────────────────────────────────────
-// REQ 7: ejecuta el UPDATE de la cita/agenda a "Atendido" (Cumplida) en la BD,
-// confirma el COMMIT correspondiente en el backend (/api/citas/<id>/atendido)
-// y solo entonces refleja el cambio de forma instantánea en "Atendidos Hoy".
-// Si el backend no confirma la persistencia, NO se actualiza el estado local,
-// evitando que la UI muestre un estado que nunca llegó a guardarse en BD.
 const finalizarConsultaDirecto = async () => {
     const indice = citaActualEmpezar;
     if (indice === null || indice === undefined) return;
@@ -575,8 +576,6 @@ const finalizarConsultaDirecto = async () => {
             Tratamiento:  cita.prescripcion || '',
         };
 
-        // UPDATE + COMMIT real en la BD (agenda.EstadoAgenda_ID → Cumplida y
-        // registro/actualización del historial clínico de la cita).
         const resp = await fetch(`/api/citas/${cita.Cita_ID}/atendido`, {
             method:  'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -589,22 +588,41 @@ const finalizarConsultaDirecto = async () => {
             return;
         }
 
-        if (data.Historial_ID) historialTotal[indice].Historial_ID = data.Historial_ID;
+        const fechaAtencionReal = data.FechaAtencion || new Date().toISOString().replace('T', ' ').split('.')[0];
 
-        // El backend ya confirmó el UPDATE + COMMIT; ahora se refleja de
-        // inmediato en la UI (tarjeta "Atendidos Hoy" y tabla de Inicio).
+        if (data.Historial_ID) historialTotal[indice].Historial_ID = data.Historial_ID;
         historialTotal[indice].estado        = 'Atendido';
         historialTotal[indice].EstadoAgenda  = 'Cumplida';
-        historialTotal[indice].fechaAtencion = new Date().toLocaleString('es-CO');
+        historialTotal[indice].FechaAtencion = fechaAtencionReal;
+
+        _lanzarFinalizarConsulta(cita.Cita_ID);
 
         cerrarEmpezarCita();
         _renderTodas();
-        mostrarToast('Consulta finalizada y registrada en el historial clínico.', 'success');
+        mostrarToast('Consulta finalizada y registrada. Se notificará al paciente.', 'success');
+
     } catch (err) {
         console.error('[especialista] Error finalizando consulta:', err);
         mostrarToast('Error al finalizar la consulta.', 'error');
     }
 };
+
+async function _lanzarFinalizarConsulta(citaId) {
+    try {
+        const resp = await fetch(`/api/citas/${citaId}/finalizar-consulta`, {
+            method:  'PUT',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (data.ok) logger_info(`[ENCUESTA] Encuesta pendiente creada para cita ${citaId}`);
+    } catch (err) {
+        console.warn('[especialista] No se pudo crear encuesta pendiente:', err);
+    }
+}
+
+function logger_info(msg) {
+    if (typeof console !== 'undefined') console.info(msg);
+}
 
 // ─── REPORTE PROFESIONAL ──────────────────────────────────────────────────────
 const verReporteProfesional = async (indice) => {
@@ -612,12 +630,12 @@ const verReporteProfesional = async (indice) => {
         const cita = historialTotal[indice];
         if (!cita) return;
 
-        let diagnostico   = cita.cie10        || 'No codificado';
-        let evolucion     = cita.evolucion    || 'Sin registro';
-        let prescripcion  = cita.prescripcion || 'Sin prescripción';
-        let fechaAtencion = cita.fechaAtencion || 'N/A';
-        let tipoDoc       = cita.tipoDoc       || 'DOC';
-        let numDoc        = cita.numDoc        || '—';
+        let diagnostico   = 'Sin diagnóstico';
+        let evolucion     = 'Sin registro';
+        let prescripcion  = 'Sin prescripción';
+        let fechaAtencion = 'N/A';
+        let tipoDoc       = cita.tipoDoc || 'DOC';
+        let numDoc        = cita.numDoc  || '—';
 
         if (cita.Cita_ID) {
             try {
@@ -635,6 +653,8 @@ const verReporteProfesional = async (indice) => {
                 console.warn('[especialista] Usando caché local para reporte.', err);
             }
 
+            if (cita.FechaAtencion && fechaAtencion === 'N/A') fechaAtencion = cita.FechaAtencion;
+
             try {
                 const resCita = await fetch(`/api/citas/${cita.Cita_ID}`);
                 if (resCita.ok) {
@@ -647,7 +667,7 @@ const verReporteProfesional = async (indice) => {
             }
         }
 
-        const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val || '—'; };
+        const setEl = (id, val) => { const el = document.getElementById(id); if (!el) return; el.innerText = val || '—'; };
         setEl('rep-paciente',       cita.nombre);
         setEl('rep-fecha-atencion', `Atendido: ${fechaAtencion}`);
         setEl('rep-cita-info',      `Cita #${cita.Cita_ID || '—'} — ${cita.fecha} ${formatearHoraAmPm(cita.hora)}`);
@@ -664,30 +684,63 @@ const verReporteProfesional = async (indice) => {
     }
 };
 
-// ─── HISTORIA CLÍNICA ─────────────────────────────────────────────────────────
+// ─── HISTORIA CLÍNICA — REDIRECCIÓN DINÁMICA ─────────────────────────────────
+// Captura el Paciente_ID y Cita_ID reales de la cita activa y navega a la
+// ruta Flask /historial/paciente/<paciente_id>?cita_id=<cita_id>
 const irAHistoriaClinica = () => {
     try {
         const indice = citaActualEmpezar;
-        if (indice === null || indice === undefined) { mostrarToast('No hay cita activa.', 'warning'); return; }
+        if (indice === null || indice === undefined) {
+            mostrarToast('No hay cita activa.', 'warning');
+            return;
+        }
         const cita = historialTotal[indice];
-        if (!cita) { mostrarToast('No se encontró la cita.', 'error'); return; }
-
-        localStorage.setItem('pacienteActivoDoc', cita.numDoc || '');
-        localStorage.setItem('citaActivaId',      String(cita.Cita_ID || ''));
-        localStorage.setItem('citaActivaData',    JSON.stringify({
-            Cita_ID: cita.Cita_ID, nombre: cita.nombre, numDoc: cita.numDoc,
-            telefono: cita.telefono, motivo: cita.motivo, fecha: cita.fecha, hora: cita.hora,
-        }));
-
-        const params = new URLSearchParams({ cita_id: cita.Cita_ID || '', doc: cita.numDoc || '' });
-        window.location.href = `/historia_clinica?${params.toString()}`;
+        if (!cita) {
+            mostrarToast('No se encontró la cita.', 'error');
+            return;
+        }
+        if (!cita.Cita_ID) {
+            mostrarToast('La cita no tiene un ID válido.', 'error');
+            return;
+        }
+ 
+        // Guardar referencias en sessionStorage (respaldo, no fuente principal)
+        sessionStorage.setItem('hc_cita_id',   String(cita.Cita_ID));
+        sessionStorage.setItem('hc_paciente_id', String(cita.Paciente_ID || ''));
+ 
+        // Navegar a la ruta Flask con parámetros reales
+        // El Paciente_ID viene de cita.Paciente_ID si está disponible,
+        // o se resuelve en el backend a través del Cita_ID.
+        // Si el objeto de cita no trae Paciente_ID directamente,
+        // el backend lo resuelve via JOIN con la tabla cita.
+        const pacienteId = cita.Paciente_ID || 0;
+        const params     = new URLSearchParams({ cita_id: cita.Cita_ID });
+ 
+        if (pacienteId) {
+            window.location.href = `/historial/paciente/${pacienteId}?${params}`;
+        } else {
+            // Fallback: resolver primero el Paciente_ID desde la API
+            fetch(`/api/citas/${cita.Cita_ID}`)
+                .then(r => r.json())
+                .then(d => {
+                    const pid = d.Paciente_ID;
+                    if (!pid) {
+                        mostrarToast('No se pudo resolver el paciente de esta cita.', 'error');
+                        return;
+                    }
+                    window.location.href = `/historial/paciente/${pid}?${params}`;
+                })
+                .catch(() => {
+                    mostrarToast('Error al obtener datos de la cita.', 'error');
+                });
+        }
     } catch (err) {
         console.error('[especialista] Error redirigiendo a historia clínica:', err);
         mostrarToast('Error al abrir la historia clínica.', 'error');
     }
 };
 
-// ─── AGENDA — GUARDAR FRANJA ──────────────────────────────────────────────────
+// ─── GUARDAR FRANJA HORARIA ───────────────────────────────────────────────────
 const guardarFranjaHoraria = async () => {
     const especialistaId = usuarioSesionActual?.Especialista_ID;
     if (!especialistaId) { mostrarToast('No se pudo identificar el especialista.', 'error'); return; }
@@ -728,10 +781,9 @@ const guardarFranjaHoraria = async () => {
             if (errorEl) { errorEl.innerText = data.error || 'No se pudo guardar la disponibilidad.'; errorEl.classList.remove('hidden'); }
             return;
         }
-        if (fechaInput)      fechaInput.value      = '';
-        if (horaInicioInput) horaInicioInput.value = '';
-        if (horaFinInput)    horaFinInput.value     = '';
-        inicializarPlaceholdersAgenda();
+        if (fechaInput)      { fechaInput.value      = ''; actualizarPlaceholderVisual(fechaInput); }
+        if (horaInicioInput) { horaInicioInput.value = ''; actualizarPlaceholderVisual(horaInicioInput); }
+        if (horaFinInput)    { horaFinInput.value     = ''; actualizarPlaceholderVisual(horaFinInput); }
         mostrarToast('Disponibilidad guardada correctamente.', 'success');
         await _cargarAgendaEspecialista(especialistaId);
     } catch (err) {
@@ -740,7 +792,7 @@ const guardarFranjaHoraria = async () => {
     }
 };
 
-// ─── AGENDA — ELIMINAR FRANJA ─────────────────────────────────────────────────
+// ─── ELIMINAR FRANJA ──────────────────────────────────────────────────────────
 function solicitarEliminarSlot(agendaId) {
     slotPendienteEliminar = agendaId;
     const modal = document.getElementById('modalEliminarSlot');
@@ -768,7 +820,7 @@ async function confirmarEliminarSlot() {
     slotPendienteEliminar = null;
 }
 
-// ─── TOGGLE VISIBILIDAD CONTRASEÑA ───────────────────────────────────────────
+// ─── TOGGLE CONTRASEÑA ────────────────────────────────────────────────────────
 window.togglePassVisibilidad = function(inputId, btn) {
     try {
         const input = document.getElementById(inputId);
@@ -784,7 +836,7 @@ window.togglePassVisibilidad = function(inputId, btn) {
     } catch (err) { console.warn('[especialista] Error toggle password:', err); }
 };
 
-// ─── VALIDACIÓN DE POLÍTICA DE CONTRASEÑA ────────────────────────────────────
+// ─── VALIDACIÓN CONTRASEÑA ────────────────────────────────────────────────────
 function _cumpleRequisitosEsp(pass) {
     return {
         length:  pass.length >= 8,
@@ -832,7 +884,6 @@ function _marcarRequisitosIncumplidosEsp() {
     return res.length && res.upper && res.lower && res.number && res.special;
 }
 
-// ─── RESET FLUJO CONTRASEÑA ───────────────────────────────────────────────────
 const _resetearFlujoPasswordEsp = () => {
     try {
         ['pass-actual', 'conf-pass-nueva', 'conf-pass-confirmar'].forEach(id => {
@@ -857,7 +908,6 @@ const _resetearFlujoPasswordEsp = () => {
     } catch (err) { console.warn('[especialista] Error reseteando formulario password:', err); }
 };
 
-// ─── VALIDAR CONTRASEÑA ACTUAL (PASO 1) ──────────────────────────────────────
 window.validarPasswordActualEsp = function () {
     const usuarioId   = usuarioSesionActual?.Usuario_ID;
     const inputActual = document.getElementById('pass-actual');
@@ -887,30 +937,19 @@ window.validarPasswordActualEsp = function () {
             document.getElementById('modalErrorPassword').style.display = 'flex';
         }
     })
-    .catch(() => {
-        mostrarToast('Error de conexión al verificar la contraseña.', 'error');
-    });
+    .catch(() => mostrarToast('Error de conexión al verificar la contraseña.', 'error'));
 };
 
-// ─── GUARDAR PERFIL ───────────────────────────────────────────────────────────
-// REQ 3: la contraseña actual es OBLIGATORIA para guardar cualquier cambio de
-// perfil — el backend (/api/usuarios/<id> PUT) la valida con check_password_hash
-// contra el hash real en odent.db ANTES de aplicar el cambio. Si se está
-// cambiando la contraseña, el backend genera y persiste el nuevo hash
-// (generate_password_hash, scrypt).
 const guardarPerfilCompleto = async () => {
-    const usuarioId   = usuarioSesionActual?.Usuario_ID;
-    const errActual   = document.getElementById('error-pass-actual');
-    const errNueva    = document.getElementById('error-pass-nueva');
-    const step2       = document.getElementById('pass-step2');
+    const usuarioId  = usuarioSesionActual?.Usuario_ID;
+    const errActual  = document.getElementById('error-pass-actual');
+    const errNueva   = document.getElementById('error-pass-nueva');
+    const step2      = document.getElementById('pass-step2');
 
     if (errActual) errActual.style.display = 'none';
     if (errNueva)  errNueva.style.display  = 'none';
 
-    if (!usuarioId) {
-        mostrarToast('No se pudo identificar la sesión.', 'error');
-        return;
-    }
+    if (!usuarioId) { mostrarToast('No se pudo identificar la sesión.', 'error'); return; }
 
     const nombres    = (document.getElementById('conf-nombres')?.value   || '').trim();
     const apellidos  = (document.getElementById('conf-apellidos')?.value || '').trim();
@@ -920,14 +959,11 @@ const guardarPerfilCompleto = async () => {
     const passNueva  = document.getElementById('conf-pass-nueva')?.value    || '';
     const passConf   = document.getElementById('conf-pass-confirmar')?.value || '';
 
-    // La contraseña actual es obligatoria para guardar cualquier cambio,
-    // ya que el backend la exige y la valida contra el hash real en BD.
     if (!passActual.trim()) {
         if (errActual) { errActual.innerText = 'Ingresa tu contraseña actual para guardar cambios.'; errActual.style.display = 'block'; }
         return;
     }
 
-    // Si el paso 2 está visible y hay nueva contraseña, validar requisitos y coincidencia
     if (step2?.style.display !== 'none' && passNueva) {
         const todosOk = _marcarRequisitosIncumplidosEsp();
         if (!todosOk) return;
@@ -947,7 +983,6 @@ const guardarPerfilCompleto = async () => {
                 Apellidos: apellidos,
                 Correo:    correo,
                 Telefono:  telefono,
-                // Si paso 2 activo y hay nueva contraseña, enviarla; sino null
                 nuevaPass: (step2?.style.display !== 'none' && passNueva) ? passNueva : null,
             })
         });
@@ -962,7 +997,6 @@ const guardarPerfilCompleto = async () => {
             return;
         }
 
-        // Actualizar sesión local
         if (usuarioSesionActual) {
             usuarioSesionActual.Nombres   = nombres   || usuarioSesionActual.Nombres;
             usuarioSesionActual.Apellidos = apellidos || usuarioSesionActual.Apellidos;
@@ -980,7 +1014,7 @@ const guardarPerfilCompleto = async () => {
     }
 };
 
-// ─── CONFIRMACIÓN SIMPLE ─────────────────────────────────────────────────────
+// ─── CONFIRMACIÓN SIMPLE ──────────────────────────────────────────────────────
 let accionPendienteSimple = '';
 function mostrarConfirmacionSimple(mensaje, accion) {
     try {
@@ -1015,9 +1049,17 @@ window.onload = () => {
         });
 
         const fechaInput = document.getElementById('agenda-fecha');
-        if (fechaInput) fechaInput.min = new Date().toISOString().split('T')[0];
-        inicializarPlaceholdersAgenda();
+        if (fechaInput) {
+            fechaInput.min = new Date().toISOString().split('T')[0];
+            fechaInput.addEventListener('change', () => actualizarPlaceholderVisual(fechaInput));
+        }
 
+        ['agenda-hora-inicio', 'agenda-hora-fin'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', () => actualizarPlaceholderVisual(el));
+        });
+
+        inicializarPlaceholdersAgenda();
         cargarInfoSesion();
         actualizarReloj();
         setInterval(actualizarReloj, 1000);

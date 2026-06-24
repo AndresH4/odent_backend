@@ -15,6 +15,7 @@ let _dropdownOpen          = false;
 const VISTAS_PACIENTE = {
     inicio   : { el: 'vista-inicio',    btn: 'btn-inicio',    titulo: 'Paciente'           },
     historial: { el: 'vista-historial', btn: 'btn-historial', titulo: 'Historial de Citas' },
+    multas   : { el: 'vista-multas',    btn: 'btn-multas',    titulo: 'Mis Multas'          },
     config   : { el: 'vista-config',    btn: 'btn-config',    titulo: 'Mi Perfil'          },
 };
 
@@ -263,6 +264,7 @@ window.cambiarVista = function (vista) {
     if (tituloEl) tituloEl.textContent = cfg.titulo;
 
     if (vista === 'historial') _renderHistorial();
+    if (vista === 'multas')    _renderMultasPaciente();
     if (vista === 'config')    _precargarPerfil();
 };
 
@@ -308,16 +310,9 @@ function _resolverEstado(c) {
     return { label: c.EstadoAgenda || '—', clase: 'bg-slate-100 text-slate-500' };
 }
 
-// ── Conjunto de estados que NUNCA deben aparecer en la sección "Inicio".
-// Toda cita cuya etiqueta resuelta (_resolverEstado) coincida con alguno de
-// estos valores queda forzosamente excluida de las citas activas/vigentes,
-// sin importar su EstadoAgenda crudo ni su Fecha. ────────────────────────────
 const ESTADOS_EXCLUIDOS_DE_INICIO = ['Cancelada', 'Cancelada con multa'];
 
 function _esCitaActiva(c) {
-    // Filtro estricto: si la etiqueta resuelta es "Cancelada" o "Cancelada con
-    // multa", la cita jamás se considera activa, independientemente de su
-    // EstadoAgenda crudo o de su Fecha.
     const estadoInfo = _resolverEstado(c);
     if (ESTADOS_EXCLUIDOS_DE_INICIO.includes(estadoInfo.label)) {
         return false;
@@ -329,12 +324,10 @@ function _esCitaActiva(c) {
 }
 
 function _esCitaHistorial(c) {
-    // Toda cita "Cancelada" o "Cancelada con multa" queda garantizada aquí,
-    // ya que _esCitaActiva las excluye explícitamente arriba.
     return !_esCitaActiva(c);
 }
 
-// ─── RENDER TABLA PRINCIPAL (INICIO) — Solo citas vigentes ──────────────────
+// ─── RENDER TABLA PRINCIPAL (INICIO) ─────────────────────────────────────────
 function _renderTablaCitas() {
     const tbody   = document.getElementById('tabla-citas-body');
     const noMsg   = document.getElementById('no-citas-msg');
@@ -389,7 +382,7 @@ function _renderTablaCitas() {
     });
 }
 
-// ─── RENDER HISTORIAL — Solo citas no activas ─────────────────────────────────
+// ─── RENDER HISTORIAL ─────────────────────────────────────────────────────────
 function _renderHistorial() {
     const tbody = document.getElementById('tabla-historial-completo');
     if (!tbody) return;
@@ -419,6 +412,75 @@ function _renderHistorial() {
             </td>`;
         tbody.appendChild(tr);
     });
+}
+
+// ─── MULTAS DEL PACIENTE ──────────────────────────────────────────────────────
+async function _renderMultasPaciente() {
+    const tbody  = document.getElementById('tabla-multas-paciente-body');
+    const noMsg  = document.getElementById('no-multas-msg');
+    const badge  = document.getElementById('badge-multas-pendientes');
+    if (!tbody) return;
+
+    if (!_pacienteId) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-10 text-center text-slate-400 font-bold italic text-xs uppercase">Cargando información...</td></tr>`;
+        return;
+    }
+
+    try {
+        const res  = await fetch(`/api/multas/paciente/${_pacienteId}`);
+        const json = await res.json();
+        const multas = json.ok ? json.data : [];
+
+        const pendientes = multas.filter(m => m.EstadoMulta_ID === 1 || (m.EstadoMulta || '').toLowerCase() === 'pendiente');
+
+        // Actualizar badge en el botón del sidebar
+        if (badge) {
+            if (pendientes.length > 0) {
+                badge.textContent = pendientes.length;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        tbody.innerHTML = '';
+
+        if (multas.length === 0) {
+            noMsg?.classList.remove('hidden');
+            return;
+        }
+        noMsg?.classList.add('hidden');
+
+        multas.forEach(m => {
+            const esPagada = m.EstadoMulta_ID === 2 || (m.EstadoMulta || '').toLowerCase() === 'pagada';
+            const badgeCls = esPagada
+                ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                : 'bg-amber-100 text-amber-700 border border-amber-200 animate-pulse-soft';
+            const badgeIcon = esPagada ? 'fa-circle-check' : 'fa-clock';
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="p-5 font-black text-slate-500 text-[11px]">#${m.Multa_ID}</td>
+                <td class="p-5 text-[10px] font-bold text-slate-600 uppercase">${m.Concepto || '—'}</td>
+                <td class="p-5 font-black text-sky-600 text-[10px] uppercase">${m.Nombre_Especialidad || '—'}</td>
+                <td class="p-5 text-[10px] font-bold text-slate-600">
+                    ${m.Fecha || '—'}<br>
+                    <span class="text-slate-400">${m.Hora_Inicio || ''}</span>
+                </td>
+                <td class="p-5 text-[10px] font-bold text-slate-600">Dr(a). ${m.NombreEspecialista || '—'}</td>
+                <td class="p-5 text-center">
+                    <span class="inline-flex items-center gap-1.5 text-[9px] font-black uppercase px-3 py-1.5 rounded-full ${badgeCls}">
+                        <i class="fas ${badgeIcon} text-[10px]"></i>
+                        ${esPagada ? 'Pagada' : 'Pendiente'}
+                    </span>
+                </td>`;
+            tbody.appendChild(tr);
+        });
+
+    } catch (err) {
+        console.error('[paciente] Error cargando multas:', err);
+        tbody.innerHTML = `<tr><td colspan="6" class="p-10 text-center text-red-400 font-bold italic text-xs uppercase">Error al cargar multas.</td></tr>`;
+    }
 }
 
 // ─── LÓGICA DE CANCELACIÓN CON DETECCIÓN DE MULTA ────────────────────────────
@@ -722,10 +784,7 @@ function _marcarRequisitosIncumplidos() {
     return res.length && res.upper && res.lower && res.number && res.special;
 }
 
-// ─── MI PERFIL — CARGA DE SELECTS EPS (COMPLETA, INDEPENDIENTE) ──────────────
-// Cada selector (Régimen, Tipo EPS, EPS) se carga con el 100% de los registros
-// de su tabla correspondiente. El Régimen ya NO depende de la EPS seleccionada;
-// se muestra el catálogo completo para que el paciente elija libremente.
+// ─── MI PERFIL — CARGA DE SELECTS EPS ────────────────────────────────────────
 let _listaEpsGlobal     = [];
 let _listaRegimenGlobal = [];
 let _listaTipoEpsGlobal = [];
@@ -742,7 +801,6 @@ async function _cargarSelectsEps() {
         _listaRegimenGlobal = _normalizar(resRegimen.ok ? await resRegimen.json() : []);
         _listaTipoEpsGlobal = _normalizar(resTipo.ok    ? await resTipo.json()    : []);
 
-        // ── 1. Poblar select de RÉGIMEN EPS — catálogo completo ───────────────
         const selRegimen = document.getElementById('edit-regimen-eps');
         if (selRegimen) {
             selRegimen.innerHTML = '<option value="">Seleccione Régimen...</option>';
@@ -757,7 +815,6 @@ async function _cargarSelectsEps() {
             });
         }
 
-        // ── 2. Poblar select de TIPO EPS — catálogo completo ─────────────────
         const selTipo = document.getElementById('edit-tipo-eps');
         if (selTipo) {
             selTipo.innerHTML = '<option value="">Seleccione Tipo EPS...</option>';
@@ -771,7 +828,6 @@ async function _cargarSelectsEps() {
             });
         }
 
-        // ── 3. Poblar select de EPS — catálogo completo ───────────────────────
         const selEps = document.getElementById('edit-eps');
         if (selEps) {
             selEps.innerHTML = '<option value="">Seleccione EPS...</option>';
@@ -796,7 +852,6 @@ async function _precargarPerfil() {
 
     _resetearFlujoPassword();
 
-    // ── 1. Obtener datos actualizados del usuario desde el backend ────────────
     try {
         const resUser = await fetch(`/api/usuarios/${_usuarioId}`);
         if (resUser.ok) {
@@ -810,17 +865,14 @@ async function _precargarPerfil() {
         console.warn('[perfil] No se pudo refrescar datos de usuario:', err);
     }
 
-    // ── 2. Precargar campos de texto con datos de la sesión (ya frescos) ──────
     const u = _sesionPaciente;
     const nombreCompleto = `${u.Nombres || ''} ${u.Apellidos || ''}`.trim();
     _setVal('edit-nombres',   nombreCompleto);
     _setVal('edit-correo',    u.Correo   || '');
     _setVal('edit-telefono',  u.Telefono || '');
 
-    // ── 3. Cargar TODOS los selects con el catálogo completo de la BD ─────────
     await _cargarSelectsEps();
 
-    // ── 4. Precargar valores actuales de afiliación del paciente ──────────────
     try {
         const resAfil = await fetch('/api/afiliacion');
         if (resAfil.ok) {
@@ -833,7 +885,6 @@ async function _precargarPerfil() {
                 const epsId     = afil.EPS_ID     || afil.Id_EPS     || afil.eps_id     || '';
                 const tipoEpsId = afil.TipoEPS_ID || afil.ID_Tipo_EPS || afil.tipoeps_id || '';
 
-                // Obtener el Regimen_ID a partir de la EPS actual del paciente
                 let regimenIdActual = '';
                 if (epsId) {
                     const epsObj = _listaEpsGlobal.find(e =>
@@ -859,9 +910,6 @@ async function _precargarPerfil() {
         console.warn('[perfil] Error precargando afiliación:', err);
     }
 
-    // ── 5. Listener: al cambiar EPS, sugerir el Régimen correspondiente ───────
-    // El selector de Régimen permanece editable con el catálogo completo;
-    // solo se pre-selecciona el régimen asociado a la EPS elegida como ayuda visual.
     const selEps = document.getElementById('edit-eps');
     if (selEps) {
         const selEpsNuevo = selEps.cloneNode(true);
@@ -872,11 +920,6 @@ async function _precargarPerfil() {
     }
 }
 
-/**
- * Pre-selecciona el Régimen asociado a la EPS elegida.
- * El select de Régimen permanece habilitado y con todas las opciones;
- * el paciente puede cambiarlo libremente si lo desea.
- */
 function _sugerirRegimenSegunEps(epsId) {
     const selRegimen = document.getElementById('edit-regimen-eps');
     if (!selRegimen || !epsId) return;
@@ -945,12 +988,7 @@ window.validarPasswordActual = function () {
     });
 };
 
-// ─── GUARDAR PERFIL — UPDATE REAL EN BD ──────────────────────────────────────
-// La contraseña nueva SOLO se aplica si:
-//   1) Se ingresó y confirmó correctamente (cumpliendo la política de seguridad), y
-//   2) Se envía la "Contraseña actual" junto con la solicitud, para que el backend
-//      la valide contra el hash real almacenado en odent.db (check_password_hash)
-//      ANTES de generar y persistir el nuevo hash (generate_password_hash).
+// ─── GUARDAR PERFIL ───────────────────────────────────────────────────────────
 window.guardarPerfilPaciente = function () {
     const nombreCompleto = (document.getElementById('edit-nombres')?.value || '').trim();
     const partes         = nombreCompleto.split(/\s+/);
@@ -967,7 +1005,6 @@ window.guardarPerfilPaciente = function () {
     const errNueva    = document.getElementById('error-pass-nueva');
     const step2       = document.getElementById('pass-step2');
 
-    // ── Leer valores de los selectores EPS (orden: Régimen, Tipo, EPS) ───────
     const selEps     = document.getElementById('edit-eps');
     const selTipoEps = document.getElementById('edit-tipo-eps');
     const regimenEl  = document.getElementById('edit-regimen-eps');
@@ -978,7 +1015,6 @@ window.guardarPerfilPaciente = function () {
 
     const cambiandoPassword = step2?.style.display !== 'none' && !!passNueva;
 
-    // ── Validar contraseña si se mostró el paso 2 ────────────────────────────
     if (cambiandoPassword) {
         const todosOk = _marcarRequisitosIncumplidos();
         if (!todosOk) return;

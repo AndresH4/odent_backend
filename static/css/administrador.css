@@ -1,6 +1,5 @@
 /* ===================================================================
    administrador.css — Stylo Dental Pro
-   Visual identity alineada con especialista.css v2.5
    =================================================================== */
 
 :root {
@@ -13,9 +12,6 @@
     --transition-section: 0.35s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-/* ===================================================================
-   BASE
-   =================================================================== */
 body {
     background-color: var(--bg-main);
     font-family: 'Open Sans', sans-serif;
@@ -27,17 +23,11 @@ body {
 /* ===================================================================
    VISIBILIDAD DE SECCIONES
    =================================================================== */
-.seccion-oculta {
-    display: none !important;
-}
-
-.seccion-visible {
-    display: block !important;
-    animation: slideUp 0.35s cubic-bezier(0.23, 1, 0.32, 1) both;
-}
+.seccion-oculta  { display: none !important; }
+.seccion-visible { display: block !important; animation: slideUp 0.35s cubic-bezier(0.23, 1, 0.32, 1) both; }
 
 /* ===================================================================
-   DROPDOWN DE PERFIL — visibility+opacity (igual que especialista)
+   DROPDOWN DE PERFIL
    =================================================================== */
 #profile-dropdown {
     visibility:     hidden;
@@ -65,36 +55,36 @@ body {
    SIDEBAR
    =================================================================== */
 .sidebar {
-    background:       var(--sidebar-grad);
-    min-height:       100vh;
-    width:            288px;
-    flex-shrink:      0;
-    display:          flex;
-    flex-direction:   column;
+    background:     var(--sidebar-grad);
+    min-height:     100vh;
+    width:          288px;
+    flex-shrink:    0;
+    display:        flex;
+    flex-direction: column;
 }
 
 /* ===================================================================
    NAVEGACIÓN
    =================================================================== */
 .nav-btn {
-    width:          100%;
-    display:        flex;
-    align-items:    center;
-    gap:            14px;
-    padding:        16px 18px;
-    border-radius:  18px;
-    transition:     all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    font-weight:    700;
-    font-size:      13px;
-    color:          #94a3b8;
-    border:         none;
-    cursor:         pointer;
-    text-align:     left;
-    position:       relative;
-    overflow:       hidden;
-    margin-bottom:  10px;
-    background:     transparent;
-    text-decoration: none;   /* para el <a> de Aseguramiento */
+    width:           100%;
+    display:         flex;
+    align-items:     center;
+    gap:             14px;
+    padding:         16px 18px;
+    border-radius:   18px;
+    transition:      all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-weight:     700;
+    font-size:       13px;
+    color:           #94a3b8;
+    border:          none;
+    cursor:          pointer;
+    text-align:      left;
+    position:        relative;
+    overflow:        hidden;
+    margin-bottom:   10px;
+    background:      transparent;
+    text-decoration: none;
 }
 
 .nav-btn:hover {
@@ -134,16 +124,16 @@ body {
 }
 
 #reloj {
-    font-family:    'JetBrains Mono', monospace;
-    font-size:      1.65rem;
-    letter-spacing: -2px;
-    background:     linear-gradient(to right, #38bdf8, #818cf8, #38bdf8);
+    font-family:     'JetBrains Mono', monospace;
+    font-size:       1.65rem;
+    letter-spacing:  -2px;
+    background:      linear-gradient(to right, #38bdf8, #818cf8, #38bdf8);
     background-size: 200% auto;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    font-weight:    800;
-    animation:      textShine 4s linear infinite;
-    text-align:     center;
+    font-weight:     800;
+    animation:       textShine 4s linear infinite;
+    text-align:      center;
 }
 
 @keyframes textShine { to { background-position: 200% center; } }
@@ -179,8 +169,8 @@ body {
 }
 
 .card-stats:hover {
-    transform:   translateY(-15px);
-    box-shadow:  0 30px 45px -15px rgba(0,0,0,0.1);
+    transform:    translateY(-15px);
+    box-shadow:   0 30px 45px -15px rgba(0,0,0,0.1);
     border-color: var(--primary);
 }
 
@@ -221,14 +211,32 @@ body {
     border:        1px solid rgba(255,255,255,0.5);
 }
 
-/* Modal simple compacto */
-#modalConfirmarSimple .modal-content {
-    max-width: 440px;
+/* ===================================================================
+   INPUTS — alineados con paciente.css
+   =================================================================== */
+.input-dental {
+    width:         100%;
+    padding:       18px 20px;
+    border:        2px solid #e2e8f0;
+    border-radius: 24px;
+    outline:       none;
+    transition:    all 0.3s ease;
+    font-size:     14px;
+    background:    #f8fafc;
+    color:         #1e293b;
+    font-weight:   600;
+    box-shadow:    inset 0 2px 4px rgba(0,0,0,0.02);
+    font-family:   'Open Sans', sans-serif;
 }
 
-/* ===================================================================
-   INPUTS
-   =================================================================== */
+.input-dental:focus {
+    border-color:     var(--primary);
+    background-color: #ffffff;
+    box-shadow:       0 0 0 6px rgba(2, 132, 199, 0.1);
+    transform:        scale(1.01);
+}
+
+/* Alias legacy para no romper referencias anteriores */
 .input-consulta {
     width:         100%;
     padding:       18px 20px;
@@ -252,13 +260,74 @@ body {
 }
 
 /* ===================================================================
+   PASSWORD WRAPPER — clonado de paciente.css
+   =================================================================== */
+.pass-input-wrapper {
+    position: relative;
+    width:    100%;
+}
+
+.pass-input-wrapper .input-dental {
+    padding-right: 56px;
+}
+
+.pass-toggle-btn {
+    position:    absolute;
+    right:       16px;
+    top:         50%;
+    transform:   translateY(-50%);
+    background:  none;
+    border:      none;
+    cursor:      pointer;
+    color:       #94a3b8;
+    font-size:   16px;
+    padding:     4px;
+    transition:  color 0.2s;
+}
+
+.pass-toggle-btn:hover { color: var(--primary); }
+
+/* ===================================================================
+   REQUISITOS DE CONTRASEÑA — clonado de paciente.css
+   =================================================================== */
+.req-item {
+    display:     flex;
+    align-items: center;
+    gap:         10px;
+    font-size:   12px;
+    font-weight: 700;
+    transition:  all 0.3s ease;
+}
+
+.req-icon {
+    width:           20px;
+    height:          20px;
+    border-radius:   50%;
+    display:         flex;
+    align-items:     center;
+    justify-content: center;
+    font-size:       11px;
+    font-weight:     900;
+    flex-shrink:     0;
+}
+
+.req-pending .req-icon { background: #e2e8f0; color: #94a3b8; }
+.req-pending .req-text { color: #94a3b8; }
+
+.req-ok .req-icon { background: #d1fae5; color: #059669; }
+.req-ok .req-text { color: #059669; }
+
+.req-error .req-icon { background: #fee2e2; color: #dc2626; }
+.req-error .req-text { color: #dc2626; }
+
+/* ===================================================================
    BOTONES DE ACCIÓN
    =================================================================== */
 .btn-action {
-    transition:  all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    cursor:      pointer;
-    display:     inline-flex;
-    align-items: center;
+    transition:      all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor:          pointer;
+    display:         inline-flex;
+    align-items:     center;
     justify-content: center;
 }
 
@@ -271,11 +340,9 @@ body {
 .btn-action:active { transform: scale(0.95); }
 
 /* ===================================================================
-   ANIMACIONES DE ENTRADA
+   ANIMACIONES
    =================================================================== */
-.animate-in {
-    animation: slideUp 0.6s cubic-bezier(0.23, 1, 0.32, 1) both;
-}
+.animate-in { animation: slideUp 0.6s cubic-bezier(0.23, 1, 0.32, 1) both; }
 
 @keyframes slideUp {
     from { opacity: 0; transform: translateY(40px); }

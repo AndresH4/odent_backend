@@ -1,35 +1,19 @@
 """
 app.py — Stylo Dental
 Punto de entrada de Flask. Registra todos los blueprints y sirve las vistas HTML.
-
-CORRECCIONES APLICADAS:
-  · Puerto SMTP: 587 (STARTTLS) → 465 (SMTP_SSL). STARTTLS en redes compartidas/hosting
-    suele silenciarse sin lanzar excepción; SMTP_SSL cifra desde el primer paquete.
-  · Contraseña de aplicación Gmail: se almacena sin espacios desde el inicio.
-  · Envío de correo movido a hilo daemon (ThreadPoolExecutor) para no bloquear la
-    respuesta HTTP mientras Gmail acepta la conexión (~1-3 s).
-  · codigos_temporales protegido con threading.Lock para evitar race-conditions.
-  · Separación de constantes SMTP en bloque único, fácil de mover a variables de entorno.
-
-OPTIMIZACIONES DE ENTREGABILIDAD (v2):
-  · Importance / X-Priority / X-MSMail-Priority → notificación de prioridad alta en Gmail app.
-  · Reply-To = From → Gmail infiere correo 1-a-1, no masivo → bandeja Principal.
-  · X-Mailer descriptivo → mejora reputación heurística ante filtros de spam.
-  · OMITIDOS intencionalmente: Precedence, List-Unsubscribe, X-Entity-Ref-ID
-    (su presencia desvía el correo a Promociones/Actualizaciones).
-  · Parte text/plain añadida automáticamente (strip HTML) → anti-spam.
-  · EHLO con dominio gmail.com → coherencia con SPF/DKIM que Gmail firma automáticamente.
 """
 
 from flask import Flask, jsonify, request, render_template, session
 from flask_cors import CORS
 
+import os
 import random
 import time
 import logging
 import smtplib
 import ssl
 import socket
+import sqlite3
 import traceback
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -37,23 +21,29 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formatdate, make_msgid
 
-# ── Blueprints del historial ──────────────────────────────────────────────────
-from modulo_historial.historial_clinico       import historial_bp
-from modulo_historial.tratamiento             import tratamiento_bp
-from modulo_historial.tabla_diagnostico       import tabla_diag_bp
-from modulo_historial.historial_diagnostico   import historial_diag_bp
+from modulo_historial.historial_clinico             import historial_bp
+from modulo_historial.tratamiento                   import tratamiento_bp
+from modulo_historial.tabla_diagnostico             import tabla_diag_bp
+from modulo_historial.historial_diagnostico         import historial_diag_bp
 from modulo_historial.tabla_puntuacion_especialista import puntuacion_bp
 
-# ── Blueprints de usuarios ────────────────────────────────────────────────────
 from modulo_usuarios.routes import usuarios_bp
-
-# ── Blueprint de citas ────────────────────────────────────────────────────────
-from modulo_citas.routes import citas_bp
-
-# ── Blueprint de EPS ──────────────────────────────────────────────────────────
-from modulo_eps.routes import eps_bp
+from modulo_citas.routes    import citas_bp
+from modulo_eps.routes      import eps_bp
 
 from db import get_db_connection
+
+# ─── Ruta absoluta a odent.db ────────────────────────────────────────────────
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH  = os.path.join(BASE_DIR, 'odent.db')
+
+
+def _app_conn():
+    """Conexión directa con ruta absoluta garantizada."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
 
 # =============================================================================
 # LOGGING
@@ -65,12 +55,7 @@ logger = logging.getLogger("stylo_dental_smtp")
 # APLICACIÓN FLASK
 # =============================================================================
 app = Flask(__name__)
-
-# TODO: en producción mover a variable de entorno (os.environ["SECRET_KEY"])
 app.secret_key = "CAMBIA-ESTO-POR-UNA-CLAVE-LARGA-Y-ALEATORIA"
-
-# supports_credentials=True permite que el navegador envíe/reciba la cookie de
-# sesión en peticiones fetch con credenciales.
 CORS(app, supports_credentials=True)
 
 # =============================================================================
@@ -100,8 +85,8 @@ SMTP_TIMEOUT      = 20
 # =============================================================================
 # ALMACÉN DE CÓDIGOS TEMPORALES
 # =============================================================================
-_codigos_lock       = threading.Lock()
-codigos_temporales  = {}
+_codigos_lock      = threading.Lock()
+codigos_temporales = {}
 CODIGO_EXPIRACION_S = 600
 
 _smtp_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="smtp")
@@ -117,35 +102,25 @@ def _html_verificacion(nombre: str, codigo: str) -> str:
                 border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
       <div style="background:linear-gradient(135deg,#0369a1,#0ea5e9);
                   padding:28px 32px;text-align:center;">
-        <h1 style="color:#ffffff;margin:0;font-size:22px;letter-spacing:0.5px;">
-          🦷 Stylo Dental
-        </h1>
-        <p style="color:#bae6fd;margin:6px 0 0;font-size:14px;">
-          Verificación de cuenta
-        </p>
+        <h1 style="color:#ffffff;margin:0;font-size:22px;">🦷 Stylo Dental</h1>
+        <p style="color:#bae6fd;margin:6px 0 0;font-size:14px;">Verificación de cuenta</p>
       </div>
       <div style="padding:32px;background:#ffffff;">
         <p style="color:#334155;font-size:15px;margin-top:0;">
           Hola, <strong>{nombre}</strong>.<br>
-          Usa el siguiente código para completar tu registro.
-          Expirará en <strong>10 minutos</strong>.
+          Usa el siguiente código. Expirará en <strong>10 minutos</strong>.
         </p>
         <div style="background:#f0f9ff;border:2px dashed #38bdf8;border-radius:10px;
                     text-align:center;padding:20px 16px;margin:28px 0;">
           <span style="font-family:'Courier New',monospace;font-size:40px;
-                       font-weight:800;letter-spacing:12px;color:#0284c7;">
-            {codigo}
-          </span>
+                       font-weight:800;letter-spacing:12px;color:#0284c7;">{codigo}</span>
         </div>
         <p style="color:#64748b;font-size:13px;margin-bottom:0;">
-          Si no solicitaste este código, puedes ignorar este mensaje de forma segura.
+          Si no solicitaste este código, puedes ignorar este mensaje.
         </p>
       </div>
-      <div style="background:#f8fafc;padding:16px 32px;text-align:center;
-                  border-top:1px solid #e2e8f0;">
-        <p style="color:#94a3b8;font-size:12px;margin:0;">
-          © 2025 Clínica Stylo Dental · Todos los derechos reservados
-        </p>
+      <div style="background:#f8fafc;padding:16px 32px;text-align:center;border-top:1px solid #e2e8f0;">
+        <p style="color:#94a3b8;font-size:12px;margin:0;">© 2025 Clínica Stylo Dental</p>
       </div>
     </div>
     """
@@ -157,35 +132,24 @@ def _html_recuperacion(codigo: str) -> str:
                 border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
       <div style="background:linear-gradient(135deg,#7c3aed,#a78bfa);
                   padding:28px 32px;text-align:center;">
-        <h1 style="color:#ffffff;margin:0;font-size:22px;letter-spacing:0.5px;">
-          🦷 Stylo Dental
-        </h1>
-        <p style="color:#ede9fe;margin:6px 0 0;font-size:14px;">
-          Recuperación de contraseña
-        </p>
+        <h1 style="color:#ffffff;margin:0;font-size:22px;">🦷 Stylo Dental</h1>
+        <p style="color:#ede9fe;margin:6px 0 0;font-size:14px;">Recuperación de contraseña</p>
       </div>
       <div style="padding:32px;background:#ffffff;">
         <p style="color:#334155;font-size:15px;margin-top:0;">
-          Recibimos una solicitud para restablecer la contraseña de tu cuenta.<br>
           Ingresa el siguiente código. Expirará en <strong>10 minutos</strong>.
         </p>
         <div style="background:#faf5ff;border:2px dashed #a78bfa;border-radius:10px;
                     text-align:center;padding:20px 16px;margin:28px 0;">
           <span style="font-family:'Courier New',monospace;font-size:40px;
-                       font-weight:800;letter-spacing:12px;color:#7c3aed;">
-            {codigo}
-          </span>
+                       font-weight:800;letter-spacing:12px;color:#7c3aed;">{codigo}</span>
         </div>
         <p style="color:#64748b;font-size:13px;margin-bottom:0;">
-          Si no solicitaste restablecer tu contraseña, ignora este mensaje.<br>
-          Tu contraseña actual sigue siendo la misma.
+          Si no solicitaste esto, ignora este mensaje.
         </p>
       </div>
-      <div style="background:#f8fafc;padding:16px 32px;text-align:center;
-                  border-top:1px solid #e2e8f0;">
-        <p style="color:#94a3b8;font-size:12px;margin:0;">
-          © 2025 Clínica Stylo Dental · Todos los derechos reservados
-        </p>
+      <div style="background:#f8fafc;padding:16px 32px;text-align:center;border-top:1px solid #e2e8f0;">
+        <p style="color:#94a3b8;font-size:12px;margin:0;">© 2025 Clínica Stylo Dental</p>
       </div>
     </div>
     """
@@ -202,47 +166,40 @@ def _enviar_correo_smtp(destinatario: str, asunto: str, cuerpo_html: str):
         texto_plano = _re.sub(r'\s{2,}', ' ', texto_plano).strip()
 
         msg = MIMEMultipart('alternative')
-        msg['From']               = SMTP_FROM
-        msg['Reply-To']           = SMTP_FROM
-        msg['To']                 = destinatario
-        msg['Subject']            = asunto
-        msg['Date']               = formatdate(localtime=True)
-        msg['Message-ID']         = make_msgid(domain="gmail.com")
-        msg['Importance']         = 'high'
-        msg['X-Priority']         = '1'
-        msg['X-MSMail-Priority']  = 'High'
-        msg['X-Mailer']           = 'StyloDental-Transactional/1.0 (Flask+smtplib)'
+        msg['From']              = SMTP_FROM
+        msg['Reply-To']          = SMTP_FROM
+        msg['To']                = destinatario
+        msg['Subject']           = asunto
+        msg['Date']              = formatdate(localtime=True)
+        msg['Message-ID']        = make_msgid(domain="gmail.com")
+        msg['Importance']        = 'high'
+        msg['X-Priority']        = '1'
+        msg['X-MSMail-Priority'] = 'High'
+        msg['X-Mailer']          = 'StyloDental-Transactional/1.0'
 
         msg.attach(MIMEText(texto_plano, 'plain', 'utf-8'))
         msg.attach(MIMEText(cuerpo_html, 'html',  'utf-8'))
 
         ctx = ssl.create_default_context()
-        logger.info("[SMTP] Conectando a %s:%d (SSL)…", SMTP_HOST, SMTP_PORT)
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT, context=ctx) as srv:
             srv.ehlo("gmail.com")
-            logger.info("[SMTP] Autenticando como %s…", SMTP_USER)
             srv.login(SMTP_USER, SMTP_APP_PASSWORD)
-            logger.info("[SMTP] Enviando a %s…", destinatario)
             rechazados = srv.sendmail(SMTP_USER, destinatario, msg.as_string())
             if rechazados:
-                logger.error("[SMTP] Rechazados: %s", rechazados)
-                return False, f"Dirección rechazada por el servidor: {rechazados}"
+                return False, f"Dirección rechazada: {rechazados}"
 
         logger.info("[SMTP] ✓ Correo entregado a %s", destinatario)
         return True, None
 
     except smtplib.SMTPAuthenticationError as exc:
-        logger.error("[SMTP] Autenticación fallida: %s", exc)
-        return False, "Credenciales SMTP rechazadas. Verifica la contraseña de aplicación."
+        return False, "Credenciales SMTP rechazadas."
     except (smtplib.SMTPConnectError, socket.timeout, socket.gaierror, ssl.SSLError) as exc:
-        logger.error("[SMTP] Fallo de conexión/SSL: %s", exc)
-        return False, "No se pudo conectar al servidor SMTP. Revisa la red o el firewall."
+        return False, "No se pudo conectar al servidor SMTP."
     except smtplib.SMTPRecipientsRefused as exc:
-        logger.error("[SMTP] Destinatario rechazado: %s", exc)
-        return False, "El servidor rechazó la dirección de correo del destinatario."
+        return False, "El servidor rechazó la dirección del destinatario."
     except Exception as exc:
-        logger.error("[SMTP] Error inesperado: %s\n%s", exc, traceback.format_exc())
-        return False, f"Error inesperado al enviar correo: {exc}"
+        logger.error("[SMTP] Error: %s\n%s", exc, traceback.format_exc())
+        return False, f"Error inesperado: {exc}"
 
 
 enviar_correo_smtp = _enviar_correo_smtp
@@ -260,7 +217,7 @@ def _guardar_codigo(correo: str, codigo: str) -> None:
         }
 
 
-def _validar_codigo(correo: str, ingresado: str) -> tuple[bool, str | None]:
+def _validar_codigo(correo: str, ingresado: str) -> tuple:
     with _codigos_lock:
         registro = codigos_temporales.get(correo)
         if not registro:
@@ -279,18 +236,17 @@ def _nuevo_codigo() -> str:
 
 
 # =============================================================================
-# ENDPOINT AUXILIAR — Obtener Paciente_ID por Usuario_ID
+# ENDPOINT AUXILIAR — Paciente por Usuario_ID
 # =============================================================================
 
 @app.route('/api/paciente/por-usuario/<int:usuario_id>', methods=['GET'])
 def paciente_por_usuario(usuario_id):
     con = None
     try:
-        con = get_db_connection()
+        con = _app_conn()
         cur = con.cursor()
         cur.execute(
-            "SELECT Paciente_ID FROM paciente WHERE Usuario_ID = ?",
-            (usuario_id,)
+            "SELECT Paciente_ID FROM paciente WHERE Usuario_ID = ?", (usuario_id,)
         )
         row = cur.fetchone()
         if not row:
@@ -299,8 +255,7 @@ def paciente_por_usuario(usuario_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
-        if con:
-            con.close()
+        if con: con.close()
 
 
 # =============================================================================
@@ -315,18 +270,12 @@ def perfil_paciente():
 
     con = None
     try:
-        con = get_db_connection()
+        con = _app_conn()
         cur = con.cursor()
-        cur.execute(
-            """
+        cur.execute("""
             SELECT
-                u.Usuario_ID,
-                u.Nombres,
-                u.Apellidos,
-                u.NumeroDocumento,
-                u.Correo,
-                u.Telefono,
-                u.FechaNacimiento,
+                u.Usuario_ID, u.Nombres, u.Apellidos, u.NumeroDocumento,
+                u.Correo, u.Telefono, u.FechaNacimiento,
                 td.Nombre_Tipo_Documento  AS TipoDocumento,
                 e.Nombre_EPS              AS EPS,
                 a.Afiliacion_ID           AS NumeroAfiliado,
@@ -338,26 +287,18 @@ def perfil_paciente():
             LEFT JOIN eps                 e   ON a.EPS_ID      = e.EPS_ID
             LEFT JOIN tipo_afiliacion_eps tae ON a.TipoEPS_ID  = tae.TipoEPS_ID
             WHERE u.Usuario_ID = ?
-            """,
-            (usuario_id,)
-        )
+        """, (usuario_id,))
         fila = cur.fetchone()
         if not fila:
             return jsonify({"ok": False, "error": "Paciente no encontrado"}), 404
 
         perfil = dict(fila)
         defaults = {
-            "Nombres":          "Paciente",
-            "Apellidos":        "",
-            "NumeroDocumento":  "No registrado",
-            "Correo":           "No registrado",
-            "Telefono":         "No registrado",
-            "FechaNacimiento":  "",
-            "TipoDocumento":    "No registrado",
-            "EPS":              "Sin afiliación",
-            "NumeroAfiliado":   "No registrado",
-            "EstadoAfiliacion": "Sin fecha",
-            "TipoAfiliacion":   "No registrado",
+            "Nombres": "Paciente", "Apellidos": "", "NumeroDocumento": "No registrado",
+            "Correo": "No registrado", "Telefono": "No registrado", "FechaNacimiento": "",
+            "TipoDocumento": "No registrado", "EPS": "Sin afiliación",
+            "NumeroAfiliado": "No registrado", "EstadoAfiliacion": "Sin fecha",
+            "TipoAfiliacion": "No registrado",
         }
         for campo, defecto in defaults.items():
             if perfil.get(campo) in (None, ""):
@@ -369,12 +310,10 @@ def perfil_paciente():
         ).upper() or "PA"
 
         return jsonify({"ok": True, "perfil": perfil}), 200
-
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
     finally:
-        if con:
-            con.close()
+        if con: con.close()
 
 
 # =============================================================================
@@ -437,7 +376,6 @@ def enviar_codigo():
 
     codigo = _nuevo_codigo()
     _guardar_codigo(correo, codigo)
-    logger.info("[CODIGO] Generado (registro) para %s: %s", correo, codigo)
 
     ok, error = _enviar_correo_smtp(
         correo,
@@ -474,7 +412,7 @@ def verificar_codigo():
 
 
 # =============================================================================
-# API — SOLICITAR CÓDIGO DE RECUPERACIÓN DE CONTRASEÑA
+# API — SOLICITAR CÓDIGO DE RECUPERACIÓN
 # =============================================================================
 
 @app.route('/api/auth/solicitar-codigo', methods=['POST'])
@@ -487,7 +425,7 @@ def solicitar_codigo_recuperacion():
 
     con = None
     try:
-        con = get_db_connection()
+        con = _app_conn()
         cur = con.cursor()
         cur.execute("SELECT 1 FROM usuarios WHERE LOWER(Correo) = ?", (correo,))
         if not cur.fetchone():
@@ -495,12 +433,10 @@ def solicitar_codigo_recuperacion():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
     finally:
-        if con:
-            con.close()
+        if con: con.close()
 
     codigo = _nuevo_codigo()
     _guardar_codigo(correo, codigo)
-    logger.info("[CODIGO] Generado (recuperación) para %s: %s", correo, codigo)
 
     ok, error = _enviar_correo_smtp(
         correo,
@@ -560,16 +496,11 @@ def cambiar_password():
         return jsonify({"ok": False, "error": "Correo y nueva contraseña son requeridos."}), 400
 
     errores = []
-    if len(nueva_contrasena) < 8:
-        errores.append("Mínimo 8 caracteres.")
-    if not re.search(r'[A-Z]', nueva_contrasena):
-        errores.append("Al menos una letra mayúscula.")
-    if not re.search(r'[a-z]', nueva_contrasena):
-        errores.append("Al menos una letra minúscula.")
-    if not re.search(r'[0-9]', nueva_contrasena):
-        errores.append("Al menos un número.")
-    if not re.search(r'[^A-Za-z0-9]', nueva_contrasena):
-        errores.append("Al menos un carácter especial.")
+    if len(nueva_contrasena) < 8:           errores.append("Mínimo 8 caracteres.")
+    if not re.search(r'[A-Z]', nueva_contrasena): errores.append("Al menos una mayúscula.")
+    if not re.search(r'[a-z]', nueva_contrasena): errores.append("Al menos una minúscula.")
+    if not re.search(r'[0-9]', nueva_contrasena): errores.append("Al menos un número.")
+    if not re.search(r'[^A-Za-z0-9]', nueva_contrasena): errores.append("Al menos un carácter especial.")
     if errores:
         return jsonify({"ok": False, "error": " ".join(errores)}), 400
 
@@ -580,16 +511,13 @@ def cambiar_password():
     else:
         with _codigos_lock:
             if correo not in codigos_temporales:
-                return jsonify({
-                    "ok": False,
-                    "error": "Sesión de recuperación no válida o expirada."
-                }), 400
+                return jsonify({"ok": False, "error": "Sesión de recuperación no válida o expirada."}), 400
         with _codigos_lock:
             codigos_temporales.pop(correo, None)
 
     con = None
     try:
-        con = get_db_connection()
+        con = _app_conn()
         cur = con.cursor()
         cur.execute("SELECT Usuario_ID FROM usuarios WHERE LOWER(Correo) = ?", (correo,))
         if not cur.fetchone():
@@ -605,12 +533,11 @@ def cambiar_password():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
     finally:
-        if con:
-            con.close()
+        if con: con.close()
 
 
 # =============================================================================
-# API — DIAGNÓSTICO SMTP AISLADO
+# API — DIAGNÓSTICO SMTP
 # =============================================================================
 
 @app.route('/api/test-smtp', methods=['POST'])
@@ -624,8 +551,7 @@ def test_smtp():
     ok, error = _enviar_correo_smtp(
         correo,
         "Prueba de diagnóstico SMTP – Stylo Dental",
-        "<p style='font-family:sans-serif'>Si recibes este correo, "
-        "la configuración SMTP funciona correctamente. ✅</p>",
+        "<p style='font-family:sans-serif'>Configuración SMTP funciona correctamente. ✅</p>",
     )
 
     if not ok:
@@ -635,38 +561,35 @@ def test_smtp():
 
 # =============================================================================
 # RUTAS DEL MÓDULO DE ASEGURAMIENTO DE DATOS
-# ─────────────────────────────────────────────────────────────────────────────
-# Estas rutas son exclusivas del módulo de aseguramiento y no colisionan con
-# ninguna ruta existente en los blueprints registrados. Se definen directamente
-# en app.py para no requerir la creación de un nuevo archivo/blueprint.
 # =============================================================================
 
 @app.route('/api/usuario/<int:usuario_id>', methods=['GET'])
 def aseg_get_usuario_por_id(usuario_id):
     """
-    Búsqueda por Usuario_ID. Retorna datos básicos + Rol_ID.
-    Llamado por buscarUsuario() cuando filtro-tipo = 'id'.
+    GET /api/usuario/<id>  — Devuelve datos del usuario con Nombre_Tipo_Documento.
+    Consumido por el módulo de aseguramiento y por administrador.js
+    para el toggle de estado (PUT).
     """
     con = None
     try:
-        con = get_db_connection()
+        con = _app_conn()
         cur = con.cursor()
-        cur.execute(
-            """
+        cur.execute("""
             SELECT
                 u.Usuario_ID,
                 u.Nombres,
                 u.Apellidos,
                 u.TipoDoc_ID,
+                td.Nombre_Tipo_Documento,
                 u.NumeroDocumento,
                 u.Correo,
                 u.Telefono,
+                u.Estado_ID,
                 u.Rol_ID
             FROM usuarios u
+            LEFT JOIN tipo_documento td ON td.TipoDoc_ID = u.TipoDoc_ID
             WHERE u.Usuario_ID = ?
-            """,
-            (usuario_id,)
-        )
+        """, (usuario_id,))
         row = cur.fetchone()
         if not row:
             return jsonify({"ok": False, "error": "Usuario no encontrado."}), 404
@@ -674,36 +597,23 @@ def aseg_get_usuario_por_id(usuario_id):
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
-        if con:
-            con.close()
+        if con: con.close()
 
 
 @app.route('/api/usuario/documento/<string:numero_documento>', methods=['GET'])
 def aseg_get_usuario_por_documento(numero_documento):
-    """
-    Búsqueda por NumeroDocumento.
-    Llamado por buscarUsuario() cuando filtro-tipo = 'documento'.
-    """
     con = None
     try:
-        con = get_db_connection()
+        con = _app_conn()
         cur = con.cursor()
-        cur.execute(
-            """
+        cur.execute("""
             SELECT
-                u.Usuario_ID,
-                u.Nombres,
-                u.Apellidos,
-                u.TipoDoc_ID,
-                u.NumeroDocumento,
-                u.Correo,
-                u.Telefono,
-                u.Rol_ID
+                u.Usuario_ID, u.Nombres, u.Apellidos,
+                u.TipoDoc_ID, u.NumeroDocumento,
+                u.Correo, u.Telefono, u.Rol_ID
             FROM usuarios u
             WHERE u.NumeroDocumento = ?
-            """,
-            (numero_documento.strip(),)
-        )
+        """, (numero_documento.strip(),))
         row = cur.fetchone()
         if not row:
             return jsonify({"ok": False, "error": "Usuario no encontrado."}), 404
@@ -711,17 +621,16 @@ def aseg_get_usuario_por_documento(numero_documento):
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
-        if con:
-            con.close()
+        if con: con.close()
 
 
 @app.route('/api/usuario/<int:usuario_id>', methods=['PUT'])
 def aseg_actualizar_usuario(usuario_id):
     """
-    Actualiza campos básicos del usuario (sin contraseña ni rol).
-    Llamado por actualizarDatosBasicos() en aseguramiento.js.
-
-    Body: { Nombres, Apellidos, TipoDoc_ID, NumeroDocumento, Telefono, Correo }
+    PUT /api/usuario/<id>
+    Acepta: Nombres, Apellidos, TipoDoc_ID, NumeroDocumento, Telefono, Correo, Estado_ID.
+    El campo Estado_ID permite al administrador activar/desactivar usuarios.
+    NO requiere ContrasenaActual (es una operación de administrador).
     """
     datos = request.get_json(silent=True) or {}
 
@@ -735,6 +644,7 @@ def aseg_actualizar_usuario(usuario_id):
         "NumeroDocumento": datos.get("NumeroDocumento"),
         "Telefono":        datos.get("Telefono"),
         "Correo":          datos.get("Correo"),
+        "Estado_ID":       datos.get("Estado_ID"),
     }
 
     for col, val in mapeo.items():
@@ -747,7 +657,7 @@ def aseg_actualizar_usuario(usuario_id):
 
     con = None
     try:
-        con = get_db_connection()
+        con = _app_conn()
         cur = con.cursor()
 
         correo_nuevo = datos.get("Correo")
@@ -757,7 +667,7 @@ def aseg_actualizar_usuario(usuario_id):
                 (correo_nuevo.strip(), usuario_id)
             )
             if cur.fetchone():
-                return jsonify({"ok": False, "error": "El correo ya está en uso por otro usuario."}), 409
+                return jsonify({"ok": False, "error": "El correo ya está en uso."}), 409
 
         doc_nuevo = datos.get("NumeroDocumento")
         if doc_nuevo:
@@ -778,42 +688,29 @@ def aseg_actualizar_usuario(usuario_id):
         if cur.rowcount == 0:
             return jsonify({"ok": False, "error": "Usuario no encontrado."}), 404
 
-        return jsonify({"ok": True, "mensaje": "Datos básicos actualizados."}), 200
+        return jsonify({"ok": True, "mensaje": "Datos actualizados."}), 200
 
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
-        if con:
-            con.close()
+        if con: con.close()
 
 
 @app.route('/api/afiliacion/por-usuario/<int:usuario_id>', methods=['GET'])
 def aseg_get_afiliacion_por_usuario(usuario_id):
-    """
-    Retorna la afiliación activa del paciente con Regimen_ID incluido
-    (obtenido por JOIN con eps para no depender de columna extra).
-    Llamado por cargarDatosPaciente() en aseguramiento.js.
-    """
     con = None
     try:
-        con = get_db_connection()
+        con = _app_conn()
         cur = con.cursor()
-        cur.execute(
-            """
-            SELECT
-                a.Afiliacion_ID,
-                a.EPS_ID,
-                a.TipoEPS_ID,
-                a.Fecha_Afiliacion,
-                e.Regimen_ID
+        cur.execute("""
+            SELECT a.Afiliacion_ID, a.EPS_ID, a.TipoEPS_ID,
+                   a.Fecha_Afiliacion, e.Regimen_ID
             FROM afiliacion a
             LEFT JOIN eps e ON e.EPS_ID = a.EPS_ID
             WHERE a.Usuario_ID = ?
             ORDER BY a.Afiliacion_ID DESC
             LIMIT 1
-            """,
-            (usuario_id,)
-        )
+        """, (usuario_id,))
         row = cur.fetchone()
         if not row:
             return jsonify({"ok": False, "error": "Sin afiliación registrada."}), 404
@@ -821,35 +718,23 @@ def aseg_get_afiliacion_por_usuario(usuario_id):
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
-        if con:
-            con.close()
+        if con: con.close()
 
 
 @app.route('/api/especialista/por-usuario/<int:usuario_id>', methods=['GET'])
 def aseg_get_especialista_por_usuario(usuario_id):
-    """
-    Retorna Especialista_ID, Tarjeta_Profesional y Especialidad_ID.
-    Llamado por cargarDatosEspecialista() en aseguramiento.js.
-    """
     con = None
     try:
-        con = get_db_connection()
+        con = _app_conn()
         cur = con.cursor()
-        cur.execute(
-            """
-            SELECT
-                esp.Especialista_ID,
-                esp.Tarjeta_Profesional,
-                ee.Especialidad_ID
+        cur.execute("""
+            SELECT esp.Especialista_ID, esp.Tarjeta_Profesional, ee.Especialidad_ID
             FROM especialista esp
-            LEFT JOIN especialista_especialidad ee
-                   ON ee.Especialista_ID = esp.Especialista_ID
+            LEFT JOIN especialista_especialidad ee ON ee.Especialista_ID = esp.Especialista_ID
             WHERE esp.Usuario_ID = ?
             ORDER BY ee.Especialidad_ID ASC
             LIMIT 1
-            """,
-            (usuario_id,)
-        )
+        """, (usuario_id,))
         row = cur.fetchone()
         if not row:
             return jsonify({"ok": False, "error": "Sin datos de especialista."}), 404
@@ -857,19 +742,11 @@ def aseg_get_especialista_por_usuario(usuario_id):
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
-        if con:
-            con.close()
+        if con: con.close()
 
 
 @app.route('/api/especialista', methods=['POST'])
 def aseg_crear_especialista():
-    """
-    Crea o actualiza el registro de especialista + especialidad.
-    Idempotente: si ya existe el especialista para ese usuario, actualiza.
-    Llamado por asegurarDatosEspecialista() cuando _especialistaId es null.
-
-    Body: { Usuario_ID, Tarjeta_Profesional, Especialidad_ID }
-    """
     datos           = request.get_json(silent=True) or {}
     usuario_id      = datos.get("Usuario_ID")
     tarjeta         = (datos.get("Tarjeta_Profesional") or "").strip()
@@ -882,12 +759,11 @@ def aseg_crear_especialista():
 
     con = None
     try:
-        con = get_db_connection()
+        con = _app_conn()
         cur = con.cursor()
 
         cur.execute(
-            "SELECT Especialista_ID FROM especialista WHERE Usuario_ID = ?",
-            (usuario_id,)
+            "SELECT Especialista_ID FROM especialista WHERE Usuario_ID = ?", (usuario_id,)
         )
         existente = cur.fetchone()
 
@@ -898,10 +774,7 @@ def aseg_crear_especialista():
                 (tarjeta, esp_id)
             )
         else:
-            cur.execute(
-                "SELECT 1 FROM especialista WHERE Tarjeta_Profesional = ?",
-                (tarjeta,)
-            )
+            cur.execute("SELECT 1 FROM especialista WHERE Tarjeta_Profesional = ?", (tarjeta,))
             if cur.fetchone():
                 return jsonify({"ok": False, "error": "La tarjeta profesional ya está registrada."}), 409
             cur.execute(
@@ -912,8 +785,7 @@ def aseg_crear_especialista():
 
         if especialidad_id:
             cur.execute(
-                "SELECT 1 FROM especialista_especialidad WHERE Especialista_ID = ?",
-                (esp_id,)
+                "SELECT 1 FROM especialista_especialidad WHERE Especialista_ID = ?", (esp_id,)
             )
             if cur.fetchone():
                 cur.execute(
@@ -932,25 +804,18 @@ def aseg_crear_especialista():
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     finally:
-        if con:
-            con.close()
+        if con: con.close()
 
 
 @app.route('/api/especialista/<int:especialista_id>', methods=['PUT'])
 def aseg_actualizar_especialista(especialista_id):
-    """
-    Actualiza tarjeta profesional y/o especialidad.
-    Llamado por asegurarDatosEspecialista() cuando _especialistaId ya existe.
-
-    Body: { Tarjeta_Profesional, Especialidad_ID }
-    """
     datos           = request.get_json(silent=True) or {}
     tarjeta         = (datos.get("Tarjeta_Profesional") or "").strip()
     especialidad_id = datos.get("Especialidad_ID")
 
     con = None
     try:
-        con = get_db_connection()
+        con = _app_conn()
         cur = con.cursor()
 
         cur.execute(
@@ -994,18 +859,14 @@ def aseg_actualizar_especialista(especialista_id):
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     finally:
-        if con:
-            con.close()
+        if con: con.close()
 
 
 @app.route('/api/especialidades', methods=['GET'])
 def aseg_get_especialidades():
-    """
-    Catálogo de especialidades. Llamado por cargarEspecialidades() en aseguramiento.js.
-    """
     con = None
     try:
-        con = get_db_connection()
+        con = _app_conn()
         cur = con.cursor()
         cur.execute(
             "SELECT Especialidad_ID, Nombre_Especialidad FROM especialidad ORDER BY Nombre_Especialidad"
@@ -1015,20 +876,14 @@ def aseg_get_especialidades():
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
-        if con:
-            con.close()
+        if con: con.close()
 
 
 @app.route('/api/tipo-eps', methods=['GET'])
 def aseg_get_tipo_eps():
-    """
-    Tipos de afiliación EPS. Llamado por cargarTiposEPS() en aseguramiento.js.
-    Alias de /tipo-afiliacion-eps (que está en usuarios_bp) con el nombre
-    exacto que espera el JS del módulo de aseguramiento.
-    """
     con = None
     try:
-        con = get_db_connection()
+        con = _app_conn()
         cur = con.cursor()
         cur.execute(
             "SELECT TipoEPS_ID, Nombre_Tipo FROM tipo_afiliacion_eps ORDER BY TipoEPS_ID"
@@ -1038,18 +893,11 @@ def aseg_get_tipo_eps():
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
-        if con:
-            con.close()
+        if con: con.close()
 
 
 @app.route('/api/aseguramiento', methods=['POST'])
 def aseg_registrar_aseguramiento():
-    """
-    Registra evento de auditoría en aseguramiento_datos.
-    Llamado al finalizar el flujo de asegurar/actualizar. No es crítico.
-
-    Body: { Usuario_ID, Accion_ID, Fecha, Descripcion }
-    """
     datos       = request.get_json(silent=True) or {}
     usuario_id  = datos.get("Usuario_ID")
     accion_id   = datos.get("Accion_ID")
@@ -1062,23 +910,19 @@ def aseg_registrar_aseguramiento():
 
     con = None
     try:
-        con = get_db_connection()
+        con = _app_conn()
         cur = con.cursor()
-        cur.execute(
-            """
+        cur.execute("""
             INSERT INTO aseguramiento_datos (Usuario_ID, Accion_ID, Fecha, Descripcion)
             VALUES (?, ?, ?, ?)
-            """,
-            (usuario_id, accion_id, fecha, descripcion)
-        )
+        """, (usuario_id, accion_id, fecha, descripcion))
         con.commit()
         return jsonify({"ok": True, "data": {"AseguramientoID": cur.lastrowid}}), 201
     except Exception as exc:
-        logger.warning("[aseguramiento] No se pudo registrar auditoría: %s", exc)
+        logger.warning("[aseguramiento] No se pudo registrar: %s", exc)
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
-        if con:
-            con.close()
+        if con: con.close()
 
 
 # =============================================================================

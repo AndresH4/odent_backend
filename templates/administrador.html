@@ -11,12 +11,8 @@
 </head>
 <body class="flex">
 
-    <!-- ================================================================
-         SIDEBAR
-    ================================================================ -->
     <aside class="sidebar text-white flex flex-col flex-shrink-0 shadow-2xl">
 
-        <!-- Logo -->
         <div class="p-12 border-b border-slate-800/60 flex flex-col items-center">
             <div class="w-16 h-16 bg-sky-500 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-sky-500/20">
                 <i class="fas fa-tooth text-3xl"></i>
@@ -25,11 +21,10 @@
             <p class="text-[10px] text-slate-500 font-extrabold uppercase tracking-[0.4em] mt-2">Admin Portal</p>
         </div>
 
-        <!-- Navegación -->
         <nav class="flex-grow p-8 space-y-4">
             <button onclick="cambiarSeccion('dashboard')" id="btn-dashboard" class="nav-btn active">
-                <i class="fas fa-users w-6 text-xl"></i>
-                <span class="tracking-wide">Usuarios</span>
+                <i class="fas fa-home w-6 text-xl"></i>
+                <span class="tracking-wide">Inicio</span>
             </button>
             <button onclick="cambiarSeccion('citas')" id="btn-citas" class="nav-btn">
                 <i class="fas fa-history w-6 text-xl"></i>
@@ -43,6 +38,10 @@
                 <i class="fas fa-shield-alt w-6 text-xl text-emerald-400"></i>
                 <span class="tracking-wide">Aseguramiento</span>
             </a>
+            <button onclick="cambiarSeccion('multas')" id="btn-multas" class="nav-btn">
+                <i class="fas fa-file-invoice-dollar w-6 text-xl text-rose-400"></i>
+                <span class="tracking-wide">Multas</span>
+            </button>
             <button onclick="cambiarSeccion('config')" id="btn-config" class="nav-btn">
                 <i class="fas fa-user-cog w-6 text-xl"></i>
                 <span class="tracking-wide">Mi Perfil</span>
@@ -60,118 +59,120 @@
             </div>
         </div>
 
-        <!-- Botón Cerrar Sesión -->
         <div class="px-6 pb-8">
             <button
-                onclick="mostrarConfirmacionSimple('¿Finalizar turno de especialista?', 'salir')"
+                onclick="mostrarConfirmacionSimple('¿Finalizar sesión de administrador?', 'salir')"
                 class="w-full flex items-center justify-center gap-4 p-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] text-red-400 hover:bg-red-500/10 transition-all border border-red-900/40 hover:border-red-500/60">
                 <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
             </button>
         </div>
     </aside>
 
-    <!-- ================================================================
-         CONTENIDO PRINCIPAL
-    ================================================================ -->
     <main class="flex-grow p-8 md:p-14 overflow-y-auto">
 
-        <!-- Cabecera -->
         <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-14 gap-8">
             <div>
-                <h1 id="main-title" class="text-4xl font-black text-slate-800 tracking-tighter mb-3">Administración</h1>
+                <h1 id="main-title" class="text-4xl font-black text-slate-800 tracking-tighter mb-3">Administrador</h1>
                 <div class="flex items-center gap-3">
                     <div class="h-1.5 w-12 bg-sky-600 rounded-full"></div>
                     <p id="fecha-actual" class="text-slate-500 font-bold uppercase text-xs tracking-[0.3em]"></p>
                 </div>
             </div>
 
-            <!-- Dropdown de perfil -->
             <div class="relative">
                 <button
                     id="profile-trigger"
                     onclick="toggleProfileDropdown()"
                     class="flex items-center gap-6 bg-white p-5 pr-12 rounded-[2rem] shadow-xl border border-slate-100 cursor-pointer hover:border-sky-500 transition-all active:scale-95 group z-50">
-                    <div class="w-14 h-14 bg-gradient-to-br from-sky-600 to-sky-800 rounded-2xl flex items-center justify-center text-white text-2xl font-black shadow-2xl shadow-sky-600/30 uppercase group-hover:rotate-6 transition-transform">
-                        <i class="fas fa-user-shield text-xl"></i>
+                    <div id="trigger-inicial"
+                         class="w-14 h-14 bg-gradient-to-br from-sky-600 to-sky-800 rounded-2xl flex items-center justify-center text-white text-2xl font-black shadow-2xl shadow-sky-600/30 uppercase group-hover:rotate-6 transition-transform">
+                        A
                     </div>
                     <div class="text-left">
-                        <p class="text-[10px] font-black text-sky-600 uppercase tracking-widest mb-1">Acceso Total</p>
+                        <p class="text-[10px] font-black text-sky-600 uppercase tracking-widest mb-1">Administrador registrado</p>
                         <p id="header-name" class="text-base font-black text-slate-800 leading-none">Admin Root</p>
                     </div>
                     <i class="fas fa-chevron-down text-sm text-slate-300 ml-4 group-hover:text-sky-600 transition-colors"></i>
                 </button>
 
-                <!-- Dropdown panel -->
-                <div id="profile-dropdown" class="absolute top-full right-0 mt-6 w-96 bg-white rounded-[2.5rem] shadow-[0_30px_70px_rgba(0,0,0,0.2)] border border-slate-50 p-10" style="display:none;">
+                <div id="profile-dropdown"
+                     class="absolute top-full right-0 mt-6 w-[28rem] bg-white rounded-[2.5rem] shadow-[0_30px_70px_rgba(0,0,0,0.2)] border border-slate-50 p-10">
+
                     <div class="text-center pb-8 border-b border-slate-100">
-                        <div class="w-24 h-24 bg-sky-50 text-sky-600 rounded-3xl flex items-center justify-center text-4xl font-black mx-auto mb-5 border-4 border-white shadow-xl">
-                            <i class="fas fa-user-shield"></i>
+                        <div id="drop-inicial"
+                             class="w-24 h-24 bg-sky-600 text-white rounded-3xl flex items-center justify-center text-4xl font-black mx-auto mb-5 shadow-xl">
+                            A
                         </div>
-                        <h4 id="drop-name" class="font-black text-slate-800 text-xl tracking-tight">Admin Root</h4>
-                        <span class="inline-block mt-3 px-6 py-2 bg-sky-100 text-sky-700 rounded-full text-[11px] font-black uppercase tracking-[0.2em]">Acceso Total</span>
+                        <h4 id="drop-name" class="font-black text-slate-800 text-xl tracking-tight uppercase">ADMIN ROOT</h4>
+                        <span id="drop-doc-badge"
+                              class="inline-block mt-3 px-6 py-2 bg-slate-100 text-slate-600 rounded-full text-[11px] font-black tracking-[0.15em]">—</span>
                     </div>
 
                     <div class="py-8 space-y-6">
                         <div class="flex items-center gap-5">
-                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100 flex-shrink-0">
                                 <i class="fas fa-envelope text-lg"></i>
                             </div>
-                            <div>
-                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email de contacto</p>
-                                <p id="drop-email" class="text-sm font-bold text-slate-700">admin@stylodental.com</p>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Correo Electrónico</p>
+                                <p id="drop-email" class="text-sm font-bold text-slate-700 truncate">—</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-5">
-                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100 flex-shrink-0">
                                 <i class="fas fa-phone text-lg"></i>
                             </div>
                             <div>
-                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Línea directa</p>
-                                <p id="drop-tel" class="text-sm font-bold text-slate-700">+57 322 456 7890</p>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Teléfono</p>
+                                <p id="drop-tel" class="text-sm font-bold text-slate-700">—</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-5">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100 flex-shrink-0">
+                                <i class="fas fa-id-card text-lg"></i>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Documento</p>
+                                <p id="drop-documento" class="text-sm font-bold text-slate-700">—</p>
                             </div>
                         </div>
                     </div>
-
-                    <button
-                        onclick="cambiarSeccion('config'); toggleProfileDropdown()"
-                        class="w-full bg-slate-900 text-white p-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] hover:bg-sky-600 transition-all shadow-xl flex items-center justify-center gap-4 mb-3">
-                        <i class="fas fa-user-cog"></i> Mi Perfil
-                    </button>
-                    <button
-                        onclick="cerrarSesion()"
-                        class="w-full p-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] text-red-500 hover:bg-red-50 transition-all flex items-center justify-center gap-4 border border-red-100">
-                        <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
-                    </button>
                 </div>
             </div>
         </header>
 
         <!-- ============================================================
-             SECCIÓN: DASHBOARD (Usuarios)
+             SECCIÓN: DASHBOARD
         ============================================================ -->
         <div id="sec-dashboard" class="seccion-visible">
 
-            <!-- Stats -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-14">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 mb-14">
                 <div onclick="renderUsuarios('Especialista')" class="card-stats p-10 border-l-[10px] border-sky-500 cursor-pointer">
-                    <p class="text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] mb-2">Personal Especializado</p>
+                    <p class="text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] mb-2">Especialistas</p>
                     <h3 id="stat-esp" class="text-5xl font-black text-sky-600">0</h3>
                 </div>
                 <div onclick="renderUsuarios('Paciente')" class="card-stats p-10 border-l-[10px] border-indigo-500 cursor-pointer">
-                    <p class="text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] mb-2">Pacientes en Base</p>
+                    <p class="text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] mb-2">Pacientes</p>
                     <h3 id="stat-pac" class="text-5xl font-black text-indigo-600">0</h3>
                 </div>
-                <div class="card-stats p-10 border-l-[10px] border-emerald-500">
-                    <p class="text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] mb-2">Citas Hoy</p>
-                    <h3 id="stat-citas-hoy" class="text-5xl font-black text-emerald-600">0</h3>
-                </div>
-                <div class="card-stats p-10 bg-slate-900 border-none text-white">
+                <div onclick="renderTodosUsuarios()" class="card-stats p-10 bg-slate-900 border-none text-white cursor-pointer">
                     <p class="text-sky-300 text-[11px] font-black uppercase tracking-[0.2em] mb-2">Total Registros</p>
                     <h3 id="stat-total" class="text-5xl font-black mt-2">0</h3>
                 </div>
             </div>
 
-            <!-- Lista dinámica de usuarios -->
+            <div id="container-buscador-lista" class="seccion-oculta mb-6">
+                <div class="bg-white rounded-3xl px-8 py-5 shadow border border-slate-100 flex items-center gap-4">
+                    <i class="fas fa-search text-slate-400"></i>
+                    <input
+                        type="text"
+                        id="busqueda-lista-dinamica"
+                        oninput="this.value = this.value.toUpperCase(); filtrarListaDinamica()"
+                        placeholder="BUSCAR POR NOMBRE..."
+                        class="flex-grow outline-none text-sm font-bold text-slate-800 uppercase placeholder:text-slate-300 bg-transparent tracking-wide">
+                </div>
+            </div>
+
             <div id="container-lista-rapida" class="seccion-oculta animate-in">
                 <div class="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden">
                     <div class="p-10 border-b border-slate-50 flex flex-wrap justify-between items-center gap-8 bg-slate-50/40">
@@ -239,146 +240,216 @@
         </section>
 
         <!-- ============================================================
+             SECCIÓN: GESTIÓN DE MULTAS
+        ============================================================ -->
+        <section id="sec-multas" class="seccion-oculta animate-in">
+            <div class="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden">
+                <div class="p-10 border-b border-slate-50 flex flex-wrap justify-between items-center gap-8 bg-slate-50/40">
+                    <div class="flex items-center gap-5">
+                        <div class="w-12 h-12 bg-rose-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-rose-500/20">
+                            <i class="fas fa-file-invoice-dollar text-xl"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-black text-slate-800 uppercase text-sm tracking-widest">Gestión de Multas</h3>
+                            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Control de penalizaciones por cancelación</p>
+                        </div>
+                    </div>
+                    <div class="relative w-full md:w-80">
+                        <i class="fas fa-search absolute left-6 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input
+                            type="text"
+                            id="busqueda-multas"
+                            oninput="filtrarTablaMultas()"
+                            placeholder="Filtrar por paciente..."
+                            class="text-xs pl-14 pr-8 py-5 w-full rounded-2xl border-2 border-slate-100 outline-none focus:border-rose-400 transition-all font-semibold">
+                    </div>
+                </div>
+
+                <!-- Contador resumen -->
+                <div class="px-10 py-5 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex flex-wrap gap-6">
+                    <div class="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3">
+                        <i class="fas fa-clock text-amber-500 text-sm"></i>
+                        <div>
+                            <p class="text-[9px] font-black text-amber-600 uppercase tracking-widest">Pendientes</p>
+                            <p id="count-pendientes" class="text-xl font-black text-amber-700">—</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-3">
+                        <i class="fas fa-circle-check text-emerald-500 text-sm"></i>
+                        <div>
+                            <p class="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Pagadas</p>
+                            <p id="count-pagadas" class="text-xl font-black text-emerald-700">—</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 bg-slate-100 border border-slate-200 rounded-2xl px-5 py-3">
+                        <i class="fas fa-hashtag text-slate-500 text-sm"></i>
+                        <div>
+                            <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest">Total</p>
+                            <p id="count-total-multas" class="text-xl font-black text-slate-700">—</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left min-w-[900px]">
+                        <thead id="tabla-head" class="bg-slate-50/80 text-slate-400 text-[11px] font-black uppercase tracking-[0.25em] border-b border-slate-100"></thead>
+                        <tbody id="tabla-body" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                    <div id="no-datos" class="p-32 text-center hidden">
+                        <i class="fas fa-file-circle-check text-4xl text-slate-300 mb-6 block"></i>
+                        <p class="text-slate-400 font-black uppercase text-sm tracking-[0.3em]">Sin multas registradas</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================
              SECCIÓN: MI PERFIL
         ============================================================ -->
-        <section id="sec-config" class="seccion-oculta max-w-6xl mx-auto py-4 animate-in">
-            <div class="bg-white p-14 rounded-[3.5rem] shadow-2xl border border-slate-100 relative overflow-hidden">
+        <section id="sec-config" class="seccion-oculta animate-in">
+            <div class="max-w-6xl mx-auto py-4">
+                <div class="bg-white p-14 rounded-[3.5rem] shadow-2xl border border-slate-100 relative overflow-hidden">
 
-                <!-- Icono decorativo de fondo -->
-                <div class="absolute top-0 right-0 p-10 opacity-5 text-9xl">
-                    <i class="fas fa-user-shield"></i>
-                </div>
-
-                <h2 class="text-2xl font-black text-slate-800 mb-12 uppercase flex items-center gap-5">
-                    <span class="w-14 h-14 bg-sky-600 text-white rounded-2xl flex items-center justify-center shadow-xl">
-                        <i class="fas fa-id-badge"></i>
-                    </span>
-                    Gestión de Perfil Administrativo
-                </h2>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-12 relative z-10">
-
-                    <!-- Nombre -->
-                    <div class="space-y-3">
-                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
-                            Nombre Administrativo
-                        </label>
-                        <input type="text" id="edit-nombre" class="input-consulta" placeholder="Nombre completo">
+                    <div class="absolute top-0 right-0 p-10 opacity-5 text-9xl">
+                        <i class="fas fa-user-shield"></i>
                     </div>
 
-                    <!-- Teléfono -->
-                    <div class="space-y-3">
-                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
-                            Teléfono Móvil
-                        </label>
-                        <input type="tel" id="edit-tel" class="input-consulta" placeholder="+57 300 000 0000">
-                    </div>
+                    <h2 class="text-2xl font-black text-slate-800 mb-12 uppercase flex items-center gap-5">
+                        <span class="w-14 h-14 bg-sky-600 text-white rounded-2xl flex items-center justify-center shadow-xl">
+                            <i class="fas fa-id-badge"></i>
+                        </span>
+                        Gestión de Perfil Administrativo
+                    </h2>
 
-                    <!-- Email -->
-                    <div class="md:col-span-2 space-y-3">
-                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
-                            Correo de Acceso
-                        </label>
-                        <input type="email" id="edit-email" class="input-consulta" placeholder="admin@stylodental.com">
-                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-12 relative z-10">
 
-                    <!-- Cambio de contraseña -->
-                    <div class="md:col-span-2 space-y-3">
-                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
-                            Seguridad: Cambiar Contraseña
-                        </label>
-
-                        <!-- Paso 1: verificar contraseña actual -->
-                        <div id="pass-step1" class="flex flex-col md:flex-row gap-4 items-start">
-                            <div class="flex-grow w-full">
-                                <input
-                                    type="password"
-                                    id="pass-actual"
-                                    class="input-consulta"
-                                    placeholder="Contraseña actual">
-                                <p id="error-pass-actual" class="text-red-600 text-xs font-bold mt-2 ml-1" style="display:none;">
-                                    Contraseña incorrecta
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onclick="validarPasswordActual()"
-                                class="bg-slate-900 text-white px-10 py-5 rounded-2xl font-black text-xs hover:bg-sky-600 transition-all uppercase tracking-[0.3em] shadow-xl active:scale-95 whitespace-nowrap">
-                                Siguiente
-                            </button>
+                        <div class="space-y-3 md:col-span-2">
+                            <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Nombre Completo</label>
+                            <input type="text" id="edit-nombre" class="input-dental w-full" placeholder="Nombre completo">
                         </div>
 
-                        <!-- Paso 2: nueva contraseña -->
-                        <div id="pass-step2" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style="display:none;">
-                            <div>
-                                <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-3">
-                                    Nueva Contraseña
-                                </label>
-                                <input
-                                    type="password"
-                                    id="conf-pass-nueva"
-                                    class="input-consulta"
-                                    placeholder="Mínimo 4 caracteres">
+                        <div class="space-y-3">
+                            <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Teléfono Móvil</label>
+                            <input type="tel" id="edit-tel" class="input-dental w-full" placeholder="+57 300 000 0000">
+                        </div>
+
+                        <div class="space-y-3">
+                            <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Correo Electrónico</label>
+                            <input type="email" id="edit-email" class="input-dental w-full" placeholder="admin@stylodental.com">
+                        </div>
+
+                        <div class="md:col-span-2 space-y-3">
+                            <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Seguridad: Cambiar Contraseña</label>
+
+                            <div id="pass-step1" class="flex flex-col md:flex-row gap-4 items-start">
+                                <div class="flex-grow w-full">
+                                    <div class="pass-input-wrapper">
+                                        <input type="password" id="pass-actual" class="input-dental w-full" placeholder="Ingrese su contraseña actual">
+                                        <button type="button" class="pass-toggle-btn" onclick="togglePassVisibility('pass-actual', this)" tabindex="-1">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                    <p id="error-pass-actual" class="text-red-600 text-xs font-bold mt-2 ml-1" style="display:none;">Contraseña incorrecta</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onclick="validarPasswordActual()"
+                                    class="bg-slate-900 text-white px-10 py-5 rounded-2xl font-black text-xs hover:bg-sky-600 transition-all uppercase tracking-[0.3em] shadow-xl active:scale-95 whitespace-nowrap">
+                                    Siguiente
+                                </button>
                             </div>
-                            <div>
-                                <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-3">
-                                    Confirmar Nueva Contraseña
-                                </label>
-                                <input
-                                    type="password"
-                                    id="conf-pass-confirmar"
-                                    class="input-consulta"
-                                    placeholder="Repite la nueva contraseña">
+
+                            <div id="pass-step2" class="grid grid-cols-1 gap-6 mt-6" style="display:none;">
+                                <div>
+                                    <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-3">Nueva Contraseña</label>
+                                    <div class="pass-input-wrapper">
+                                        <input type="password" id="conf-pass-nueva" class="input-dental w-full" placeholder="Mínimo 8 caracteres" oninput="validarRequisitosEnTiempoReal()">
+                                        <button type="button" class="pass-toggle-btn" onclick="togglePassVisibility('conf-pass-nueva', this)" tabindex="-1">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="lista-requisitos" class="bg-slate-50 rounded-2xl p-5 border border-slate-200">
+                                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Requisitos de la contraseña</p>
+                                    <ul class="space-y-2">
+                                        <li id="req-length"  class="req-item req-pending"><span class="req-icon">-</span><span class="req-text">Mínimo 8 caracteres</span></li>
+                                        <li id="req-upper"   class="req-item req-pending"><span class="req-icon">-</span><span class="req-text">Al menos una letra mayúscula</span></li>
+                                        <li id="req-lower"   class="req-item req-pending"><span class="req-icon">-</span><span class="req-text">Al menos una letra minúscula</span></li>
+                                        <li id="req-number"  class="req-item req-pending"><span class="req-icon">-</span><span class="req-text">Al menos un número</span></li>
+                                        <li id="req-special" class="req-item req-pending"><span class="req-icon">-</span><span class="req-text">Al menos un carácter especial (!@#$%^&*...)</span></li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-3">Confirmar Nueva Contraseña</label>
+                                    <div class="pass-input-wrapper">
+                                        <input type="password" id="conf-pass-confirmar" class="input-dental w-full" placeholder="Repite la nueva contraseña">
+                                        <button type="button" class="pass-toggle-btn" onclick="togglePassVisibility('conf-pass-confirmar', this)" tabindex="-1">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <p id="error-pass-nueva" class="text-red-600 text-xs font-bold mt-1 ml-1" style="display:none;">Las contraseñas no coinciden.</p>
                             </div>
-                            <p id="error-pass-nueva" class="md:col-span-2 text-red-600 text-xs font-bold mt-1 ml-1" style="display:none;">
-                                Las contraseñas no coinciden.
-                            </p>
                         </div>
                     </div>
-                </div>
 
-                <!-- Acciones -->
-                <div class="mt-14 flex justify-end gap-8 pt-10 border-t border-slate-50">
-                    <button
-                        onclick="cambiarSeccion('dashboard')"
-                        class="px-10 py-5 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-800 transition-colors">
-                        Cancelar
-                    </button>
-                    <button
-                        onclick="guardarPerfilCompleto()"
-                        class="bg-slate-900 text-white px-16 py-5 rounded-2xl font-black text-xs hover:bg-sky-600 transition-all uppercase tracking-[0.3em] shadow-2xl active:scale-95">
-                        Guardar Cambios
-                    </button>
+                    <div class="mt-14 flex justify-end gap-8 pt-10 border-t border-slate-50">
+                        <button
+                            onclick="cambiarSeccion('dashboard')"
+                            class="px-10 py-5 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-800 transition-colors">
+                            Cancelar
+                        </button>
+                        <button
+                            onclick="guardarPerfilCompleto()"
+                            class="bg-slate-900 text-white px-16 py-5 rounded-2xl font-black text-xs hover:bg-sky-600 transition-all uppercase tracking-[0.3em] shadow-2xl active:scale-95">
+                            Guardar Cambios
+                        </button>
+                    </div>
                 </div>
             </div>
         </section>
 
     </main>
 
-    <!-- ================================================================
-         MODAL: CONFIRMACIÓN SIMPLE (CERRAR SESIÓN)
-    ================================================================ -->
+    <!-- Modal cerrar sesión -->
     <div id="modalConfirmarSimple" class="modal-overlay" style="display:none;">
         <div class="modal-content p-10 text-center border-t-8 border-sky-600" style="max-width:440px">
-            <div id="icon-simple" class="text-sky-500 text-6xl mb-6">
-                <i class="fas fa-question-circle"></i>
-            </div>
+            <div class="text-sky-500 text-6xl mb-6"><i class="fas fa-question-circle"></i></div>
             <h3 id="confirm-text-simple" class="text-slate-800 font-black text-xl mb-8 uppercase tracking-tighter italic"></h3>
             <div class="flex gap-4">
-                <button
-                    onclick="ejecutarAccionSimple()"
-                    class="flex-1 bg-sky-600 text-white py-4 rounded-2xl font-black hover:bg-sky-700 transition-all text-xs uppercase tracking-widest">
-                    Confirmar
-                </button>
-                <button
-                    onclick="cerrarModalSimple()"
-                    class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all text-xs uppercase tracking-widest">
-                    Cancelar
-                </button>
+                <button onclick="ejecutarAccionSimple()" class="flex-1 bg-sky-600 text-white py-4 rounded-2xl font-black hover:bg-sky-700 transition-all text-xs uppercase tracking-widest">Confirmar</button>
+                <button onclick="cerrarModalSimple()" class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all text-xs uppercase tracking-widest">Cancelar</button>
             </div>
         </div>
     </div>
 
+    <!-- Modal error contraseña -->
+    <div id="modalErrorPassword" class="modal-overlay" style="display:none;">
+        <div class="modal-content p-10 text-center border-t-8 border-red-400" style="max-width:440px">
+            <div class="text-red-400 text-6xl mb-6"><i class="fas fa-lock"></i></div>
+            <h3 class="text-slate-800 font-black text-xl mb-3 uppercase tracking-tighter italic">Contraseña Incorrecta</h3>
+            <p class="text-slate-500 text-xs mb-8 font-bold uppercase tracking-widest">La contraseña ingresada no coincide con la registrada.</p>
+            <button onclick="document.getElementById('modalErrorPassword').style.display='none';"
+                class="w-full bg-red-500 text-white py-4 rounded-2xl font-black hover:bg-red-600 transition-all text-xs uppercase tracking-widest">
+                Intentar de nuevo
+            </button>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"
+         class="fixed bottom-10 right-10 bg-slate-900 text-white text-xs font-black uppercase tracking-widest px-8 py-4 rounded-2xl shadow-2xl transition-all duration-500 opacity-0 pointer-events-none z-[9999]"
+         style="transition: opacity 0.4s ease;">
+    </div>
+
     <script src="{{ url_for('static', filename='js/administrador.js') }}"></script>
+    <script>
+        // Toast helper accesible globalmente desde el HTML inline
+        (function () {
+            const style = document.createElement('style');
+            style.textContent = '#toast.visible { opacity: 1 !important; pointer-events: auto; }';
+            document.head.appendChild(style);
+        })();
+    </script>
 </body>
 </html>

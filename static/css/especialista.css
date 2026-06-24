@@ -1,8 +1,6 @@
 /* ===================================================================
-   especialista.css — Stylo Dental Pro v6.1
-   REQ 1: contraseña real | REQ 2: perfil real + doc concatenado
-   REQ 3: tablas alineadas | REQ 4: avatar/botón | REQ 5: pickers
-   REQ 6: reloj AM/PM mismo tamaño que los números
+   especialista.css — Stylo Dental Pro v6.3
+   FIX: maquetación de campos de agenda médica (iconos encimados)
    =================================================================== */
 
 :root {
@@ -13,7 +11,6 @@
     --sidebar-grad:       linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
     --card-shadow:        0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.05);
     --transition-section: 0.35s cubic-bezier(0.23, 1, 0.32, 1);
-    /* REQ 4: color sobrio para avatar del modal de cita */
     --avatar-sobrio-bg:   #0369a1;
     --avatar-sobrio-bg-2: #075985;
 }
@@ -121,7 +118,7 @@ body {
 }
 
 /* ===================================================================
-   RELOJ — REQ 6: AM/PM exactamente el mismo tamaño que los números
+   RELOJ
    =================================================================== */
 .clock-widget {
     background:      rgba(15,23,42,0.4);
@@ -133,31 +130,16 @@ body {
     box-shadow:      inset 0 2px 10px rgba(0,0,0,0.3);
 }
 #reloj {
-    font-family:     'JetBrains Mono', monospace;
-    font-size:       1.55rem;
-    letter-spacing:  0.5px;
-    background:      linear-gradient(to right, #38bdf8, #818cf8, #38bdf8);
+    font-family:    'JetBrains Mono', monospace;
+    font-size:      1.65rem;
+    letter-spacing: -2px;
+    background:     linear-gradient(to right, #38bdf8, #818cf8, #38bdf8);
     background-size: 200% auto;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    font-weight:     800;
-    animation:       textShine 4s linear infinite;
-    text-align:      center;
-    display:         flex;
-    align-items:     center;
-    justify-content: center;
-    gap:             6px;
-    white-space:     nowrap;
-}
-/* REQ 6: .reloj-ampm hereda el mismo font-size que .reloj-hms — sin override de tamaño */
-#reloj .reloj-hms {
-    font-size:   inherit;
-    font-weight: inherit;
-}
-#reloj .reloj-ampm {
-    font-size:      inherit;
     font-weight:    800;
-    letter-spacing: 1px;
+    animation:      textShine 4s linear infinite;
+    text-align:     center;
 }
 @keyframes textShine { to { background-position: 200% center; } }
 
@@ -274,12 +256,10 @@ body {
     border:        1px solid rgba(255,255,255,0.5);
 }
 
-/* REQ 4: cabecera del modal "Empezar Cita" — oscura y coherente */
 .modal-header-dark {
     background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
 }
 
-/* REQ 4: avatar del paciente en modal — sky sobrio, sin amarillo */
 .avatar-cita-modal {
     background: linear-gradient(135deg, var(--avatar-sobrio-bg) 0%, var(--avatar-sobrio-bg-2) 100%);
     color:      #ffffff;
@@ -310,7 +290,11 @@ body {
 }
 
 /* ===================================================================
-   REQ 5 — SMART PICKER WRAPPER
+   SMART PICKER WRAPPER — FIX CRÍTICO DE MAQUETACIÓN
+   Problema: los iconos nativos del navegador (calendario/reloj) y el
+   ícono FontAwesome se superponían creando el error visual de la imagen.
+   Solución: eliminar el ícono FA decorativo, ocultar los controles
+   nativos del input y controlar toda la apariencia desde el wrapper.
    =================================================================== */
 .smart-picker-wrapper {
     position:      relative;
@@ -321,45 +305,91 @@ body {
     border:        2px solid #e2e8f0;
     background:    #f8fafc;
     transition:    box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
-    overflow:      hidden;
+    overflow:      hidden;          /* evita que el input nativo sobresalga */
+    height:        58px;            /* altura fija = sin colapso */
 }
+
+/* El input ocupa todo el espacio menos el padding derecho del ícono */
 .smart-picker-wrapper .input-smart-picker {
-    flex:       1;
-    width:      100%;
-    border:     none !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    padding:    18px 52px 18px 20px;
-    margin:     0;
-    border-radius: 0;
-    cursor:     pointer;
+    flex:            1;
+    width:           100%;
+    height:          100%;
+    border:          none !important;
+    background:      transparent !important;
+    box-shadow:      none !important;
+    padding:         0 52px 0 20px;  /* 52px a la derecha = espacio para el ícono FA */
+    margin:          0;
+    border-radius:   0;
+    cursor:          pointer;
+    font-size:       14px;
+    font-weight:     600;
+    color:           #1e293b;
+    outline:         none;
+
+    /* Ocultar los iconos nativos del navegador (calendario, reloj) */
     -webkit-appearance: none;
     -moz-appearance:    none;
     appearance:         none;
 }
-.smart-picker-wrapper .input-smart-picker:focus { transform: none; }
+
+/* Webkit: ocultar botón de calendario nativo */
+.smart-picker-wrapper .input-smart-picker::-webkit-calendar-picker-indicator {
+    display:    none !important;
+    opacity:    0;
+    width:      0;
+    height:     0;
+    position:   absolute;
+    pointer-events: none;
+}
+
+/* Firefox: ocultar botón de calendario nativo */
+.smart-picker-wrapper .input-smart-picker::-moz-calendar-picker-indicator {
+    display: none !important;
+}
+
+/* Ocultar controles de tiempo nativos en todos los navegadores */
+.smart-picker-wrapper .input-smart-picker[type="time"]::-webkit-inner-spin-button,
+.smart-picker-wrapper .input-smart-picker[type="time"]::-webkit-clear-button {
+    display: none;
+    -webkit-appearance: none;
+}
+
+.smart-picker-wrapper .input-smart-picker:focus {
+    transform: none; /* evitar que el scale del .input-consulta rompa el layout */
+}
+
 .smart-picker-wrapper:focus-within {
     border-color: var(--primary);
     background:   #ffffff;
     box-shadow:   0 0 0 6px rgba(2,132,199,0.12);
 }
+
+/* Ícono FA: posicionado absolutamente a la derecha, sobre el input */
 .smart-picker-icon {
     position:       absolute;
-    right:          20px;
+    right:          18px;
     top:            50%;
     transform:      translateY(-50%);
     color:          #94a3b8;
     font-size:      16px;
-    pointer-events: none;
-    transition:     color 0.2s ease;
+    pointer-events: none;       /* el clic pasa al wrapper y llega al input */
     z-index:        2;
+    transition:     color 0.2s ease;
+    line-height:    1;
+    display:        flex;
+    align-items:    center;
+    justify-content: center;
+    width:          20px;
+    height:         20px;
 }
+
 .smart-picker-wrapper:focus-within .smart-picker-icon { color: var(--primary); }
 
+/* Placeholder personalizado: solo visible cuando el input está vacío */
 .smart-picker-placeholder {
     position:       absolute;
     left:           20px;
-    right:          52px;
+    right:          52px;           /* no solapar el ícono */
     top:            0;
     bottom:         0;
     display:        flex;
@@ -371,11 +401,20 @@ body {
     font-size:      13.5px;
     text-transform: uppercase;
     letter-spacing: 0.3px;
-    pointer-events: none;
+    pointer-events: none;   /* nunca interfiere con clics */
     z-index:        1;
     transition:     color 0.2s ease;
+    user-select:    none;
 }
+
 .smart-picker-wrapper:focus-within .smart-picker-placeholder { color: #64748b; }
+
+/* Cuando el input tiene valor, el placeholder no debe superponerse.
+   Usamos la clase .has-value añadida por JS (ver especialista.js) */
+.smart-picker-wrapper .input-smart-picker.has-value + .smart-picker-placeholder,
+.smart-picker-wrapper .input-smart-picker:not(:placeholder-shown) + .smart-picker-placeholder {
+    display: none;
+}
 
 /* ===================================================================
    WRAPPER CONTRASEÑA CON ÍCONO OJO
@@ -435,7 +474,7 @@ body {
 .req-item.req-error .req-icon  { background-color: #fee2e2; color: #dc2626; }
 
 /* ===================================================================
-   REQ 3 — TABLAS: alineación milimétrica th ↔ td
+   TABLAS
    =================================================================== */
 table {
     table-layout: fixed;
@@ -477,8 +516,76 @@ tr { transition: background-color 0.2s ease; }
 tr:hover td { background-color: rgba(2,132,199,0.02); }
 
 /* ===================================================================
-   REQ 3 — REPORTE PROFESIONAL: valores de solo lectura
+   BADGE DE NOTIFICACIÓN (NUEVO — encuesta pendiente)
    =================================================================== */
+.badge-encuesta {
+    display:         inline-flex;
+    align-items:     center;
+    justify-content: center;
+    min-width:       20px;
+    height:          20px;
+    background:      #ef4444;
+    color:           #ffffff;
+    border-radius:   10px;
+    font-size:       10px;
+    font-weight:     900;
+    padding:         0 6px;
+    margin-left:     6px;
+    animation:       pulse-badge 2s ease-in-out infinite;
+}
+@keyframes pulse-badge {
+    0%, 100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+    50%       { transform: scale(1.05); box-shadow: 0 0 0 6px rgba(239,68,68,0);  }
+}
+
+/* ===================================================================
+   MODAL REPORTE CLÍNICO
+   =================================================================== */
+.reporte-clinico-body {
+    padding: 32px;
+    background: #f8fafc;
+}
+.reporte-clinico-card {
+    background:    #ffffff;
+    border-radius: 28px;
+    padding:       28px;
+    border:        1px solid #e2e8f0;
+    box-shadow:    0 2px 8px rgba(0,0,0,0.04);
+    margin-bottom: 20px;
+}
+.reporte-clinico-card:last-child { margin-bottom: 0; }
+
+.reporte-section-label {
+    display:        flex;
+    align-items:    center;
+    gap:            8px;
+    font-size:      10px;
+    font-weight:    900;
+    text-transform: uppercase;
+    letter-spacing: 0.35em;
+    margin-bottom:  16px;
+}
+.reporte-section-label.sky    { color: #0284c7; }
+.reporte-section-label.amber  { color: #d97706; }
+.reporte-section-label.emerald{ color: #059669; }
+.reporte-section-label.slate  { color: #475569; }
+
+.reporte-dato-mini {
+    font-size:      9px;
+    font-weight:    900;
+    color:          #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-bottom:  4px;
+}
+.reporte-dato-valor {
+    font-size:   14px;
+    font-weight: 800;
+    color:       #0f172a;
+    line-height: 1.3;
+}
+.reporte-dato-valor.muted { color: #64748b; font-weight: 600; }
+
 .report-value-readonly {
     color:          #0f172a;
     font-weight:    600;
@@ -503,6 +610,9 @@ tr:hover td { background-color: rgba(2,132,199,0.02); }
 #rep-prescripcion.report-value-readonly { border-left-color: #10b981; }
 #rep-evolucion.report-value-readonly    { border-left-color: #f59e0b; }
 
+#rep-pac-prescripcion.report-value-readonly { border-left-color: #10b981; }
+#rep-pac-evolucion.report-value-readonly    { border-left-color: #f59e0b; }
+
 /* ===================================================================
    BOTONES DE ACCIÓN
    =================================================================== */
@@ -520,7 +630,6 @@ tr:hover td { background-color: rgba(2,132,199,0.02); }
 }
 .btn-action:active { transform: scale(0.95); }
 
-/* REQ 4: "Empezar Cita" — sky primario, coherente con la paleta */
 .btn-empezar-cita {
     background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
     color:      #ffffff;
