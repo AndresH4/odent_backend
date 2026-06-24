@@ -946,6 +946,11 @@ window.validarPasswordActual = function () {
 };
 
 // ─── GUARDAR PERFIL — UPDATE REAL EN BD ──────────────────────────────────────
+// La contraseña nueva SOLO se aplica si:
+//   1) Se ingresó y confirmó correctamente (cumpliendo la política de seguridad), y
+//   2) Se envía la "Contraseña actual" junto con la solicitud, para que el backend
+//      la valide contra el hash real almacenado en odent.db (check_password_hash)
+//      ANTES de generar y persistir el nuevo hash (generate_password_hash).
 window.guardarPerfilPaciente = function () {
     const nombreCompleto = (document.getElementById('edit-nombres')?.value || '').trim();
     const partes         = nombreCompleto.split(/\s+/);
@@ -953,12 +958,14 @@ window.guardarPerfilPaciente = function () {
     const nombres        = partes.slice(0, mitad).join(' ');
     const apellidos      = partes.slice(mitad).join(' ');
 
-    const correo    = (document.getElementById('edit-correo')?.value   || '').trim();
-    const telefono  = (document.getElementById('edit-telefono')?.value || '').trim();
-    const passNueva = document.getElementById('conf-pass-nueva')?.value    || '';
-    const passConf  = document.getElementById('conf-pass-confirmar')?.value || '';
-    const errNueva  = document.getElementById('error-pass-nueva');
-    const step2     = document.getElementById('pass-step2');
+    const correo      = (document.getElementById('edit-correo')?.value   || '').trim();
+    const telefono    = (document.getElementById('edit-telefono')?.value || '').trim();
+    const passActual  = document.getElementById('pass-actual')?.value        || '';
+    const passNueva   = document.getElementById('conf-pass-nueva')?.value    || '';
+    const passConf    = document.getElementById('conf-pass-confirmar')?.value || '';
+    const errActual   = document.getElementById('error-pass-actual');
+    const errNueva    = document.getElementById('error-pass-nueva');
+    const step2       = document.getElementById('pass-step2');
 
     // ── Leer valores de los selectores EPS (orden: Régimen, Tipo, EPS) ───────
     const selEps     = document.getElementById('edit-eps');
@@ -969,24 +976,32 @@ window.guardarPerfilPaciente = function () {
     const tipoEpsId = selTipoEps ? (selTipoEps.value || null) : null;
     const regimenId = regimenEl  ? (regimenEl.value  || null) : null;
 
+    const cambiandoPassword = step2?.style.display !== 'none' && !!passNueva;
+
     // ── Validar contraseña si se mostró el paso 2 ────────────────────────────
-    if (step2?.style.display !== 'none' && passNueva) {
+    if (cambiandoPassword) {
         const todosOk = _marcarRequisitosIncumplidos();
         if (!todosOk) return;
         if (passNueva !== passConf) {
             if (errNueva) errNueva.style.display = 'block';
             return;
         }
+        if (!passActual.trim()) {
+            if (errActual) { errActual.textContent = 'Ingresa tu contraseña actual para poder cambiarla.'; errActual.style.display = 'block'; }
+            return;
+        }
     }
-    if (errNueva) errNueva.style.display = 'none';
+    if (errNueva)  errNueva.style.display  = 'none';
+    if (errActual) errActual.style.display = 'none';
 
     const payload = {
-        usuario_id:  _usuarioId,
-        nombres:     nombres   || undefined,
-        apellidos:   apellidos || undefined,
-        correo:      correo    || undefined,
-        telefono:    telefono  || undefined,
-        nuevaPass:   (step2?.style.display !== 'none' && passNueva) ? passNueva : null,
+        usuario_id:        _usuarioId,
+        nombres:           nombres   || undefined,
+        apellidos:         apellidos || undefined,
+        correo:            correo    || undefined,
+        telefono:          telefono  || undefined,
+        nuevaPass:         cambiandoPassword ? passNueva  : null,
+        contrasena_actual: cambiandoPassword ? passActual : null,
         eps_id:      epsId     ? parseInt(epsId)     : null,
         tipo_eps_id: tipoEpsId ? parseInt(tipoEpsId) : null,
         regimen_id:  regimenId ? parseInt(regimenId) : null,
@@ -997,8 +1012,8 @@ window.guardarPerfilPaciente = function () {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
     })
-    .then(r => r.json())
-    .then(data => {
+    .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
         if (data.ok) {
             if (_sesionPaciente) {
                 if (nombres)   _sesionPaciente.Nombres   = nombres;
@@ -1010,6 +1025,8 @@ window.guardarPerfilPaciente = function () {
             _cargarSesion();
             cambiarVista('inicio');
             _mostrarNotificacion('Perfil Actualizado', 'Tus datos han sido guardados correctamente.', 'success');
+        } else if (r.status === 401 && cambiandoPassword) {
+            if (errActual) { errActual.textContent = data.error || 'Contraseña actual incorrecta.'; errActual.style.display = 'block'; }
         } else {
             _mostrarNotificacion('Error', data.mensaje || data.error || 'No se pudo guardar. Intenta de nuevo.', 'error');
         }

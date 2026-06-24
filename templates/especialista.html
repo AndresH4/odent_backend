@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel del Especialista v2.5 - Stylo Dental Pro</title>
+    <title>Panel del Especialista v4.0 - Stylo Dental Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -11,23 +11,21 @@
 </head>
 <body class="flex">
 
-    <!-- ================================================================
-         SIDEBAR
-    ================================================================ -->
     <aside class="sidebar text-white flex flex-col w-72 flex-shrink-0 shadow-2xl">
-
-        <!-- Logo -->
         <div class="p-12 border-b border-slate-800/60 flex flex-col items-center">
             <div class="w-16 h-16 bg-sky-500 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-sky-500/20">
                 <i class="fas fa-tooth text-3xl"></i>
             </div>
             <h2 class="text-3xl font-black italic tracking-tighter text-sky-400">STYLO<span class="text-white">DENTAL</span></h2>
-            <p class="text-[10px] text-slate-500 font-extrabold uppercase tracking-[0.4em] mt-2">Admin Portal</p>
+            <p class="text-[10px] text-slate-500 font-extrabold uppercase tracking-[0.4em] mt-2">Specialist Portal</p>
         </div>
 
-        <!-- Navegación -->
         <nav class="flex-grow p-8 space-y-4">
-            <button onclick="cambiarSeccion('agenda')" id="btn-agenda" class="nav-btn active">
+            <button onclick="cambiarSeccion('inicio')" id="btn-inicio" class="nav-btn active">
+                <i class="fas fa-home w-6 text-xl"></i>
+                <span class="tracking-wide">Inicio</span>
+            </button>
+            <button onclick="cambiarSeccion('agenda')" id="btn-agenda" class="nav-btn">
                 <i class="fas fa-calendar-alt w-6 text-xl"></i>
                 <span class="tracking-wide">Agenda Médica</span>
             </button>
@@ -35,67 +33,52 @@
                 <i class="fas fa-user-injured w-6 text-xl"></i>
                 <span class="tracking-wide">Mis Pacientes</span>
             </button>
-            <button onclick="cambiarSeccion('config'); toggleProfileDropdown && toggleProfileDropdown();" id="btn-config" class="nav-btn">
+            <button onclick="cambiarSeccion('config')" id="btn-config" class="nav-btn">
                 <i class="fas fa-user-cog w-6 text-xl"></i>
                 <span class="tracking-wide">Mi Perfil</span>
             </button>
         </nav>
 
-        <!-- Reloj y estado -->
         <div class="clock-widget mx-6 mb-8 text-center flex-shrink-0">
-            <div id="reloj" class="font-black text-slate-700">00:00:00</div>
-            <div class="mt-4 flex items-center justify-center bg-slate-900/50 py-3 px-4 rounded-2xl border border-slate-700/50">
-                <span class="status-dot dot-active"></span>
-                <span id="status-text" class="text-[11px] font-black uppercase tracking-widest text-slate-400">
-                    turno activo
-                </span>
+            <div id="reloj" class="font-black">00:00:00</div>
+            <div id="status-laboral" class="mt-4 flex items-center justify-center bg-slate-900/50 py-3 px-4 rounded-2xl border border-slate-700/50">
+                <span id="status-dot" class="status-dot dot-active"></span>
+                <span id="status-text" class="text-[11px] font-black uppercase tracking-widest text-slate-400">Iniciando...</span>
             </div>
-            <div class="mt-4 text-[9px] text-slate-600 font-black italic uppercase tracking-widest">
-                Bogotá GMT-5
-            </div>
+            <div class="mt-4 text-[9px] text-slate-600 font-black italic uppercase tracking-widest">Bogotá GMT-5</div>
         </div>
 
-        <!-- Botón Cerrar Sesión en sidebar -->
         <div class="px-6 pb-8">
-            <button
-                onclick="mostrarConfirmacionSimple('¿Finalizar turno de especialista?', 'salir')"
+            <button onclick="mostrarConfirmacionSimple('¿Finalizar turno de especialista?', 'salir')"
                 class="w-full flex items-center justify-center gap-4 p-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] text-red-400 hover:bg-red-500/10 transition-all border border-red-900/40 hover:border-red-500/60">
                 <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
             </button>
         </div>
-
     </aside>
 
-    <!-- ================================================================
-         CONTENIDO PRINCIPAL
-    ================================================================ -->
     <main class="flex-grow p-8 md:p-14 overflow-y-auto">
 
-        <!-- Cabecera -->
         <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-14 gap-8">
             <div>
-                <h1 id="main-title" class="text-4xl font-black text-slate-800 tracking-tighter mb-3">Agenda Médica</h1>
+                <h1 id="main-title" class="text-4xl font-black text-slate-800 tracking-tighter mb-3">Especialista</h1>
                 <div class="flex items-center gap-3">
                     <div class="h-1.5 w-12 bg-sky-600 rounded-full"></div>
                     <p id="fecha-actual" class="text-slate-500 font-bold uppercase text-xs tracking-[0.3em]"></p>
                 </div>
             </div>
 
-            <!-- Dropdown de perfil -->
             <div class="relative">
-                <button
-                    id="profile-trigger"
-                    onclick="toggleProfileDropdown()"
+                <button id="profile-trigger" onclick="toggleProfileDropdown()"
                     class="flex items-center gap-6 bg-white p-5 pr-12 rounded-[2rem] shadow-xl border border-slate-100 cursor-pointer hover:border-sky-500 transition-all active:scale-95 group z-50">
-                    <div id="doctor-avatar" class="w-14 h-14 bg-gradient-to-br from-sky-600 to-sky-800 rounded-2xl flex items-center justify-center text-white text-2xl font-black shadow-2xl shadow-sky-600/30 uppercase group-hover:rotate-6 transition-transform">D</div>
+                    <div id="doctor-avatar" class="w-14 h-14 bg-gradient-to-br from-sky-600 to-sky-800 rounded-2xl flex items-center justify-center text-white text-2xl font-black shadow-2xl shadow-sky-600/30 uppercase group-hover:rotate-6 transition-transform">E</div>
                     <div class="text-left">
-                        <p class="text-[10px] font-black text-sky-600 uppercase tracking-widest mb-1">Doctor Registrado</p>
+                        <p class="text-[10px] font-black text-sky-600 uppercase tracking-widest mb-1">Especialista Registrado</p>
                         <p id="doctor-nombre-display" class="text-base font-black text-slate-800 leading-none">Cargando...</p>
                     </div>
                     <i class="fas fa-chevron-down text-sm text-slate-300 ml-4 group-hover:text-sky-600 transition-colors"></i>
                 </button>
 
-                <!-- Dropdown — CSS lo controla con visibility+opacity, NO con class="hidden" -->
+                <!-- DROPDOWN PERFIL -->
                 <div id="profile-dropdown" class="absolute top-full right-0 mt-6 w-96 bg-white rounded-[2.5rem] shadow-[0_30px_70px_rgba(0,0,0,0.2)] border border-slate-50 p-10">
                     <div class="text-center pb-8 border-b border-slate-100">
                         <div id="avatar-grande" class="w-24 h-24 bg-sky-50 text-sky-600 rounded-3xl flex items-center justify-center text-4xl font-black uppercase mx-auto mb-5 border-4 border-white shadow-xl"></div>
@@ -103,23 +86,50 @@
                         <span id="esp-menu" class="inline-block mt-3 px-6 py-2 bg-sky-100 text-sky-700 rounded-full text-[11px] font-black uppercase tracking-[0.2em]"></span>
                     </div>
 
-                    <div class="py-8 space-y-6">
+                    <div class="py-8 space-y-5">
                         <div class="flex items-center gap-5">
-                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100 flex-shrink-0">
                                 <i class="fas fa-envelope text-lg"></i>
                             </div>
-                            <div>
-                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Correo Profesional</p>
-                                <p id="email-menu" class="text-sm font-bold text-slate-700"></p>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Correo Electrónico</p>
+                                <p id="email-menu" class="text-sm font-bold text-slate-700 truncate"></p>
                             </div>
                         </div>
                         <div class="flex items-center gap-5">
-                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100 flex-shrink-0">
                                 <i class="fas fa-phone-alt text-lg"></i>
                             </div>
                             <div>
-                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Línea de Contacto</p>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Teléfono</p>
                                 <p id="tel-menu" class="text-sm font-bold text-slate-700"></p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-5">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100 flex-shrink-0">
+                                <i class="fas fa-id-card text-lg"></i>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Documento</p>
+                                <p id="doc-menu-concat" class="text-sm font-bold text-slate-700 mt-1">—</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-5">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100 flex-shrink-0">
+                                <i class="fas fa-stethoscope text-lg"></i>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Especialidad</p>
+                                <p id="especialidad-menu" class="text-sm font-bold text-slate-700">—</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-5">
+                            <div class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100 flex-shrink-0">
+                                <i class="fas fa-certificate text-lg"></i>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tarjeta Profesional</p>
+                                <p id="tarjeta-menu" class="text-sm font-bold text-slate-700">—</p>
                             </div>
                         </div>
                     </div>
@@ -127,69 +137,224 @@
             </div>
         </header>
 
-        <!-- Stats -->
-        <div id="contenedor-stats" class="seccion-visible grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-14">
-            <div class="card-stats p-10 relative overflow-hidden">
-                <div class="absolute -right-6 -top-6 w-32 h-32 bg-slate-50 rounded-full opacity-60"></div>
-                <p class="text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] mb-2 relative">Total Pacientes</p>
-                <h3 id="stat-total" class="text-5xl font-black text-slate-800 relative">0</h3>
+        <!-- SECCIÓN: INICIO -->
+        <section id="sec-inicio" class="seccion-visible">
+            <div id="contenedor-stats" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-14">
+                <div class="card-stats p-10 relative overflow-hidden cursor-pointer" onclick="filtrarPorEstado('todos')">
+                    <div class="absolute -right-6 -top-6 w-32 h-32 bg-slate-50 rounded-full opacity-60"></div>
+                    <p class="text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] mb-2 relative">Total Pacientes</p>
+                    <h3 id="stat-total" class="text-5xl font-black text-slate-800 relative">0</h3>
+                </div>
+                <div class="card-stats p-10 border-l-[10px] border-amber-400 cursor-pointer" onclick="filtrarPorEstado('Pendiente')">
+                    <p class="text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] mb-2">Por Atender</p>
+                    <h3 id="stat-pendientes" class="text-5xl font-black text-amber-600">0</h3>
+                </div>
+                <div class="card-stats p-10 border-l-[10px] border-emerald-500 cursor-pointer" onclick="filtrarPorEstado('Atendido')">
+                    <p class="text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] mb-2">Atendidos Hoy</p>
+                    <h3 id="stat-atendidos" class="text-5xl font-black text-emerald-600">0</h3>
+                </div>
+                <div class="card-stats p-10 bg-slate-900 border-none text-white cursor-pointer" onclick="filtrarPorEstado('proxima')">
+                    <p class="text-sky-300 text-[11px] font-black uppercase tracking-[0.2em] mb-3">Siguiente Cita</p>
+                    <div class="siguiente-cita-bloque">
+                        <p id="stat-proxima-hora" class="siguiente-cita-dato">--:--</p>
+                        <p id="stat-proxima-fecha" class="siguiente-cita-dato">Sin citas</p>
+                    </div>
+                </div>
             </div>
-            <div class="card-stats p-10 border-l-[10px] border-amber-400">
-                <p class="text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] mb-2">Por Atender</p>
-                <h3 id="stat-pendientes" class="text-5xl font-black text-amber-600">0</h3>
-            </div>
-            <div class="card-stats p-10 border-l-[10px] border-emerald-500">
-                <p class="text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] mb-2">Atendidos</p>
-                <h3 id="stat-atendidos" class="text-5xl font-black text-emerald-600">0</h3>
-            </div>
-            <div class="card-stats p-10 bg-slate-900 border-none text-white">
-                <p class="text-sky-300 text-[11px] font-black uppercase tracking-[0.2em] mb-2">Siguiente Cita</p>
-                <h3 id="stat-proxima" class="text-3xl font-black mt-2">--:--</h3>
-            </div>
-        </div>
 
-        <!-- Tabla de citas -->
-        <section id="sec-tabla" class="seccion-visible animate-in">
+            <section id="sec-tabla-inicio" class="animate-in">
+                <div class="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden">
+                    <div class="p-10 border-b border-slate-50 flex flex-wrap justify-between items-center gap-8 bg-slate-50/40">
+                        <div class="flex items-center gap-5">
+                            <div class="w-12 h-12 bg-sky-600 text-white rounded-2xl flex items-center justify-center shadow-lg">
+                                <i class="fas fa-clipboard-list text-xl"></i>
+                            </div>
+                            <h3 id="tabla-titulo-inicio" class="font-black text-slate-800 uppercase text-sm tracking-widest">Listado de Pacientes</h3>
+                        </div>
+                        <div class="relative w-full md:w-96">
+                            <i class="fas fa-search absolute left-6 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                            <input type="text" id="busqueda-inicio"
+                                oninput="this.value=this.value.toUpperCase(); filtrarTablaSeccion('tabla-inicio', this.value)"
+                                placeholder="FILTRAR PACIENTE..."
+                                class="text-xs pl-14 pr-8 py-5 w-full rounded-2xl border-2 border-slate-100 outline-none focus:border-sky-500 transition-all font-semibold uppercase">
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left" style="min-width:900px; table-layout:fixed;">
+                            <colgroup>
+                                <col style="width:14%">
+                                <col style="width:24%">
+                                <col style="width:16%">
+                                <col style="width:14%">
+                                <col style="width:16%">
+                                <col style="width:16%">
+                            </colgroup>
+                            <thead class="bg-slate-50/80 text-slate-400 text-[11px] font-black uppercase tracking-[0.25em] border-b border-slate-100">
+                                <tr>
+                                    <th class="px-8 py-6 text-left">Horario</th>
+                                    <th class="px-8 py-6 text-left">Paciente</th>
+                                    <th class="px-8 py-6 text-left">Procedimiento</th>
+                                    <th class="px-8 py-6 text-left">Estado</th>
+                                    <th class="px-8 py-6 text-left">Motivo</th>
+                                    <th class="px-8 py-6 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-inicio" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                        <div id="no-datos-inicio" class="p-32 text-center" style="display:none;">
+                            <i class="fas fa-user-slash text-4xl text-slate-300 mb-6 block"></i>
+                            <p class="text-slate-400 font-black uppercase text-sm tracking-[0.3em]">Sin registros disponibles</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </section>
+
+        <!-- SECCIÓN: AGENDA MÉDICA -->
+        <section id="sec-agenda" class="seccion-oculta animate-in">
+            <div class="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden mb-10">
+                <div class="p-10 border-b border-slate-50 bg-slate-50/40">
+                    <div class="flex items-center gap-5">
+                        <div class="w-12 h-12 bg-sky-600 text-white rounded-2xl flex items-center justify-center shadow-lg">
+                            <i class="fas fa-plus-circle text-xl"></i>
+                        </div>
+                        <h3 class="font-black text-slate-800 uppercase text-sm tracking-widest">Agregar Disponibilidad</h3>
+                    </div>
+                </div>
+                <div class="p-10">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                        <div class="space-y-3">
+                            <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Fecha</label>
+                            <div class="smart-picker-wrapper" onclick="dispararPicker(this)">
+                                <input type="date" id="agenda-fecha" class="input-smart-picker" min=""
+                                    oninput="actualizarPlaceholderVisual(this)">
+                                <span class="smart-picker-placeholder" id="agenda-fecha-placeholder">DD/MM/AAAA</span>
+                                <i class="fas fa-calendar-alt smart-picker-icon pointer-events-none"></i>
+                            </div>
+                        </div>
+                        <div class="space-y-3">
+                            <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Hora de Inicio</label>
+                            <div class="smart-picker-wrapper" onclick="dispararPicker(this)">
+                                <input type="time" id="agenda-hora-inicio" class="input-smart-picker"
+                                    oninput="actualizarPlaceholderVisual(this)">
+                                <span class="smart-picker-placeholder" id="agenda-hora-inicio-placeholder">00:00</span>
+                                <i class="fas fa-clock smart-picker-icon pointer-events-none"></i>
+                            </div>
+                        </div>
+                        <div class="space-y-3">
+                            <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Hora de Fin</label>
+                            <div class="smart-picker-wrapper" onclick="dispararPicker(this)">
+                                <input type="time" id="agenda-hora-fin" class="input-smart-picker"
+                                    oninput="actualizarPlaceholderVisual(this)">
+                                <span class="smart-picker-placeholder" id="agenda-hora-fin-placeholder">00:00</span>
+                                <i class="fas fa-clock smart-picker-icon pointer-events-none"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex justify-end">
+                        <button onclick="guardarFranjaHoraria()"
+                            class="bg-slate-900 text-white px-14 py-5 rounded-2xl font-black text-xs hover:bg-sky-600 transition-all uppercase tracking-[0.3em] shadow-2xl active:scale-95 flex items-center gap-3">
+                            <i class="fas fa-save"></i> Guardar Disponibilidad
+                        </button>
+                    </div>
+                    <div id="agenda-form-error" class="mt-4 hidden text-red-600 text-xs font-bold ml-1"></div>
+                </div>
+            </div>
+
             <div class="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden">
                 <div class="p-10 border-b border-slate-50 flex flex-wrap justify-between items-center gap-8 bg-slate-50/40">
                     <div class="flex items-center gap-5">
                         <div class="w-12 h-12 bg-sky-600 text-white rounded-2xl flex items-center justify-center shadow-lg">
-                            <i class="fas fa-clipboard-list text-xl"></i>
+                            <i class="fas fa-calendar-alt text-xl"></i>
                         </div>
-                        <h3 id="tabla-titulo" class="font-black text-slate-800 uppercase text-sm tracking-widest">Listado de Pacientes</h3>
+                        <h3 class="font-black text-slate-800 uppercase text-sm tracking-widest">Mis Horarios de Disponibilidad</h3>
                     </div>
                     <div class="relative w-full md:w-96">
                         <i class="fas fa-search absolute left-6 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                        <input
-                            type="text"
-                            id="busqueda-paciente"
-                            onkeyup="filtrarTabla()"
-                            placeholder="Filtrar paciente..."
-                            class="text-xs pl-14 pr-8 py-5 w-full rounded-2xl border-2 border-slate-100 outline-none focus:border-sky-500 transition-all font-semibold">
+                        <input type="text" id="busqueda-agenda"
+                            oninput="this.value=this.value.toUpperCase(); filtrarTablaSeccion('tabla-agenda', this.value)"
+                            placeholder="FILTRAR FECHA / HORARIO..."
+                            class="text-xs pl-14 pr-8 py-5 w-full rounded-2xl border-2 border-slate-100 outline-none focus:border-sky-500 transition-all font-semibold uppercase">
                     </div>
                 </div>
                 <div class="overflow-x-auto">
-                    <table class="w-full text-left min-w-[900px]">
+                    <table class="w-full text-left" style="min-width:700px; table-layout:fixed;">
+                        <colgroup>
+                            <col style="width:22%">
+                            <col style="width:22%">
+                            <col style="width:22%">
+                            <col style="width:18%">
+                            <col style="width:16%">
+                        </colgroup>
                         <thead class="bg-slate-50/80 text-slate-400 text-[11px] font-black uppercase tracking-[0.25em] border-b border-slate-100">
                             <tr>
-                                <th class="p-8">Horario</th>
-                                <th class="p-8">Datos del Paciente</th>
-                                <th class="p-8">Procedimiento</th>
-                                <th class="p-8">Estado</th>
-                                <th class="p-8 text-right">Acciones</th>
+                                <th class="px-8 py-6 text-left">Fecha</th>
+                                <th class="px-8 py-6 text-left">Hora Inicio</th>
+                                <th class="px-8 py-6 text-left">Hora Fin</th>
+                                <th class="px-8 py-6 text-left">Estado</th>
+                                <th class="px-8 py-6 text-right">Acciones</th>
                             </tr>
                         </thead>
-                        <tbody id="tabla-especialista" class="divide-y divide-slate-100"></tbody>
+                        <tbody id="tabla-agenda" class="divide-y divide-slate-100"></tbody>
                     </table>
-                    <div id="no-datos" class="p-32 text-center">
-                        <i class="fas fa-user-slash text-4xl text-slate-300 mb-6 block"></i>
-                        <p class="text-slate-400 font-black uppercase text-sm tracking-[0.3em]">Sin registros disponibles</p>
+                    <div id="no-datos-agenda" class="p-32 text-center" style="display:none;">
+                        <i class="fas fa-calendar-times text-4xl text-slate-300 mb-6 block"></i>
+                        <p class="text-slate-400 font-black uppercase text-sm tracking-[0.3em]">Sin horarios registrados.</p>
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- Configuración de perfil -->
+        <!-- SECCIÓN: MIS PACIENTES -->
+        <section id="sec-pacientes" class="seccion-oculta animate-in">
+            <div class="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden">
+                <div class="p-10 border-b border-slate-50 flex flex-wrap justify-between items-center gap-8 bg-slate-50/40">
+                    <div class="flex items-center gap-5">
+                        <div class="w-12 h-12 bg-sky-600 text-white rounded-2xl flex items-center justify-center shadow-lg">
+                            <i class="fas fa-users text-xl"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-black text-slate-800 uppercase text-sm tracking-widest">Historial de Pacientes</h3>
+                            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Citas finalizadas o canceladas</p>
+                        </div>
+                    </div>
+                    <div class="relative w-full md:w-96">
+                        <i class="fas fa-search absolute left-6 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" id="busqueda-pacientes"
+                            oninput="this.value=this.value.toUpperCase(); filtrarTablaSeccion('tabla-pacientes', this.value)"
+                            placeholder="FILTRAR PACIENTE..."
+                            class="text-xs pl-14 pr-8 py-5 w-full rounded-2xl border-2 border-slate-100 outline-none focus:border-sky-500 transition-all font-semibold uppercase">
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left" style="min-width:900px; table-layout:fixed;">
+                        <colgroup>
+                            <col style="width:16%">
+                            <col style="width:28%">
+                            <col style="width:18%">
+                            <col style="width:18%">
+                            <col style="width:20%">
+                        </colgroup>
+                        <thead class="bg-slate-50/80 text-slate-400 text-[11px] font-black uppercase tracking-[0.25em] border-b border-slate-100">
+                            <tr>
+                                <th class="px-8 py-6 text-left">Horario</th>
+                                <th class="px-8 py-6 text-left">Paciente</th>
+                                <th class="px-8 py-6 text-left">Procedimiento</th>
+                                <th class="px-8 py-6 text-left">Estado</th>
+                                <th class="px-8 py-6 text-right">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-pacientes" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                    <div id="no-datos-pacientes" class="p-32 text-center" style="display:none;">
+                        <i class="fas fa-user-slash text-4xl text-slate-300 mb-6 block"></i>
+                        <p class="text-slate-400 font-black uppercase text-sm tracking-[0.3em]">Sin pacientes con historial finalizado</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECCIÓN: MI PERFIL -->
         <section id="sec-config" class="seccion-oculta max-w-6xl mx-auto py-4">
             <div class="bg-white p-14 rounded-[3.5rem] shadow-2xl border border-slate-100 relative overflow-hidden">
                 <div class="absolute top-0 right-0 p-10 opacity-5 text-9xl"><i class="fas fa-user-shield"></i></div>
@@ -201,56 +366,75 @@
                 </h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-12 relative z-10">
                     <div class="space-y-3">
-                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Nombres y Apellidos</label>
-                        <input type="text" id="conf-nombre" class="input-consulta" placeholder="Nombre completo">
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Nombres</label>
+                        <input type="text" id="conf-nombres" class="input-consulta w-full" placeholder="Nombres">
                     </div>
                     <div class="space-y-3">
-                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Especialidad</label>
-                        <select id="esp-1" class="input-consulta appearance-none cursor-pointer">
-                            <option value="Odontología General">Odontología General</option>
-                            <option value="Ortodoncia">Ortodoncia y Ortopedia</option>
-                            <option value="Endodoncia">Endodoncia Avanzada</option>
-                            <option value="Cirugía Maxilofacial">Cirugía Maxilofacial</option>
-                            <option value="Estética Dental">Estética Dental</option>
-                        </select>
-                    </div>
-                    <div class="space-y-3">
-                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">E-mail de Acceso</label>
-                        <input type="email" id="conf-email" class="input-consulta" placeholder="correo@ejemplo.com">
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Apellidos</label>
+                        <input type="text" id="conf-apellidos" class="input-consulta w-full" placeholder="Apellidos">
                     </div>
                     <div class="space-y-3">
                         <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Teléfono Móvil</label>
-                        <input type="tel" id="conf-tel" class="input-consulta" placeholder="+57 300 000 0000">
+                        <input type="tel" id="conf-tel" class="input-consulta w-full" placeholder="+57 300 000 0000">
                     </div>
+                    <div class="space-y-3">
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">E-mail de Acceso</label>
+                        <input type="email" id="conf-email" class="input-consulta w-full" placeholder="correo@ejemplo.com">
+                    </div>
+
                     <div class="md:col-span-2 space-y-3">
                         <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Seguridad: Cambiar Contraseña</label>
                         <div id="pass-step1" class="flex flex-col md:flex-row gap-4 items-start">
                             <div class="flex-grow w-full">
-                                <input type="password" id="pass-actual" class="input-consulta" placeholder="Contraseña actual">
+                                <div class="pass-input-wrapper">
+                                    <input type="password" id="pass-actual" class="input-consulta w-full" placeholder="Ingrese su contraseña actual">
+                                    <button type="button" class="pass-toggle-btn" onclick="togglePassVisibilidad('pass-actual', this)" tabindex="-1">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
                                 <p id="error-pass-actual" class="text-red-600 text-xs font-bold mt-2 ml-1" style="display:none;">Contraseña incorrecta</p>
                             </div>
-                            <button
-                                type="button"
-                                onclick="validarPasswordActual()"
+                            <button type="button" onclick="validarPasswordActualEsp()"
                                 class="bg-slate-900 text-white px-10 py-5 rounded-2xl font-black text-xs hover:bg-sky-600 transition-all uppercase tracking-[0.3em] shadow-xl active:scale-95 whitespace-nowrap">
                                 Siguiente
                             </button>
                         </div>
-                        <div id="pass-step2" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style="display:none;">
+                        <div id="pass-step2" class="grid grid-cols-1 gap-6 mt-6" style="display:none;">
                             <div>
                                 <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-3">Nueva Contraseña</label>
-                                <input type="password" id="conf-pass-nueva" class="input-consulta" placeholder="Mínimo 4 caracteres">
+                                <div class="pass-input-wrapper">
+                                    <input type="password" id="conf-pass-nueva" class="input-consulta w-full" placeholder="Ingrese su nueva contraseña" oninput="validarRequisitosEnTiempoRealEsp()">
+                                    <button type="button" class="pass-toggle-btn" onclick="togglePassVisibilidad('conf-pass-nueva', this)" tabindex="-1">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Lista de requisitos -->
+                            <div id="lista-requisitos-esp" class="bg-slate-50 rounded-2xl p-5 border border-slate-200">
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Requisitos de la contraseña</p>
+                                <ul class="space-y-2">
+                                    <li id="req-length-esp"  class="req-item req-pending"><span class="req-icon">-</span><span class="req-text">Mínimo 8 caracteres</span></li>
+                                    <li id="req-upper-esp"   class="req-item req-pending"><span class="req-icon">-</span><span class="req-text">Al menos una letra mayúscula</span></li>
+                                    <li id="req-lower-esp"   class="req-item req-pending"><span class="req-icon">-</span><span class="req-text">Al menos una letra minúscula</span></li>
+                                    <li id="req-number-esp"  class="req-item req-pending"><span class="req-icon">-</span><span class="req-text">Al menos un número</span></li>
+                                    <li id="req-special-esp" class="req-item req-pending"><span class="req-icon">-</span><span class="req-text">Al menos un carácter especial (!@#$%^&*...)</span></li>
+                                </ul>
                             </div>
                             <div>
                                 <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-3">Confirmar Nueva Contraseña</label>
-                                <input type="password" id="conf-pass-confirmar" class="input-consulta" placeholder="Repite la nueva contraseña">
+                                <div class="pass-input-wrapper">
+                                    <input type="password" id="conf-pass-confirmar" class="input-consulta w-full" placeholder="Repita la nueva contraseña">
+                                    <button type="button" class="pass-toggle-btn" onclick="togglePassVisibilidad('conf-pass-confirmar', this)" tabindex="-1">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
                             </div>
-                            <p id="error-pass-nueva" class="md:col-span-2 text-red-600 text-xs font-bold mt-1 ml-1" style="display:none;">Las contraseñas no coinciden.</p>
+                            <p id="error-pass-nueva" class="text-red-600 text-xs font-bold mt-1 ml-1" style="display:none;">Las contraseñas no coinciden.</p>
                         </div>
                     </div>
                 </div>
                 <div class="mt-14 flex justify-end gap-8 pt-10 border-t border-slate-50">
-                    <button onclick="cambiarSeccion('agenda')" class="px-10 py-5 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-800 transition-colors">Cancelar</button>
+                    <button onclick="cambiarSeccion('inicio')" class="px-10 py-5 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-800 transition-colors">Cancelar</button>
                     <button onclick="guardarPerfilCompleto()" class="bg-slate-900 text-white px-16 py-5 rounded-2xl font-black text-xs hover:bg-sky-600 transition-all uppercase tracking-[0.3em] shadow-2xl active:scale-95">Guardar Cambios</button>
                 </div>
             </div>
@@ -258,197 +442,173 @@
 
     </main>
 
-<!-- ================================================================
-         MODAL: CONSULTA CLÍNICA
-    ================================================================ -->
-    <div id="modalConsulta" class="modal-overlay">
-        <div class="modal-content" style="max-width:900px;">
-            <div class="bg-slate-900 p-12 flex justify-between items-center text-white">
-                <div class="flex items-center gap-8">
-                    <div class="w-20 h-20 bg-sky-600 rounded-3xl flex items-center justify-center text-4xl shadow-2xl">
-                        <i class="fas fa-file-medical"></i>
-                    </div>
+    <!-- MODAL: EMPEZAR CITA -->
+    <div id="modalEmpezarCita" class="modal-overlay">
+        <div class="modal-content" style="max-width:700px;">
+            <div class="modal-header-dark p-10 flex justify-between items-center rounded-t-[45px]">
+                <div class="flex items-center gap-6">
+                    <div id="empezar-avatar-paciente" class="avatar-cita-modal w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shadow-xl uppercase">P</div>
                     <div>
-                        <h3 id="paciente-nombre-modal" class="font-black text-3xl uppercase tracking-tighter mb-2"></h3>
-                        <p id="paciente-doc-modal" class="text-sky-400 font-black text-sm uppercase tracking-widest"></p>
+                        <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Cita en Proceso</p>
+                        <h3 id="empezar-nombre-modal" class="font-black text-2xl uppercase tracking-tighter text-white"></h3>
                     </div>
                 </div>
-                <button onclick="cerrarConsulta()" class="text-slate-500 hover:text-white transition-all transform hover:rotate-90 duration-500">
-                    <i class="fas fa-times-circle text-5xl"></i>
+                <button onclick="cerrarEmpezarCita()" class="text-slate-500 hover:text-white transition-all transform hover:rotate-90 duration-500">
+                    <i class="fas fa-times-circle text-4xl"></i>
                 </button>
             </div>
-
-            <div class="p-12">
-
-                <!-- Panel EPS / Aseguramiento -->
-                <div class="mb-10 bg-sky-50 p-8 rounded-[2rem] border border-sky-100">
-                    <p class="text-[10px] font-black text-sky-800 uppercase tracking-widest mb-4 flex items-center gap-2">
-                        <i class="fas fa-shield-alt text-sky-600"></i> Aseguramiento EPS
-                    </p>
-                    <div id="panel-eps-paciente">
-                        <div class="flex items-center gap-3 text-slate-400 text-xs font-bold">
-                            <i class="fas fa-spinner fa-spin"></i> Cargando...
-                        </div>
+            <div class="p-10">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <div class="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Nombre Completo</p>
+                        <p id="empezar-nombre-dato" class="font-black text-slate-700 text-sm uppercase"></p>
+                    </div>
+                    <div class="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Documento</p>
+                        <p id="empezar-doc-dato" class="font-black text-slate-700 text-sm"></p>
+                    </div>
+                    <div class="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Estado de la Cita</p>
+                        <p id="empezar-estado-dato" class="font-black text-sky-600 text-sm uppercase"></p>
+                    </div>
+                    <div class="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Motivo de Consulta</p>
+                        <p id="empezar-motivo-dato" class="font-black text-slate-700 text-sm"></p>
                     </div>
                 </div>
-
-                <!-- Datos clínicos del paciente -->
-                <div class="mb-10 bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
-                    <p class="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-4 flex items-center gap-2">
-                        <i class="fas fa-heartbeat text-red-500"></i> Datos Clínicos del Paciente
-                    </p>
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                        <div class="bg-white rounded-2xl p-4 border border-slate-100">
-                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Género</p>
-                            <p id="modal-genero" class="font-black text-slate-700 text-sm">---</p>
-                        </div>
-                        <div class="bg-white rounded-2xl p-4 border border-slate-100">
-                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Grupo Sanguíneo</p>
-                            <p id="modal-grupo-sanguineo" class="font-black text-red-600 text-sm">---</p>
-                        </div>
-                        <div class="bg-white rounded-2xl p-4 border border-slate-100 col-span-2">
-                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Alergias</p>
-                            <p id="modal-alergias" class="font-bold text-amber-700 text-sm">---</p>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="bg-white rounded-2xl p-4 border border-slate-100">
-                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Antecedentes</p>
-                            <p id="modal-antecedentes" class="font-bold text-slate-600 text-sm">---</p>
-                        </div>
-                        <div class="bg-white rounded-2xl p-4 border border-slate-100">
-                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Observaciones</p>
-                            <p id="modal-observaciones" class="font-bold text-slate-600 text-sm">---</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Anamnesis / Formulario de preguntas -->
-                <div class="mb-10 bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
-                    <p class="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-4 flex items-center gap-2">
-                        <i class="fas fa-clipboard-list text-sky-500"></i> Formulario de Anamnesis
-                    </p>
-                    <div id="panel-anamnesis" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <p class="text-xs text-slate-400 font-bold italic col-span-2">Cargando anamnesis...</p>
-                    </div>
-                </div>
-
-                <!-- Expediente + botones -->
-                <div class="mb-10 bg-sky-50 p-10 rounded-[2.5rem] border border-sky-100 flex flex-wrap justify-between items-center gap-8">
-                    <div class="flex items-center gap-6">
-                        <div class="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-sky-600 shadow-xl border border-sky-50">
-                            <i class="fas fa-folder-open text-3xl"></i>
-                        </div>
-                        <div>
-                            <p class="text-[12px] font-black text-sky-800 uppercase tracking-widest">Expediente Clínico Digital</p>
-                            <p class="text-xs text-slate-500 font-bold mt-1">Consulte antecedentes y evolución dental histórica.</p>
-                        </div>
-                    </div>
-                    <div class="flex gap-5">
-                        <button onclick="irAHistoriaClinica()" class="bg-white text-sky-600 border-2 border-sky-200 px-10 py-5 rounded-2xl font-black text-[11px] hover:bg-sky-600 hover:text-white transition-all uppercase shadow-md active:scale-95">Ver Historia</button>
-                        <button onclick="irAOdontograma()" class="bg-white text-emerald-600 border-2 border-emerald-200 px-10 py-5 rounded-2xl font-black text-[11px] hover:bg-emerald-600 hover:text-white transition-all uppercase shadow-md active:scale-95">Odontograma</button>
-                    </div>
-                </div>
-
-                <!-- Campos de consulta -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
-                    <div class="space-y-5">
-                        <label class="block text-[12px] font-black text-slate-500 uppercase tracking-widest ml-2">
-                            <i class="fas fa-pen-alt mr-2 text-sky-500"></i> Evolución de la Sesión
-                        </label>
-                        <textarea id="nota-clinica" class="input-consulta h-64 resize-none leading-relaxed" placeholder="Registrar hallazgos y avances..."></textarea>
-                    </div>
-                    <div class="space-y-5">
-                        <label class="block text-[12px] font-black text-slate-500 uppercase tracking-widest ml-2">
-                            <i class="fas fa-file-prescription mr-2 text-emerald-500"></i> Plan de Tratamiento / Receta
-                        </label>
-                        <textarea id="receta-clinica" class="input-consulta h-64 resize-none leading-relaxed" placeholder="Indicaciones y medicamentos..."></textarea>
-                    </div>
-                    <div class="md:col-span-2 space-y-5">
-                        <label class="block text-[12px] font-black text-slate-500 uppercase tracking-widest ml-2">
-                            <i class="fas fa-stethoscope mr-2 text-sky-500"></i> Diagnóstico (CIE-10)
-                        </label>
-                        <input type="text" id="diag-clinica" class="input-consulta" placeholder="Ej: K02.1 Caries dentina">
-                    </div>
-                </div>
-
-                <div class="mt-14 flex justify-end gap-8 border-t border-slate-100 pt-12">
-                    <button onclick="cerrarConsulta()" class="px-10 py-5 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-800 transition-colors">Descartar</button>
-                    <button onclick="finalizarAtencion()" class="bg-emerald-600 text-white px-20 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.3em] shadow-2xl hover:bg-emerald-700 transition-all active:scale-95">Finalizar Consulta</button>
+                <div class="flex gap-4 flex-wrap justify-end border-t border-slate-100 pt-8">
+                    <button onclick="irAHistoriaClinica()" class="bg-sky-50 text-sky-600 border-2 border-sky-200 px-10 py-4 rounded-2xl font-black text-[11px] hover:bg-sky-600 hover:text-white transition-all uppercase shadow-md active:scale-95">
+                        <i class="fas fa-folder-open mr-2"></i>Historia Clínica
+                    </button>
+                    <button onclick="finalizarConsultaDirecto()" class="bg-emerald-600 text-white px-10 py-4 rounded-2xl font-black text-[11px] hover:bg-emerald-700 transition-all uppercase shadow-xl active:scale-95">
+                        <i class="fas fa-check-circle mr-2"></i>Finalizar Consulta
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- ================================================================
-         MODAL: REPORTE PROFESIONAL
-    ================================================================ -->
+    <!-- MODAL: REPORTE PROFESIONAL -->
     <div id="modalReporte" class="modal-overlay">
-        <div class="modal-content overflow-hidden">
-            <div class="bg-gradient-to-r from-sky-700 to-sky-900 p-14 flex justify-between items-center text-white border-b-8 border-sky-400">
+        <div class="modal-content overflow-hidden" style="max-width:860px;">
+            <div class="bg-gradient-to-r from-sky-700 to-sky-900 p-12 flex justify-between items-start text-white">
                 <div>
-                    <h3 class="font-black text-4xl tracking-tighter uppercase mb-2">Resumen de Atención</h3>
-                    <p id="rep-fecha-atencion" class="text-sky-300 font-black text-[11px] uppercase tracking-[0.4em]"></p>
+                    <div class="flex items-center gap-4 mb-3">
+                        <div class="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center border border-white/20">
+                            <i class="fas fa-file-medical text-xl text-sky-200"></i>
+                        </div>
+                        <div>
+                            <p class="text-sky-300 text-[10px] font-black uppercase tracking-[0.4em]">Registro Clínico — Solo Lectura</p>
+                            <h3 class="font-black text-3xl tracking-tighter uppercase">Reporte de Atención</h3>
+                        </div>
+                    </div>
+                    <p id="rep-fecha-atencion" class="text-sky-300/70 font-bold text-[11px] uppercase tracking-[0.3em] ml-16"></p>
                 </div>
-                <button
-                    onclick="document.getElementById('modalReporte').style.display='none'"
-                    class="text-white/40 hover:text-white transition-all">
-                    <i class="fas fa-times-circle text-5xl"></i>
+                <button onclick="document.getElementById('modalReporte').style.display='none'" class="text-white/40 hover:text-white transition-all mt-1">
+                    <i class="fas fa-times-circle text-4xl"></i>
                 </button>
             </div>
-            <div class="p-14">
-                <div class="bg-slate-50 p-12 rounded-[3rem] mb-12 border border-slate-100 shadow-inner text-center">
-                    <span class="report-label">Paciente Atendido</span>
-                    <div id="rep-paciente" class="text-4xl font-black text-slate-800 uppercase tracking-tight"></div>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-14">
-                    <div class="space-y-8">
-                        <div>
-                            <span class="report-label text-sky-600">Diagnóstico</span>
-                            <div id="rep-diagnostico" class="report-value"></div>
+
+            <div class="p-12 bg-slate-50/50">
+                <div class="bg-white rounded-[2rem] p-8 mb-8 border border-slate-100 shadow-sm">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-5 flex items-center gap-2">
+                        <i class="fas fa-user-circle text-sky-500"></i> Paciente
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="md:col-span-1">
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Nombre Completo</p>
+                            <p id="rep-paciente" class="font-black text-slate-800 text-base uppercase tracking-tight"></p>
                         </div>
                         <div>
-                            <span class="report-label text-sky-600">Evolución</span>
-                            <div id="rep-evolucion" class="report-value h-40 overflow-y-auto"></div>
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tipo de Documento</p>
+                            <p id="rep-tipo-doc" class="font-bold text-slate-700 text-sm">—</p>
+                        </div>
+                        <div>
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Número de Documento</p>
+                            <p id="rep-num-doc" class="font-bold text-slate-700 text-sm">—</p>
                         </div>
                     </div>
-                    <div>
-                        <span class="report-label text-emerald-600">Tratamiento Enviado</span>
-                        <div id="rep-prescripcion" class="report-value h-64 overflow-y-auto border-l-emerald-500"></div>
+                    <div class="mt-4 pt-4 border-t border-slate-100">
+                        <p id="rep-cita-info" class="text-slate-400 text-xs font-bold uppercase tracking-widest"></p>
                     </div>
                 </div>
-                <button
-                    onclick="document.getElementById('modalReporte').style.display='none'"
-                    class="mt-14 w-full bg-slate-900 text-white py-6 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-sky-600 transition-colors shadow-2xl">
-                    Cerrar Reporte
-                </button>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
+                        <p class="text-[10px] font-black text-sky-600 uppercase tracking-[0.3em] mb-4 flex items-center gap-2">
+                            <i class="fas fa-stethoscope"></i> Diagnóstico
+                        </p>
+                        <div id="rep-diagnostico" class="report-value-readonly min-h-[60px]"></div>
+                    </div>
+                    <div class="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
+                        <p class="text-[10px] font-black text-amber-600 uppercase tracking-[0.3em] mb-4 flex items-center gap-2">
+                            <i class="fas fa-chart-line"></i> Evolución Clínica
+                        </p>
+                        <div id="rep-evolucion" class="report-value-readonly min-h-[60px] max-h-40 overflow-y-auto"></div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm mb-8">
+                    <p class="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em] mb-4 flex items-center gap-2">
+                        <i class="fas fa-pills"></i> Tratamiento y Plan a Seguir
+                    </p>
+                    <div id="rep-prescripcion" class="report-value-readonly min-h-[60px] max-h-48 overflow-y-auto border-l-emerald-500"></div>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3">
+                        <i class="fas fa-lock text-amber-500 text-sm"></i>
+                        <p class="text-amber-700 text-[10px] font-black uppercase tracking-widest">Documento de solo lectura — No editable</p>
+                    </div>
+                    <button onclick="document.getElementById('modalReporte').style.display='none'"
+                        class="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-sky-600 transition-colors shadow-xl active:scale-95">
+                        Cerrar Reporte
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- ================================================================
-         MODAL: CONFIRMACIÓN SIMPLE (CERRAR SESIÓN)
-    ================================================================ -->
+    <!-- MODAL: CONFIRMACIÓN SIMPLE -->
     <div id="modalConfirmarSimple" class="modal-overlay">
         <div class="modal-content p-10 text-center border-t-8 border-sky-600" style="max-width:440px">
-            <div id="icon-simple" class="text-sky-500 text-6xl mb-6">
-                <i class="fas fa-question-circle"></i>
-            </div>
+            <div id="icon-simple" class="text-sky-500 text-6xl mb-6"><i class="fas fa-question-circle"></i></div>
             <h3 id="confirm-text-simple" class="text-slate-800 font-black text-xl mb-8 uppercase tracking-tighter italic"></h3>
             <div class="flex gap-4">
-                <button
-                    onclick="ejecutarAccionSimple()"
-                    class="flex-1 bg-sky-600 text-white py-4 rounded-2xl font-black hover:bg-sky-700 transition-all text-xs uppercase tracking-widest">
-                    Confirmar
-                </button>
-                <button
-                    onclick="cerrarModalSimple()"
-                    class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all text-xs uppercase tracking-widest">
-                    Cancelar
-                </button>
+                <button onclick="ejecutarAccionSimple()" class="flex-1 bg-sky-600 text-white py-4 rounded-2xl font-black hover:bg-sky-700 transition-all text-xs uppercase tracking-widest">Confirmar</button>
+                <button onclick="cerrarModalSimple()" class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all text-xs uppercase tracking-widest">Cancelar</button>
             </div>
         </div>
     </div>
+
+    <!-- MODAL: CONFIRMAR ELIMINACIÓN DE FRANJA HORARIA -->
+    <div id="modalEliminarSlot" class="modal-overlay">
+        <div class="modal-content p-10 text-center border-t-8 border-red-500" style="max-width:440px">
+            <div class="text-red-500 text-6xl mb-6"><i class="fas fa-trash-alt"></i></div>
+            <h3 class="text-slate-800 font-black text-xl mb-4 uppercase tracking-tighter italic">¿Eliminar este horario?</h3>
+            <p class="text-slate-400 text-sm font-bold mb-8">Esta acción no se puede deshacer.</p>
+            <div class="flex gap-4">
+                <button onclick="confirmarEliminarSlot()" class="flex-1 bg-red-600 text-white py-4 rounded-2xl font-black hover:bg-red-700 transition-all text-xs uppercase tracking-widest">Eliminar</button>
+                <button onclick="document.getElementById('modalEliminarSlot').style.display='none'" class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all text-xs uppercase tracking-widest">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: ERROR CONTRASEÑA -->
+    <div id="modalErrorPassword" class="modal-overlay" style="display:none;">
+        <div class="modal-content p-10 text-center border-t-8 border-red-400" style="max-width:440px">
+            <div class="text-red-400 text-6xl mb-6"><i class="fas fa-lock"></i></div>
+            <h3 class="text-slate-800 font-black text-xl mb-3 uppercase tracking-tighter italic">Contraseña Incorrecta</h3>
+            <p class="text-slate-500 text-xs mb-8 font-bold uppercase tracking-widest">La contraseña ingresada no coincide con la registrada.</p>
+            <button onclick="document.getElementById('modalErrorPassword').style.display='none';"
+                class="w-full bg-red-500 text-white py-4 rounded-2xl font-black hover:bg-red-600 transition-all text-xs uppercase tracking-widest">
+                Intentar de nuevo
+            </button>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div id="toast-container" class="fixed bottom-8 right-8 z-[9999] flex flex-col gap-3"></div>
 
     <script src="{{ url_for('static', filename='js/especialista.js') }}"></script>
 </body>
