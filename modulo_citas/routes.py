@@ -1,45 +1,5 @@
 """
 modulo_citas/routes.py — Stylo Dental (versión fusionada + perfil especialista)
-==========================================================
-Endpoints REST. Integra todas las funcionalidades de ambas versiones:
-
-  • GET  /api/usuarios                          — Lista de usuarios
-  • POST /api/usuarios                          — Crear usuario
-  • GET  /api/paciente/por-usuario/<uid>        — Resolver Paciente_ID desde Usuario_ID
-  • GET  /api/especialistas                     — Lista de especialistas con especialidad
-  • GET  /api/especialista/perfil/<usuario_id>  — Perfil completo del especialista (NUEVO)
-  • GET  /api/agenda                            — Slots de agenda (filtrable)
-  • POST /api/agenda                            — Crear slot de agenda
-  • DELETE /api/agenda/<id>                     — Eliminar slot disponible
-  • GET  /api/citas                             — Listar citas (filtrable)
-  • POST /api/citas                             — Crear cita (transaccional)
-  • GET  /api/citas/<id>                        — Detalle de una cita
-  • PUT  /api/citas/<id>/en-proceso             — Marcar en proceso (legado)
-  • PUT  /api/citas/<id>/atender                — REQ 3: Especialista inicia atención
-  • PUT  /api/citas/<id>/atendido               — Marcar atendida + historial clínico
-  • PUT  /api/citas/<id>/cancelar               — Cancelar con multa (legado)
-  • PUT  /api/citas/<id>/cancelar-sin-multa     — Cancelar sin penalización
-  • PUT  /api/citas/<id>/cancelar-con-multa     — Cancelar con multa
-  • PUT  /api/citas/<id>/finalizar-consulta     — REQ 3/4: Finaliza + correo encuesta
-  • GET  /api/paciente/<id>/citas               — Citas de un paciente
-  • GET  /api/especialista/<id>/citas           — Citas de un especialista
-  • GET  /api/multas                            — Listar multas
-  • PUT  /api/multas/<id>/pagar                 — Marcar multa como pagada
-  • GET  /api/paciente/<id>/multa-activa        — Verificar multa pendiente
-  • POST /api/historial-clinico                 — Crear/actualizar historial clínico
-  • GET  /api/historial-clinico/<cita_id>       — Consultar historial de una cita
-  • POST /api/respuesta                         — Registrar respuesta de ranking (REQ 5/6)
-  • GET  /api/config-ranking                    — REQ 8/9: Leer configuración de ranking
-  • PUT  /api/config-ranking                    — REQ 8/9: Actualizar configuración
-  • POST /api/verificar-password                — Verificar contraseña del usuario
-  • POST /api/actualizar-perfil-paciente        — Actualizar datos del paciente
-
-NOTA DE FUSIÓN:
-  Este archivo reemplaza por completo la versión anterior de
-  modulo_citas/routes.py (la que usaba "especialistas" en plural y
-  Estado_ID/Estado_Envio inconsistentes con init_db.py). Esa versión
-  quedó OBSOLETA y fue eliminada porque no coincidía con el esquema
-  real de odent.db y duplicaba el mismo Blueprint 'citas_bp'.
 """
 
 from flask import Blueprint, request, jsonify
@@ -189,10 +149,6 @@ def _garantizar_historial_clinico(cur, cita_id, diagnosticos=None,
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _crear_promedio(cur, especialista_id: int) -> float:
-    """
-    Recalcula el promedio matemático acumulado del especialista basado en
-    la totalidad de sus respuestas en respuesta_ranking.
-    """
     cur.execute("""
         SELECT ROUND(AVG(CAST(rr.Respuesta AS REAL)), 2) AS Promedio,
                COUNT(rr.Respuesta_ID)                    AS Total
@@ -206,16 +162,160 @@ def _crear_promedio(cur, especialista_id: int) -> float:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# CORREO ENCUESTA — plantilla HTML anti-spam
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _html_encuesta_cita(nombre_paciente: str, nombre_especialista: str,
+                         login_url: str) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Encuesta de Satisfacción — Stylo Dental</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f1f5f9;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="520" cellpadding="0" cellspacing="0" border="0"
+               style="background:#ffffff;border-radius:12px;overflow:hidden;
+                      box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+
+          <!-- CABECERA -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#0369a1,#0ea5e9);
+                       padding:32px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;font-weight:800;
+                          letter-spacing:0.5px;">🦷 Stylo Dental</h1>
+              <p style="color:#bae6fd;margin:8px 0 0;font-size:14px;">
+                Evaluación de servicio odontológico
+              </p>
+            </td>
+          </tr>
+
+          <!-- CUERPO -->
+          <tr>
+            <td style="padding:36px 40px;">
+              <p style="color:#1e293b;font-size:16px;margin:0 0 16px;font-weight:600;">
+                Estimado(a) {nombre_paciente},
+              </p>
+              <p style="color:#475569;font-size:14px;line-height:1.7;margin:0 0 16px;">
+                Su consulta con <strong>Dr(a). {nombre_especialista}</strong> ha finalizado.
+                En Clínica Stylo Dental valoramos profundamente su opinión y nos gustaría
+                que calificara la atención recibida.
+              </p>
+              <p style="color:#475569;font-size:14px;line-height:1.7;margin:0 0 28px;">
+                Ingrese a nuestra plataforma y complete la encuesta de satisfacción disponible
+                en su <strong>Panel de Paciente → Historial de Citas</strong>.
+                Su retroalimentación es fundamental para mejorar nuestro servicio.
+              </p>
+
+              <!-- CTA -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="padding:8px 0 28px;">
+                    <a href="{login_url}"
+                       style="display:inline-block;
+                              background:linear-gradient(135deg,#0369a1,#0ea5e9);
+                              color:#ffffff;text-decoration:none;
+                              padding:16px 40px;border-radius:8px;
+                              font-size:15px;font-weight:700;letter-spacing:0.3px;">
+                      Calificar mi experiencia ★
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="color:#94a3b8;font-size:12px;margin:0;">
+                Si el botón no funciona, copie y pegue este enlace en su navegador:<br>
+                <a href="{login_url}" style="color:#0284c7;word-break:break-all;">{login_url}</a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- PIE -->
+          <tr>
+            <td style="background:#f8fafc;padding:20px 40px;text-align:center;
+                       border-top:1px solid #e2e8f0;">
+              <p style="color:#94a3b8;font-size:12px;margin:0;">
+                © 2025 Clínica Stylo Dental · Todos los derechos reservados<br>
+                Este mensaje fue enviado porque usted tiene una cita registrada en nuestra plataforma.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+
+def _despachar_correo_encuesta(cita_id: int, correo_paciente: str,
+                                nombre_paciente: str, nombre_especialista: str,
+                                horas_retraso: int, login_url: str):
+    """
+    Ejecutado en hilo daemon.
+    Espera Horas_Envio horas, re-verifica el kill-switch y envía el correo.
+    Usa la misma infraestructura SMTP (SMTP_SSL port 465) que app.py.
+    Tras el envío exitoso marca Encuesta_Enviada = 1 en la BD.
+    """
+    import time as _time
+
+    if horas_retraso > 0:
+        logger.info(
+            "[ENCUESTA] Esperando %d hora(s) antes de enviar correo a %s (cita %d)",
+            horas_retraso, correo_paciente, cita_id
+        )
+        _time.sleep(horas_retraso * 3600)
+
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+
+        # Re-verificar el kill-switch DESPUÉS del retraso
+        cur.execute("SELECT Estado_Envio FROM config_ranking LIMIT 1")
+        cfg = cur.fetchone()
+        if cfg and cfg['Estado_Envio'] == 0:
+            logger.info(
+                "[ENCUESTA] Kill-switch INACTIVO: no se envía correo para cita %d", cita_id
+            )
+            return
+
+        from app import enviar_correo_smtp
+
+        asunto      = "Tiene una nueva Encuesta de Satisfacción disponible – Stylo Dental"
+        cuerpo_html = _html_encuesta_cita(nombre_paciente, nombre_especialista, login_url)
+
+        ok, error = enviar_correo_smtp(correo_paciente, asunto, cuerpo_html)
+
+        if ok:
+            cur.execute(
+                "UPDATE cita SET Encuesta_Enviada = 1 WHERE Cita_ID = ?", (cita_id,)
+            )
+            con.commit()
+            logger.info(
+                "[ENCUESTA] ✓ Correo enviado para cita %d a %s", cita_id, correo_paciente
+            )
+        else:
+            logger.error(
+                "[ENCUESTA] Fallo al enviar correo para cita %d: %s", cita_id, error
+            )
+    except Exception as exc:
+        logger.error("[ENCUESTA] Error en hilo de envío (cita %d): %s", cita_id, exc)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # REQ 8/9 — CONFIGURACIÓN DE RANKING
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/config-ranking', methods=['GET'])
 def get_config_ranking():
-    """
-    Devuelve la configuración de envío automático de encuestas.
-    REQ 8: Horas_Envio  — retraso en horas desde la finalización de consulta.
-    REQ 9: Estado_Envio — 1=ACTIVO (envía correos), 0=INACTIVO (kill-switch).
-    """
     con = None
     try:
         con = get_db_connection()
@@ -237,11 +337,6 @@ def get_config_ranking():
 
 @citas_bp.route('/config-ranking', methods=['PUT'])
 def put_config_ranking():
-    """
-    Actualiza Horas_Envio y/o Estado_Envio.
-    REQ 8: horas_envio  → cuántas horas esperar antes de enviar el correo.
-    REQ 9: estado_envio → kill-switch: 0=INACTIVO detiene TODO envío.
-    """
     datos        = request.get_json(silent=True) or {}
     horas_envio  = datos.get('Horas_Envio')
     estado_envio = datos.get('Estado_Envio')
@@ -279,115 +374,6 @@ def put_config_ranking():
     except Exception as exc:
         if con: con.rollback()
         return _json_error(str(exc), 500)
-    finally:
-        if con: con.close()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# CORREO ENCUESTA — helpers privados
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _html_encuesta_cita(nombre_paciente: str, nombre_especialista: str,
-                         login_url: str) -> str:
-    return f"""
-    <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:520px;margin:auto;
-                border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
-      <div style="background:linear-gradient(135deg,#0369a1,#0ea5e9);
-                  padding:28px 32px;text-align:center;">
-        <h1 style="color:#ffffff;margin:0;font-size:22px;letter-spacing:0.5px;">
-          🦷 Stylo Dental
-        </h1>
-        <p style="color:#bae6fd;margin:6px 0 0;font-size:14px;">
-          Evaluación de servicio odontológico
-        </p>
-      </div>
-      <div style="padding:32px;background:#ffffff;">
-        <p style="color:#334155;font-size:15px;margin-top:0;">
-          Estimado(a) <strong>{nombre_paciente}</strong>,
-        </p>
-        <p style="color:#475569;font-size:14px;line-height:1.6;">
-          Su consulta con <strong>Dr(a). {nombre_especialista}</strong> ha finalizado.
-          En Clínica Stylo Dental valoramos su opinión y nos gustaría que calificara
-          la atención recibida.
-        </p>
-        <p style="color:#475569;font-size:14px;line-height:1.6;">
-          Por favor, ingrese a nuestra plataforma y complete la encuesta de satisfacción.
-          Su retroalimentación es fundamental para mejorar nuestro servicio.
-        </p>
-        <div style="text-align:center;margin:28px 0;">
-          <a href="{login_url}"
-             style="display:inline-block;background:linear-gradient(135deg,#0369a1,#0ea5e9);
-                    color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;
-                    font-size:15px;font-weight:700;letter-spacing:0.3px;">
-            Calificar mi experiencia ★
-          </a>
-        </div>
-        <p style="color:#64748b;font-size:12px;margin-bottom:0;">
-          Si el botón no funciona, copie y pegue este enlace en su navegador:<br>
-          <a href="{login_url}" style="color:#0284c7;">{login_url}</a>
-        </p>
-      </div>
-      <div style="background:#f8fafc;padding:16px 32px;text-align:center;
-                  border-top:1px solid #e2e8f0;">
-        <p style="color:#94a3b8;font-size:12px;margin:0;">
-          © 2025 Clínica Stylo Dental · Todos los derechos reservados
-        </p>
-      </div>
-    </div>
-    """
-
-
-def _despachar_correo_encuesta(cita_id: int, correo_paciente: str,
-                                nombre_paciente: str, nombre_especialista: str,
-                                horas_retraso: int, login_url: str):
-    """
-    Ejecutado en hilo daemon.
-    Espera Horas_Envio horas, re-verifica el kill-switch y envía el correo.
-    Tras el envío exitoso marca Encuesta_Enviada = 1 en la BD.
-    """
-    import time as _time
-
-    if horas_retraso > 0:
-        logger.info(
-            "[ENCUESTA] Esperando %d hora(s) antes de enviar correo a %s (cita %d)",
-            horas_retraso, correo_paciente, cita_id
-        )
-        _time.sleep(horas_retraso * 3600)
-
-    con = None
-    try:
-        con = get_db_connection()
-        cur = con.cursor()
-        # Re-verificar el kill-switch DESPUÉS del retraso (REQ 9)
-        cur.execute("SELECT Estado_Envio FROM config_ranking LIMIT 1")
-        cfg = cur.fetchone()
-        if cfg and cfg['Estado_Envio'] == 0:
-            logger.info(
-                "[ENCUESTA] Kill-switch INACTIVO: no se envía correo para cita %d", cita_id
-            )
-            return
-
-        from app import enviar_correo_smtp
-
-        asunto      = "Califica tu experiencia en Stylo Dental ★"
-        cuerpo_html = _html_encuesta_cita(nombre_paciente, nombre_especialista, login_url)
-
-        ok, error = enviar_correo_smtp(correo_paciente, asunto, cuerpo_html)
-
-        if ok:
-            cur.execute(
-                "UPDATE cita SET Encuesta_Enviada = 1 WHERE Cita_ID = ?", (cita_id,)
-            )
-            con.commit()
-            logger.info(
-                "[ENCUESTA] ✓ Correo enviado para cita %d a %s", cita_id, correo_paciente
-            )
-        else:
-            logger.error(
-                "[ENCUESTA] Fallo al enviar correo para cita %d: %s", cita_id, error
-            )
-    except Exception as exc:
-        logger.error("[ENCUESTA] Error en hilo de envío (cita %d): %s", cita_id, exc)
     finally:
         if con: con.close()
 
@@ -472,11 +458,6 @@ def get_especialistas():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PERFIL DEL ESPECIALISTA  —  GET /api/especialista/perfil/<usuario_id>
-# (NUEVO) Consumido por especialista.js → _cargarPerfilRealDesdeBD().
-# Hidrata el dropdown de perfil, el avatar y la sección "Mi Perfil" con
-# datos 100% reales de odent.db. Antes de este endpoint, ese fetch en el
-# frontend siempre fallaba (404) y el perfil quedaba solo con los datos
-# parciales que venían en sessionStorage desde el login.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/especialista/perfil/<int:usuario_id>', methods=['GET'])
@@ -592,7 +573,6 @@ def crear_usuario():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # AGENDA  —  GET /api/agenda?especialista_id=&fecha=
-# Devuelve únicamente disponibilidades reales registradas en la BD.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/agenda', methods=['GET'])
@@ -634,7 +614,6 @@ def get_agenda():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CREAR SLOT DE AGENDA  —  POST /api/agenda
-# INSERT real en SQLite + commit. Devuelve Agenda_ID para render inmediato.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/agenda', methods=['POST'])
@@ -687,7 +666,6 @@ def crear_agenda():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ELIMINAR SLOT DE AGENDA  —  DELETE /api/agenda/<agenda_id>
-# Solo elimina slots con estado "Disponible" (EstadoAgenda_ID = 1).
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/agenda/<int:agenda_id>', methods=['DELETE'])
@@ -739,7 +717,13 @@ def get_citas():
                    ea.Nombre_Estado AS EstadoAgenda,
                    e.Especialista_ID,
                    ue.Nombres || ' ' || ue.Apellidos AS NombreEspecialista,
-                   esp.Nombre_Especialidad
+                   esp.Nombre_Especialidad,
+                   CASE
+                     WHEN EXISTS (
+                       SELECT 1 FROM respuesta_ranking rr WHERE rr.Cita_ID = c.Cita_ID
+                     ) THEN 1
+                     ELSE COALESCE(c.Encuesta_Enviada, 0)
+                   END AS Encuesta_Completada
             FROM cita c
             JOIN paciente p   ON p.Paciente_ID     = c.Paciente_ID
             JOIN usuarios up  ON up.Usuario_ID     = p.Usuario_ID
@@ -858,7 +842,6 @@ def crear_cita():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CITA INDIVIDUAL  —  GET /api/citas/<id>
-# Incluye TipoDocumento para hidratar el modal de Reporte Profesional.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>', methods=['GET'])
@@ -878,7 +861,13 @@ def get_cita(cita_id):
                    a.Fecha, a.Hora_Inicio,
                    a.Hora_Final AS Hora_Fin,
                    ea.Nombre_Estado AS EstadoAgenda,
-                   ue.Nombres || ' ' || ue.Apellidos AS NombreEspecialista
+                   ue.Nombres || ' ' || ue.Apellidos AS NombreEspecialista,
+                   CASE
+                     WHEN EXISTS (
+                       SELECT 1 FROM respuesta_ranking rr WHERE rr.Cita_ID = c.Cita_ID
+                     ) THEN 1
+                     ELSE COALESCE(c.Encuesta_Enviada, 0)
+                   END AS Encuesta_Completada
             FROM cita c
             JOIN paciente p    ON p.Paciente_ID = c.Paciente_ID
             JOIN usuarios up   ON up.Usuario_ID = p.Usuario_ID
@@ -937,15 +926,10 @@ def marcar_en_proceso(cita_id):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # REQ 3 — ATENDER CITA  —  PUT /api/citas/<id>/atender
-# El especialista hace clic en "ATENDER": registra el inicio de atención.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>/atender', methods=['PUT'])
 def atender_cita(cita_id):
-    """
-    Registra el inicio de atención de una cita.
-    Asegura EstadoAgenda_ID = 2 (Ocupado/En atención).
-    """
     con = None
     try:
         con = get_db_connection()
@@ -1109,8 +1093,12 @@ def finalizar_consulta(cita_id):
             hilo = threading.Thread(
                 target=_despachar_correo_encuesta,
                 args=(
-                    cita_id, correo_paciente, nombre_paciente,
-                    nombre_especialista, horas_envio, login_url,
+                    cita_id,
+                    correo_paciente,
+                    nombre_paciente,
+                    nombre_especialista,
+                    horas_envio,
+                    login_url,
                 ),
                 daemon=True,
                 name=f"encuesta-cita-{cita_id}",
@@ -1120,7 +1108,10 @@ def finalizar_consulta(cita_id):
                 "[ENCUESTA] Hilo iniciado para cita %d → %s (retraso %dh)",
                 cita_id, correo_paciente, horas_envio
             )
-            correo_msg = f"Correo programado para {correo_paciente} con {horas_envio}h de retraso."
+            correo_msg = (
+                f"Correo de encuesta programado para {correo_paciente} "
+                f"con {horas_envio}h de retraso."
+            )
         else:
             correo_msg = "No se encontró correo del paciente; no se enviará notificación."
             logger.warning("[ENCUESTA] Cita %d sin correo de paciente.", cita_id)
@@ -1232,6 +1223,7 @@ def cancelar_cita_con_multa(cita_id):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CITAS POR PACIENTE  —  GET /api/paciente/<id>/citas
+# CORREGIDO: incluye Encuesta_Completada verificando respuesta_ranking en BD
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/paciente/<int:paciente_id>/citas', methods=['GET'])
@@ -1241,25 +1233,34 @@ def get_citas_paciente(paciente_id):
         con = get_db_connection()
         cur = con.cursor()
         cur.execute("""
-            SELECT c.Cita_ID, c.Motivo_Consulta, c.Encuesta_Enviada,
-                   a.Fecha, a.Hora_Inicio,
-                   a.Hora_Final AS Hora_Fin,
-                   ea.Nombre_Estado AS EstadoAgenda,
-                   ue.Nombres || ' ' || ue.Apellidos AS NombreEspecialista,
+            SELECT c.Cita_ID,
+                   c.Motivo_Consulta,
+                   c.Encuesta_Enviada,
+                   a.Fecha,
+                   a.Hora_Inicio,
+                   a.Hora_Final                          AS Hora_Fin,
+                   ea.Nombre_Estado                      AS EstadoAgenda,
+                   ue.Nombres || ' ' || ue.Apellidos     AS NombreEspecialista,
                    esp.Nombre_Especialidad,
-                   up.Nombres || ' ' || up.Apellidos AS NombrePaciente,
+                   up.Nombres || ' ' || up.Apellidos     AS NombrePaciente,
                    up.NumeroDocumento,
-                   COALESCE(em.Nombre_Estado, 'Sin multa') AS EstadoMulta
+                   COALESCE(em.Nombre_Estado, 'Sin multa') AS EstadoMulta,
+                   CASE
+                     WHEN EXISTS (
+                       SELECT 1 FROM respuesta_ranking rr WHERE rr.Cita_ID = c.Cita_ID
+                     ) THEN 1
+                     ELSE COALESCE(c.Encuesta_Enviada, 0)
+                   END AS Encuesta_Completada
             FROM cita c
-            JOIN agenda a      ON a.Agenda_ID    = c.Agenda_ID
+            JOIN agenda a         ON a.Agenda_ID       = c.Agenda_ID
             JOIN estado_agenda ea ON ea.EstadoAgenda_ID = a.EstadoAgenda_ID
             JOIN especialista e   ON e.Especialista_ID  = a.Especialista_ID
-            JOIN usuarios ue   ON ue.Usuario_ID  = e.Usuario_ID
-            JOIN paciente p    ON p.Paciente_ID  = c.Paciente_ID
-            JOIN usuarios up   ON up.Usuario_ID  = p.Usuario_ID
+            JOIN usuarios ue      ON ue.Usuario_ID      = e.Usuario_ID
+            JOIN paciente p       ON p.Paciente_ID      = c.Paciente_ID
+            JOIN usuarios up      ON up.Usuario_ID      = p.Usuario_ID
             LEFT JOIN especialista_especialidad ee ON ee.Especialista_ID = e.Especialista_ID
-            LEFT JOIN especialidad esp ON esp.Especialidad_ID = ee.Especialidad_ID
-            LEFT JOIN multa m  ON m.Cita_ID = c.Cita_ID
+            LEFT JOIN especialidad esp             ON esp.Especialidad_ID = ee.Especialidad_ID
+            LEFT JOIN multa m      ON m.Cita_ID         = c.Cita_ID
             LEFT JOIN estado_multa em ON em.EstadoMulta_ID = m.EstadoMulta_ID
             WHERE c.Paciente_ID = ?
             ORDER BY a.Fecha DESC, a.Hora_Inicio DESC
@@ -1663,13 +1664,13 @@ def actualizar_perfil_paciente():
         campos  = []
         valores = []
 
-        if nombres:          campos.append("Nombres = ?");         valores.append(nombres)
-        if apellidos:        campos.append("Apellidos = ?");       valores.append(apellidos)
-        if documento:        campos.append("NumeroDocumento = ?"); valores.append(documento)
-        if tipo_documento_id: campos.append("TipoDoc_ID = ?");    valores.append(tipo_documento_id)
-        if correo:           campos.append("Correo = ?");          valores.append(correo)
-        if telefono:         campos.append("Telefono = ?");        valores.append(telefono)
-        if nacimiento:       campos.append("FechaNacimiento = ?"); valores.append(nacimiento)
+        if nombres:           campos.append("Nombres = ?");          valores.append(nombres)
+        if apellidos:         campos.append("Apellidos = ?");        valores.append(apellidos)
+        if documento:         campos.append("NumeroDocumento = ?");  valores.append(documento)
+        if tipo_documento_id: campos.append("TipoDoc_ID = ?");       valores.append(tipo_documento_id)
+        if correo:            campos.append("Correo = ?");           valores.append(correo)
+        if telefono:          campos.append("Telefono = ?");         valores.append(telefono)
+        if nacimiento:        campos.append("FechaNacimiento = ?");  valores.append(nacimiento)
         if nueva_pass:
             ok, msg = _validar_politica_password(nueva_pass)
             if not ok:

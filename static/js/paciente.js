@@ -1,4 +1,4 @@
-// Archivo: paciente.js  — Stylo Dental Pro v3.0
+// Archivo: paciente.js  — Stylo Dental Pro v3.1
 'use strict';
 
 // ─── ESTADO GLOBAL ────────────────────────────────────────────────────────────
@@ -10,6 +10,11 @@ let _citaParaCancelar      = null;
 let _cancelarConMulta      = false;
 let _accionPendienteSimple = null;
 let _dropdownOpen          = false;
+
+// Estado de encuesta activa
+let _encuestaCitaId        = null;
+let _encuestaPreguntas     = [];
+let _encuestaExitoTimer    = null;
 
 // ─── MAPA DE VISTAS ───────────────────────────────────────────────────────────
 const VISTAS_PACIENTE = {
@@ -308,33 +313,32 @@ function _resolverEstado(c) {
     return { label: c.EstadoAgenda || '—', clase: 'bg-slate-100 text-slate-500' };
 }
 
-// ── Conjunto de estados que NUNCA deben aparecer en la sección "Inicio".
-// Toda cita cuya etiqueta resuelta (_resolverEstado) coincida con alguno de
-// estos valores queda forzosamente excluida de las citas activas/vigentes,
-// sin importar su EstadoAgenda crudo ni su Fecha. ────────────────────────────
 const ESTADOS_EXCLUIDOS_DE_INICIO = ['Cancelada', 'Cancelada con multa'];
 
 function _esCitaActiva(c) {
-    // Filtro estricto: si la etiqueta resuelta es "Cancelada" o "Cancelada con
-    // multa", la cita jamás se considera activa, independientemente de su
-    // EstadoAgenda crudo o de su Fecha.
     const estadoInfo = _resolverEstado(c);
     if (ESTADOS_EXCLUIDOS_DE_INICIO.includes(estadoInfo.label)) {
         return false;
     }
-
     const hoy   = new Date().toISOString().split('T')[0];
     const estado = (c.EstadoAgenda || '').toLowerCase();
     return (estado === 'ocupado' || estado === 'disponible') && c.Fecha >= hoy;
 }
 
 function _esCitaHistorial(c) {
-    // Toda cita "Cancelada" o "Cancelada con multa" queda garantizada aquí,
-    // ya que _esCitaActiva las excluye explícitamente arriba.
     return !_esCitaActiva(c);
 }
 
-// ─── RENDER TABLA PRINCIPAL (INICIO) — Solo citas vigentes ──────────────────
+// ─── VERIFICAR SI UNA CITA YA TIENE ENCUESTA COMPLETADA ──────────────────────
+// Usa Encuesta_Completada que viene de la BD (verifica respuesta_ranking directamente)
+function _citaEncuestaCompletada(c) {
+    return c.Encuesta_Completada === 1
+        || c.Encuesta_Completada === true
+        || c.Encuesta_Enviada === 1
+        || c.Encuesta_Enviada === true;
+}
+
+// ─── RENDER TABLA PRINCIPAL (INICIO) ─────────────────────────────────────────
 function _renderTablaCitas() {
     const tbody   = document.getElementById('tabla-citas-body');
     const noMsg   = document.getElementById('no-citas-msg');
@@ -354,7 +358,6 @@ function _renderTablaCitas() {
 
     activas.forEach(c => {
         const estadoInfo = _resolverEstado(c);
-        const esCumplida = (c.EstadoAgenda || '').toLowerCase() === 'cumplida';
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -375,21 +378,14 @@ function _renderTablaCitas() {
                        </button>`
                     : '<span class="text-slate-300 text-[10px] font-bold">—</span>'
                 }
-            </td>
-            <td class="p-5 text-center">
-                ${esCumplida
-                    ? `<button onclick="_abrirRanking(${c.Cita_ID})"
-                           class="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-4 py-2 rounded-xl font-black hover:bg-amber-100 transition-all uppercase">
-                           <i class="fas fa-star mr-1"></i> Evaluar
-                       </button>`
-                    : '<span class="text-slate-300 text-[10px] font-bold">—</span>'
-                }
             </td>`;
         tbody.appendChild(tr);
     });
 }
 
-// ─── RENDER HISTORIAL — Solo citas no activas ─────────────────────────────────
+// ─── RENDER HISTORIAL ─────────────────────────────────────────────────────────
+// La fuente de verdad para el estado del botón de encuesta es Encuesta_Completada,
+// que el backend calcula directamente desde respuesta_ranking (nunca resetea).
 function _renderHistorial() {
     const tbody = document.getElementById('tabla-historial-completo');
     if (!tbody) return;
@@ -398,13 +394,35 @@ function _renderHistorial() {
     const historial = _citasData.filter(_esCitaHistorial);
 
     if (historial.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="p-10 text-center text-slate-400 font-bold italic text-xs uppercase">Sin historial registrado.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="p-10 text-center text-slate-400 font-bold italic text-xs uppercase">Sin historial registrado.</td></tr>`;
         return;
     }
 
     historial.forEach(c => {
-        const estadoInfo = _resolverEstado(c);
+        const estadoInfo   = _resolverEstado(c);
+        const esCumplida   = (c.EstadoAgenda || '').toLowerCase() === 'cumplida';
+        // Fuente de verdad: campo calculado en BD que verifica respuesta_ranking
+        const yaCompletada = _citaEncuestaCompletada(c);
+
+        let encuestaCelda = '<span class="text-slate-300 text-[10px] font-bold">—</span>';
+        if (esCumplida) {
+            if (yaCompletada) {
+                encuestaCelda = `
+                    <button disabled
+                        class="btn-encuesta-completada text-[10px] bg-green-50 text-green-600 border border-green-200 px-4 py-2 rounded-xl font-black uppercase cursor-not-allowed opacity-80">
+                        <i class="fas fa-check-circle mr-1"></i> Completada
+                    </button>`;
+            } else {
+                encuestaCelda = `
+                    <button onclick="abrirModalEncuesta(${c.Cita_ID})"
+                        class="btn-encuesta-pendiente text-[10px] bg-orange-50 text-orange-500 border border-orange-200 px-4 py-2 rounded-xl font-black hover:bg-orange-100 transition-all uppercase">
+                        <i class="fas fa-star mr-1"></i> Encuesta
+                    </button>`;
+            }
+        }
+
         const tr = document.createElement('tr');
+        tr.id = `historial-row-${c.Cita_ID}`;
         tr.innerHTML = `
             <td class="p-5 text-xs font-bold">${c.Fecha}<br><span class="text-slate-400">${c.Hora_Inicio || ''}</span></td>
             <td class="p-5 font-black text-sky-600 uppercase text-[10px]">${c.Nombre_Especialidad || '—'}</td>
@@ -416,9 +434,212 @@ function _renderHistorial() {
             </td>
             <td class="p-5 text-center">
                 <span class="text-[10px] font-bold text-slate-400">${c.Motivo_Consulta || '—'}</span>
-            </td>`;
+            </td>
+            <td class="p-5 text-center">${encuestaCelda}</td>`;
         tbody.appendChild(tr);
     });
+}
+
+// ─── MODAL ENCUESTA ───────────────────────────────────────────────────────────
+window.abrirModalEncuesta = async function (citaId) {
+    _encuestaCitaId    = citaId;
+    _encuestaPreguntas = [];
+
+    const container = document.getElementById('encuesta-preguntas-container');
+    const errEl     = document.getElementById('encuesta-error');
+    if (container) container.innerHTML = '<p class="text-center text-slate-400 text-xs font-bold py-6">Cargando preguntas...</p>';
+    if (errEl)     errEl.style.display = 'none';
+
+    document.getElementById('modalEncuesta').style.display = 'flex';
+
+    try {
+        const res  = await fetch('/api/pregunta?activas=true');
+        const data = await res.json();
+
+        if (!data.ok || !Array.isArray(data.data) || data.data.length === 0) {
+            if (container) container.innerHTML = '<p class="text-center text-slate-400 text-xs font-bold py-6">No hay preguntas de evaluación configuradas.</p>';
+            return;
+        }
+
+        _encuestaPreguntas = data.data;
+        _renderPreguntasEncuesta(container, _encuestaPreguntas);
+
+    } catch (err) {
+        console.error('[encuesta] Error cargando preguntas:', err);
+        if (container) container.innerHTML = '<p class="text-center text-red-400 text-xs font-bold py-6">Error al cargar preguntas. Intente de nuevo.</p>';
+    }
+};
+
+function _renderPreguntasEncuesta(container, preguntas) {
+    container.innerHTML = '';
+    preguntas.forEach((p, idx) => {
+        const bloque = document.createElement('div');
+        bloque.className = 'encuesta-pregunta-bloque';
+        bloque.dataset.preguntaId = p.ID_Pregunta;
+
+        bloque.innerHTML = `
+            <p class="text-[11px] font-black text-slate-700 uppercase tracking-wider mb-3">
+                <span class="text-orange-400 mr-1">${idx + 1}.</span>${p.Texto_Pregunta}
+            </p>
+            <div class="encuesta-estrellas flex gap-2 items-center" data-pregunta="${p.ID_Pregunta}">
+                ${[1,2,3,4,5].map(v => `
+                    <button type="button"
+                        class="estrella-btn text-3xl text-slate-300 hover:text-orange-400 transition-colors focus:outline-none"
+                        data-valor="${v}"
+                        aria-label="Calificación ${v} de 5"
+                        title="${v} estrella${v > 1 ? 's' : ''}">
+                        ☆
+                    </button>`).join('')}
+                <span class="text-[10px] text-slate-400 font-bold ml-2 estrella-label">Sin calificar</span>
+            </div>`;
+
+        const estrellasWrap = bloque.querySelector('.encuesta-estrellas');
+        const botones       = estrellasWrap.querySelectorAll('.estrella-btn');
+        const label         = estrellasWrap.querySelector('.estrella-label');
+
+        botones.forEach(btn => {
+            btn.addEventListener('click', function () {
+                const val = parseInt(this.dataset.valor);
+                estrellasWrap.dataset.seleccionado = val;
+                botones.forEach((b, i) => {
+                    b.textContent = i < val ? '★' : '☆';
+                    b.classList.toggle('text-orange-400', i < val);
+                    b.classList.toggle('text-slate-300',  i >= val);
+                });
+                const textos = ['Muy malo', 'Malo', 'Regular', 'Bueno', 'Excelente'];
+                if (label) label.textContent = textos[val - 1] || '';
+            });
+        });
+
+        container.appendChild(bloque);
+    });
+}
+
+window.cerrarModalEncuesta = function () {
+    document.getElementById('modalEncuesta').style.display = 'none';
+    _encuestaCitaId    = null;
+    _encuestaPreguntas = [];
+};
+
+window.enviarEncuesta = async function () {
+    const container = document.getElementById('encuesta-preguntas-container');
+    const errEl     = document.getElementById('encuesta-error');
+    if (errEl) errEl.style.display = 'none';
+
+    const bloques = container ? container.querySelectorAll('.encuesta-pregunta-bloque') : [];
+    const respuestas   = [];
+    let todoRespondido = true;
+
+    bloques.forEach(bloque => {
+        const pid  = parseInt(bloque.dataset.preguntaId);
+        const wrap = bloque.querySelector('.encuesta-estrellas');
+        const val  = wrap ? parseInt(wrap.dataset.seleccionado || '0') : 0;
+        if (!val || val < 1 || val > 5) {
+            todoRespondido = false;
+        } else {
+            respuestas.push({ ID_Pregunta: pid, Texto_Respuesta: String(val) });
+        }
+    });
+
+    if (!todoRespondido) {
+        if (errEl) {
+            errEl.textContent   = '⚠ Por favor califica todas las preguntas antes de enviar.';
+            errEl.style.display = 'block';
+        }
+        return;
+    }
+
+    const btnEnviar = document.getElementById('btn-enviar-encuesta');
+    if (btnEnviar) { btnEnviar.disabled = true; btnEnviar.textContent = 'Enviando...'; }
+
+    // Capturar citaId antes de cerrar el modal
+    const citaIdEnviada = _encuestaCitaId;
+
+    try {
+        for (const r of respuestas) {
+            const res = await fetch('/api/respuesta', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({
+                    ID_Pregunta:     r.ID_Pregunta,
+                    ID_Paciente:     _pacienteId,
+                    Texto_Respuesta: r.Texto_Respuesta,
+                    Cita_ID:         citaIdEnviada,
+                }),
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                throw new Error(data.error || 'Error al enviar una respuesta.');
+            }
+        }
+
+        // ── PERSISTENCIA INMEDIATA EN MEMORIA ────────────────────────────────
+        // Marcar en _citasData para que si el usuario vuelve a la vista de
+        // historial SIN recargar la página, el botón ya aparezca en verde.
+        const citaLocal = _citasData.find(c => c.Cita_ID === citaIdEnviada);
+        if (citaLocal) {
+            citaLocal.Encuesta_Completada = 1;
+            citaLocal.Encuesta_Enviada    = 1;
+        }
+
+        // ── ACTUALIZACIÓN INMEDIATA DEL DOM ───────────────────────────────────
+        // Cambia el botón a verde ANTES de mostrar el modal de éxito.
+        _actualizarBotonEncuestaEnDOM(citaIdEnviada);
+
+        // Cerrar modal encuesta y mostrar éxito
+        cerrarModalEncuesta();
+        _mostrarModalExitoEncuesta();
+
+    } catch (err) {
+        console.error('[encuesta] Error enviando respuestas:', err);
+        if (errEl) {
+            errEl.textContent   = err.message || 'Error de conexión. Intente de nuevo.';
+            errEl.style.display = 'block';
+        }
+    } finally {
+        if (btnEnviar) {
+            btnEnviar.disabled  = false;
+            btnEnviar.innerHTML = '<i class="fas fa-paper-plane mr-2"></i> Enviar Encuesta';
+        }
+    }
+};
+
+// Actualiza el botón en el DOM de forma inmediata sin re-renderizar toda la tabla
+function _actualizarBotonEncuestaEnDOM(citaId) {
+    const row = document.getElementById(`historial-row-${citaId}`);
+    if (!row) return;
+    const celdaEncuesta = row.querySelector('td:last-child');
+    if (!celdaEncuesta) return;
+    celdaEncuesta.innerHTML = `
+        <button disabled
+            class="btn-encuesta-completada text-[10px] bg-green-50 text-green-600 border border-green-200 px-4 py-2 rounded-xl font-black uppercase cursor-not-allowed opacity-80">
+            <i class="fas fa-check-circle mr-1"></i> Completada
+        </button>`;
+}
+
+// Modal de éxito con auto-cierre a los 3 segundos
+function _mostrarModalExitoEncuesta() {
+    const modal = document.getElementById('modalEncuestaExito');
+    const bar   = document.getElementById('encuesta-exito-bar');
+    if (!modal) return;
+
+    modal.style.display = 'flex';
+    if (bar) {
+        bar.style.transition = 'none';
+        bar.style.width      = '100%';
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                bar.style.transition = 'width 3s linear';
+                bar.style.width      = '0%';
+            });
+        });
+    }
+
+    if (_encuestaExitoTimer) clearTimeout(_encuestaExitoTimer);
+    _encuestaExitoTimer = setTimeout(() => {
+        modal.style.display = 'none';
+        _encuestaExitoTimer = null;
+    }, 3000);
 }
 
 // ─── LÓGICA DE CANCELACIÓN CON DETECCIÓN DE MULTA ────────────────────────────
@@ -543,122 +764,6 @@ window.confirmarAccionCancelado = async function () {
     }
 };
 
-// ─── RANKING ──────────────────────────────────────────────────────────────────
-window._abrirRanking = async function (citaId) {
-    try {
-        const resP  = await fetch('/api/pregunta');
-        const dataP = await resP.json();
-        if (!dataP.ok || !dataP.data.length) {
-            _mostrarNotificacion('Sin Preguntas', 'No hay preguntas de evaluación configuradas.', 'info');
-            return;
-        }
-        _mostrarFormRanking(citaId, dataP.data);
-    } catch (err) {
-        console.error('[ranking] Error cargando preguntas:', err);
-        _mostrarNotificacion('Error', 'Error al cargar preguntas de evaluación.', 'error');
-    }
-};
-
-function _mostrarFormRanking(citaId, preguntas) {
-    const existente = document.getElementById('modal-ranking-dinamico');
-    if (existente) existente.remove();
-
-    const modal = document.createElement('div');
-    modal.id        = 'modal-ranking-dinamico';
-    modal.className = 'modal-overlay';
-    modal.style.display = 'flex';
-
-    const preguntasHTML = preguntas.map(p => `
-        <div class="mb-4">
-            <p class="text-[11px] font-black text-slate-600 uppercase tracking-widest mb-2">${p.Texto_Pregunta}</p>
-            <div class="flex gap-3">
-                ${[1,2,3,4,5].map(v => `
-                    <label class="flex flex-col items-center cursor-pointer">
-                        <input type="radio" name="pregunta_${p.ID_Pregunta}" value="${v}" class="sr-only">
-                        <span class="text-2xl star-btn" data-val="${v}">☆</span>
-                        <span class="text-[9px] font-bold text-slate-400">${v}</span>
-                    </label>`).join('')}
-            </div>
-        </div>`).join('');
-
-    modal.innerHTML = `
-        <div class="modal-content" style="max-width:540px;">
-            <div class="bg-slate-900 p-6 rounded-t-[45px] text-white text-center">
-                <p class="text-slate-500 text-[9px] font-black uppercase tracking-widest mb-1">Evaluación</p>
-                <h3 class="font-black uppercase tracking-widest text-sm">Califica tu experiencia</h3>
-            </div>
-            <div class="p-8">
-                <form id="form-ranking">
-                    ${preguntasHTML}
-                    <div id="err-ranking" class="text-red-600 text-xs font-bold mt-2" style="display:none;"></div>
-                    <div class="flex gap-4 mt-8 pt-6 border-t border-slate-100">
-                        <button type="button" onclick="document.getElementById('modal-ranking-dinamico').remove()"
-                            class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">
-                            Cancelar
-                        </button>
-                        <button type="button" onclick="_enviarRanking(${citaId}, ${JSON.stringify(preguntas.map(p => p.ID_Pregunta))})"
-                            class="flex-1 bg-sky-600 text-white py-4 rounded-2xl font-black hover:bg-sky-700 transition-all uppercase text-[10px] tracking-widest shadow-lg">
-                            <i class="fas fa-paper-plane mr-2"></i> Enviar Evaluación
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>`;
-
-    document.body.appendChild(modal);
-
-    modal.querySelectorAll('.star-btn').forEach(star => {
-        star.addEventListener('click', function () {
-            const name = this.closest('div').querySelector('input[type=radio]').name;
-            const val  = parseInt(this.dataset.val);
-            modal.querySelectorAll(`input[name="${name}"]`).forEach(r => {
-                if (parseInt(r.value) === val) r.checked = true;
-            });
-            const allStars = this.parentElement.parentElement.querySelectorAll('.star-btn');
-            allStars.forEach((s, i) => { s.textContent = i < val ? '★' : '☆'; });
-        });
-    });
-}
-
-window._enviarRanking = async function (citaId, preguntaIds) {
-    const errEl = document.getElementById('err-ranking');
-    const respuestas = [];
-
-    for (const pid of preguntaIds) {
-        const selected = document.querySelector(`input[name="pregunta_${pid}"]:checked`);
-        if (!selected) {
-            if (errEl) { errEl.textContent = '⚠ Responde todas las preguntas.'; errEl.style.display = 'block'; }
-            return;
-        }
-        respuestas.push({ ID_Pregunta: pid, Texto_Respuesta: selected.value });
-    }
-
-    try {
-        for (const r of respuestas) {
-            const res = await fetch('/api/respuesta', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({
-                    ID_Pregunta:     r.ID_Pregunta,
-                    ID_Paciente:     _pacienteId,
-                    Texto_Respuesta: r.Texto_Respuesta,
-                    Cita_ID:         citaId
-                })
-            });
-            const data = await res.json();
-            if (!data.ok) {
-                if (errEl) { errEl.textContent = data.error || 'Error al enviar evaluación.'; errEl.style.display = 'block'; }
-                return;
-            }
-        }
-        document.getElementById('modal-ranking-dinamico')?.remove();
-        _mostrarNotificacion('¡Gracias!', 'Tu evaluación fue enviada correctamente.', 'success');
-    } catch (err) {
-        console.error('[ranking] Error enviando respuestas:', err);
-        if (errEl) { errEl.textContent = 'Error de conexión. Intente de nuevo.'; errEl.style.display = 'block'; }
-    }
-};
-
 // ─── VISIBILIDAD DE CONTRASEÑA ────────────────────────────────────────────────
 window.togglePassVisibility = function (inputId, btn) {
     const input = document.getElementById(inputId);
@@ -722,10 +827,7 @@ function _marcarRequisitosIncumplidos() {
     return res.length && res.upper && res.lower && res.number && res.special;
 }
 
-// ─── MI PERFIL — CARGA DE SELECTS EPS (COMPLETA, INDEPENDIENTE) ──────────────
-// Cada selector (Régimen, Tipo EPS, EPS) se carga con el 100% de los registros
-// de su tabla correspondiente. El Régimen ya NO depende de la EPS seleccionada;
-// se muestra el catálogo completo para que el paciente elija libremente.
+// ─── MI PERFIL — CARGA DE SELECTS EPS ────────────────────────────────────────
 let _listaEpsGlobal     = [];
 let _listaRegimenGlobal = [];
 let _listaTipoEpsGlobal = [];
@@ -742,7 +844,6 @@ async function _cargarSelectsEps() {
         _listaRegimenGlobal = _normalizar(resRegimen.ok ? await resRegimen.json() : []);
         _listaTipoEpsGlobal = _normalizar(resTipo.ok    ? await resTipo.json()    : []);
 
-        // ── 1. Poblar select de RÉGIMEN EPS — catálogo completo ───────────────
         const selRegimen = document.getElementById('edit-regimen-eps');
         if (selRegimen) {
             selRegimen.innerHTML = '<option value="">Seleccione Régimen...</option>';
@@ -757,7 +858,6 @@ async function _cargarSelectsEps() {
             });
         }
 
-        // ── 2. Poblar select de TIPO EPS — catálogo completo ─────────────────
         const selTipo = document.getElementById('edit-tipo-eps');
         if (selTipo) {
             selTipo.innerHTML = '<option value="">Seleccione Tipo EPS...</option>';
@@ -771,7 +871,6 @@ async function _cargarSelectsEps() {
             });
         }
 
-        // ── 3. Poblar select de EPS — catálogo completo ───────────────────────
         const selEps = document.getElementById('edit-eps');
         if (selEps) {
             selEps.innerHTML = '<option value="">Seleccione EPS...</option>';
@@ -796,7 +895,6 @@ async function _precargarPerfil() {
 
     _resetearFlujoPassword();
 
-    // ── 1. Obtener datos actualizados del usuario desde el backend ────────────
     try {
         const resUser = await fetch(`/api/usuarios/${_usuarioId}`);
         if (resUser.ok) {
@@ -810,17 +908,14 @@ async function _precargarPerfil() {
         console.warn('[perfil] No se pudo refrescar datos de usuario:', err);
     }
 
-    // ── 2. Precargar campos de texto con datos de la sesión (ya frescos) ──────
     const u = _sesionPaciente;
     const nombreCompleto = `${u.Nombres || ''} ${u.Apellidos || ''}`.trim();
     _setVal('edit-nombres',   nombreCompleto);
     _setVal('edit-correo',    u.Correo   || '');
     _setVal('edit-telefono',  u.Telefono || '');
 
-    // ── 3. Cargar TODOS los selects con el catálogo completo de la BD ─────────
     await _cargarSelectsEps();
 
-    // ── 4. Precargar valores actuales de afiliación del paciente ──────────────
     try {
         const resAfil = await fetch('/api/afiliacion');
         if (resAfil.ok) {
@@ -833,7 +928,6 @@ async function _precargarPerfil() {
                 const epsId     = afil.EPS_ID     || afil.Id_EPS     || afil.eps_id     || '';
                 const tipoEpsId = afil.TipoEPS_ID || afil.ID_Tipo_EPS || afil.tipoeps_id || '';
 
-                // Obtener el Regimen_ID a partir de la EPS actual del paciente
                 let regimenIdActual = '';
                 if (epsId) {
                     const epsObj = _listaEpsGlobal.find(e =>
@@ -859,9 +953,6 @@ async function _precargarPerfil() {
         console.warn('[perfil] Error precargando afiliación:', err);
     }
 
-    // ── 5. Listener: al cambiar EPS, sugerir el Régimen correspondiente ───────
-    // El selector de Régimen permanece editable con el catálogo completo;
-    // solo se pre-selecciona el régimen asociado a la EPS elegida como ayuda visual.
     const selEps = document.getElementById('edit-eps');
     if (selEps) {
         const selEpsNuevo = selEps.cloneNode(true);
@@ -872,11 +963,6 @@ async function _precargarPerfil() {
     }
 }
 
-/**
- * Pre-selecciona el Régimen asociado a la EPS elegida.
- * El select de Régimen permanece habilitado y con todas las opciones;
- * el paciente puede cambiarlo libremente si lo desea.
- */
 function _sugerirRegimenSegunEps(epsId) {
     const selRegimen = document.getElementById('edit-regimen-eps');
     if (!selRegimen || !epsId) return;
@@ -945,12 +1031,7 @@ window.validarPasswordActual = function () {
     });
 };
 
-// ─── GUARDAR PERFIL — UPDATE REAL EN BD ──────────────────────────────────────
-// La contraseña nueva SOLO se aplica si:
-//   1) Se ingresó y confirmó correctamente (cumpliendo la política de seguridad), y
-//   2) Se envía la "Contraseña actual" junto con la solicitud, para que el backend
-//      la valide contra el hash real almacenado en odent.db (check_password_hash)
-//      ANTES de generar y persistir el nuevo hash (generate_password_hash).
+// ─── GUARDAR PERFIL ──────────────────────────────────────────────────────────
 window.guardarPerfilPaciente = function () {
     const nombreCompleto = (document.getElementById('edit-nombres')?.value || '').trim();
     const partes         = nombreCompleto.split(/\s+/);
@@ -960,14 +1041,13 @@ window.guardarPerfilPaciente = function () {
 
     const correo      = (document.getElementById('edit-correo')?.value   || '').trim();
     const telefono    = (document.getElementById('edit-telefono')?.value || '').trim();
-    const passActual  = document.getElementById('pass-actual')?.value        || '';
-    const passNueva   = document.getElementById('conf-pass-nueva')?.value    || '';
+    const passActual  = document.getElementById('pass-actual')?.value         || '';
+    const passNueva   = document.getElementById('conf-pass-nueva')?.value     || '';
     const passConf    = document.getElementById('conf-pass-confirmar')?.value || '';
     const errActual   = document.getElementById('error-pass-actual');
     const errNueva    = document.getElementById('error-pass-nueva');
     const step2       = document.getElementById('pass-step2');
 
-    // ── Leer valores de los selectores EPS (orden: Régimen, Tipo, EPS) ───────
     const selEps     = document.getElementById('edit-eps');
     const selTipoEps = document.getElementById('edit-tipo-eps');
     const regimenEl  = document.getElementById('edit-regimen-eps');
@@ -978,7 +1058,6 @@ window.guardarPerfilPaciente = function () {
 
     const cambiandoPassword = step2?.style.display !== 'none' && !!passNueva;
 
-    // ── Validar contraseña si se mostró el paso 2 ────────────────────────────
     if (cambiandoPassword) {
         const todosOk = _marcarRequisitosIncumplidos();
         if (!todosOk) return;

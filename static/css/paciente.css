@@ -457,3 +457,82 @@ th { border-bottom: 2px solid #f1f5f9; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
 main { scroll-behavior: smooth; }
+
+/* ===================================================================
+   ENCUESTA DE SATISFACCIÓN — MODAL ESTRELLAS
+   =================================================================== */
+
+/* Bloque individual de pregunta */
+.encuesta-pregunta-bloque {
+    background:    #f8fafc;
+    border:        1px solid #e2e8f0;
+    border-radius: 20px;
+    padding:       18px 20px;
+    transition:    border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.encuesta-pregunta-bloque:hover {
+    border-color: #cbd5e1;
+    box-shadow:   0 4px 12px rgba(0,0,0,0.04);
+}
+
+/* Botones de estrella */
+.estrella-btn {
+    background:  none;
+    border:      none;
+    cursor:      pointer;
+    line-height: 1;
+    padding:     2px;
+    transition:  transform 0.15s ease, color 0.15s ease;
+    font-size:   1.75rem;
+}
+
+.estrella-btn:hover {
+    transform: scale(1.25);
+}
+
+.estrella-btn:focus {
+    outline: none;
+}
+
+/* Etiqueta textual de calificación */
+.estrella-label {
+    min-width:   70px;
+    font-size:   10px;
+    font-weight: 800;
+    color:       #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Botón de encuesta — estado PENDIENTE (naranja) */
+.btn-encuesta-pendiente {
+    transition: all 0.25s ease;
+}
+
+.btn-encuesta-pendiente:hover {
+    transform:  translateY(-2px);
+    box-shadow: 0 6px 16px rgba(249, 115, 22, 0.2);
+}
+
+/* Botón de encuesta — estado COMPLETADO (verde, bloqueado) */
+.btn-encuesta-completada {
+    pointer-events: none;
+    user-select:    none;
+}
+
+/* Modal éxito — barra de progreso */
+#encuesta-exito-bar {
+    will-change: width;
+}
+
+/* Error de encuesta */
+#encuesta-error {
+    background:    #fff5f5;
+    border:        1px solid #fecaca;
+    border-radius: 12px;
+    padding:       10px 16px;
+    color:         #dc2626;
+    font-size:     12px;
+    font-weight:   700;
+}
