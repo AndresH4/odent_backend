@@ -135,7 +135,7 @@ body {
 #reloj {
     font-family:     'JetBrains Mono', monospace;
     font-size:       1.55rem;
-    letter-spacing:  0.5px;
+    letter-spacing:  -2px;
     background:      linear-gradient(to right, #38bdf8, #818cf8, #38bdf8);
     background-size: 200% auto;
     -webkit-background-clip: text;

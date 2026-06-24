@@ -43,7 +43,7 @@ function actualizarReloj() {
     const horas = ahora.getHours();
 
     const elReloj = document.getElementById('reloj');
-    if (elReloj) elReloj.innerText = ahora.toLocaleTimeString('es-CO');
+    if (elReloj) elReloj.innerText = ahora.toLocaleTimeString('es-CO').toUpperCase().replace(/\.\s*M\./g, '.M.');
 
     const esHorarioLaboral =
         (dia >= 1 && dia <= 5 && horas >= 8 && horas < 18) ||
