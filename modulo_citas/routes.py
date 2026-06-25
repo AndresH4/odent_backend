@@ -1,43 +1,8 @@
 """
-modulo_citas/routes.py — Stylo Dental (versión fusionada + perfil especialista)
-==========================================================
-Endpoints REST. Integra todas las funcionalidades de ambas versiones:
-
-  • GET  /api/usuarios                          — Lista de usuarios
-  • POST /api/usuarios                          — Crear usuario
-  • GET  /api/paciente/por-usuario/<uid>        — Resolver Paciente_ID desde Usuario_ID
-  • GET  /api/especialistas                     — Lista de especialistas con especialidad
-  • GET  /api/especialista/perfil/<usuario_id>  — Perfil completo del especialista
-  • GET  /api/agenda                            — Slots de agenda (filtrable)
-  • POST /api/agenda                            — Crear slot de agenda
-  • DELETE /api/agenda/<id>                     — Eliminar slot disponible
-  • GET  /api/citas                             — Listar citas (filtrable)
-  • POST /api/citas                             — Crear cita (transaccional)
-  • GET  /api/citas/<id>                        — Detalle de una cita
-  • PUT  /api/citas/<id>/en-proceso             — Marcar en proceso (legado)
-  • PUT  /api/citas/<id>/atender                — REQ 3: Especialista inicia atención
-  • PUT  /api/citas/<id>/atendido               — Marcar atendida + historial clínico
-  • PUT  /api/citas/<id>/cancelar               — Cancelar con multa (legado)
-  • PUT  /api/citas/<id>/cancelar-sin-multa     — Cancelar sin penalización
-  • PUT  /api/citas/<id>/cancelar-con-multa     — Cancelar con multa
-  • PUT  /api/citas/<id>/finalizar-consulta     — REQ 3/4: Finaliza + correo encuesta
-  • GET  /api/paciente/<id>/citas               — Citas de un paciente
-  • GET  /api/especialista/<id>/citas           — Citas de un especialista
-  • GET  /api/multas                            — Listar multas
-  • PUT  /api/multas/<id>/pagar                 — Marcar multa como pagada
-  • GET  /api/paciente/<id>/multa-activa        — Verificar multa pendiente
-  • POST /api/historial-clinico                 — Crear/actualizar historial clínico
-  • GET  /api/historial-clinico/<cita_id>       — Consultar historial de una cita
-  • POST /api/respuesta                         — Registrar respuesta de ranking (REQ 5/6)
-  • GET  /api/config-ranking                    — REQ 8/9: Leer configuración de ranking
-  • PUT  /api/config-ranking                    — REQ 8/9: Actualizar configuración
-  • POST /api/verificar-password                — Verificar contraseña del usuario
-  • POST /api/actualizar-perfil-paciente        — Actualizar datos del paciente
-  • GET  /api/paciente/<id>/encuestas-pendientes — Encuestas pendientes del paciente (NUEVO)
+modulo_citas/routes.py — Stylo Dental
 """
 
 from flask import Blueprint, request, jsonify
-from db import get_db_connection
 from datetime import date, datetime, timedelta
 import re
 import threading
@@ -49,13 +14,11 @@ logger = logging.getLogger("stylo_dental_smtp")
 
 citas_bp = Blueprint('citas_bp', __name__)
 
-# ─── Ruta absoluta a odent.db (REQ: evitar BD fantasma) ──────────────────────
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH  = os.path.join(BASE_DIR, 'odent.db')
 
 
 def _get_conn():
-    """Conexión directa con ruta absoluta garantizada."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
@@ -137,7 +100,7 @@ def _calcular_minutos_restantes(fecha_str, hora_str):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CONEXIÓN INTERMODULAR: GARANTIZAR HISTORIAL CLÍNICO PARA UNA CITA
+# HISTORIAL CLÍNICO — FUNCIÓN INTERNA
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _garantizar_historial_clinico(cur, cita_id, diagnosticos=None,
@@ -192,7 +155,7 @@ def _garantizar_historial_clinico(cur, cita_id, diagnosticos=None,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# REQ 5 — CÁLCULO DE PROMEDIO DEL ESPECIALISTA
+# PROMEDIO DEL ESPECIALISTA
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _crear_promedio(cur, especialista_id: int) -> float:
@@ -209,7 +172,137 @@ def _crear_promedio(cur, especialista_id: int) -> float:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# REQ 8/9 — CONFIGURACIÓN DE RANKING
+# CORREO ENCUESTA
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _html_encuesta_cita(nombre_paciente: str, nombre_especialista: str,
+                         login_url: str) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Encuesta de Satisfacción — Stylo Dental</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f1f5f9;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="520" cellpadding="0" cellspacing="0" border="0"
+               style="background:#ffffff;border-radius:12px;overflow:hidden;
+                      box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+          <tr>
+            <td style="background:linear-gradient(135deg,#0369a1,#0ea5e9);
+                       padding:32px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;font-weight:800;
+                          letter-spacing:0.5px;">🦷 Stylo Dental</h1>
+              <p style="color:#bae6fd;margin:8px 0 0;font-size:14px;">
+                Evaluación de servicio odontológico
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:36px 40px;">
+              <p style="color:#1e293b;font-size:16px;margin:0 0 16px;font-weight:600;">
+                Estimado(a) {nombre_paciente},
+              </p>
+              <p style="color:#475569;font-size:14px;line-height:1.7;margin:0 0 16px;">
+                Su consulta con <strong>Dr(a). {nombre_especialista}</strong> ha finalizado.
+                En Clínica Stylo Dental valoramos profundamente su opinión y nos gustaría
+                que calificara la atención recibida.
+              </p>
+              <p style="color:#475569;font-size:14px;line-height:1.7;margin:0 0 28px;">
+                Ingrese a nuestra plataforma y complete la encuesta de satisfacción disponible
+                en su <strong>Panel de Paciente → Historial de Citas</strong>.
+              </p>
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="padding:8px 0 28px;">
+                    <a href="{login_url}"
+                       style="display:inline-block;
+                              background:linear-gradient(135deg,#0369a1,#0ea5e9);
+                              color:#ffffff;text-decoration:none;
+                              padding:16px 40px;border-radius:8px;
+                              font-size:15px;font-weight:700;letter-spacing:0.3px;">
+                      Calificar mi experiencia ★
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="color:#94a3b8;font-size:12px;margin:0;">
+                Si el botón no funciona, copie y pegue este enlace en su navegador:<br>
+                <a href="{login_url}" style="color:#0284c7;word-break:break-all;">{login_url}</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#f8fafc;padding:20px 40px;text-align:center;
+                       border-top:1px solid #e2e8f0;">
+              <p style="color:#94a3b8;font-size:12px;margin:0;">
+                © 2025 Clínica Stylo Dental · Todos los derechos reservados
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+
+def _despachar_correo_encuesta(cita_id: int, correo_paciente: str,
+                                nombre_paciente: str, nombre_especialista: str,
+                                horas_retraso: int, login_url: str):
+    import time as _time
+
+    if horas_retraso > 0:
+        logger.info(
+            "[ENCUESTA] Esperando %d hora(s) antes de enviar correo a %s (cita %d)",
+            horas_retraso, correo_paciente, cita_id
+        )
+        _time.sleep(horas_retraso * 3600)
+
+    con = None
+    try:
+        con = _get_conn()
+        cur = con.cursor()
+
+        cur.execute("SELECT Estado_Envio FROM config_ranking LIMIT 1")
+        cfg = cur.fetchone()
+        if cfg and cfg['Estado_Envio'] == 0:
+            logger.info(
+                "[ENCUESTA] Kill-switch INACTIVO: no se envía correo para cita %d", cita_id
+            )
+            return
+
+        from app import enviar_correo_smtp
+
+        asunto      = "Tiene una nueva Encuesta de Satisfacción disponible – Stylo Dental"
+        cuerpo_html = _html_encuesta_cita(nombre_paciente, nombre_especialista, login_url)
+
+        ok, error = enviar_correo_smtp(correo_paciente, asunto, cuerpo_html)
+
+        if ok:
+            cur.execute(
+                "UPDATE cita SET Encuesta_Enviada = 1 WHERE Cita_ID = ?", (cita_id,)
+            )
+            con.commit()
+            logger.info(
+                "[ENCUESTA] ✓ Correo enviado para cita %d a %s", cita_id, correo_paciente
+            )
+        else:
+            logger.error(
+                "[ENCUESTA] Fallo al enviar correo para cita %d: %s", cita_id, error
+            )
+    except Exception as exc:
+        logger.error("[ENCUESTA] Error en hilo de envío (cita %d): %s", cita_id, exc)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONFIGURACIÓN DE RANKING
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/config-ranking', methods=['GET'])
@@ -277,116 +370,7 @@ def put_config_ranking():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CORREO ENCUESTA — helpers privados
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _html_encuesta_cita(nombre_paciente: str, nombre_especialista: str,
-                         login_url: str) -> str:
-    return f"""
-    <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:520px;margin:auto;
-                border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
-      <div style="background:linear-gradient(135deg,#0369a1,#0ea5e9);
-                  padding:28px 32px;text-align:center;">
-        <h1 style="color:#ffffff;margin:0;font-size:22px;letter-spacing:0.5px;">
-          🦷 Stylo Dental
-        </h1>
-        <p style="color:#bae6fd;margin:6px 0 0;font-size:14px;">
-          Evaluación de servicio odontológico
-        </p>
-      </div>
-      <div style="padding:32px;background:#ffffff;">
-        <p style="color:#334155;font-size:15px;margin-top:0;">
-          Estimado(a) <strong>{nombre_paciente}</strong>,
-        </p>
-        <p style="color:#475569;font-size:14px;line-height:1.6;">
-          Su consulta con <strong>Dr(a). {nombre_especialista}</strong> ha finalizado.
-          En Clínica Stylo Dental valoramos su opinión y nos gustaría que calificara
-          la atención recibida.
-        </p>
-        <p style="color:#475569;font-size:14px;line-height:1.6;">
-          Por favor, ingrese a nuestra plataforma y complete la encuesta de satisfacción.
-          Su retroalimentación es fundamental para mejorar nuestro servicio.
-        </p>
-        <div style="text-align:center;margin:28px 0;">
-          <a href="{login_url}"
-             style="display:inline-block;background:linear-gradient(135deg,#0369a1,#0ea5e9);
-                    color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;
-                    font-size:15px;font-weight:700;letter-spacing:0.3px;">
-            Calificar mi experiencia ★
-          </a>
-        </div>
-        <p style="color:#64748b;font-size:12px;margin-bottom:0;">
-          Si el botón no funciona, copie y pegue este enlace en su navegador:<br>
-          <a href="{login_url}" style="color:#0284c7;">{login_url}</a>
-        </p>
-      </div>
-      <div style="background:#f8fafc;padding:16px 32px;text-align:center;
-                  border-top:1px solid #e2e8f0;">
-        <p style="color:#94a3b8;font-size:12px;margin:0;">
-          © 2025 Clínica Stylo Dental · Todos los derechos reservados
-        </p>
-      </div>
-    </div>
-    """
-
-
-def _despachar_correo_encuesta(cita_id: int, correo_paciente: str,
-                                nombre_paciente: str, nombre_especialista: str,
-                                horas_retraso: int, login_url: str):
-    """
-    Ejecutado en hilo daemon.
-    Espera Horas_Envio horas, re-verifica el kill-switch y envía el correo.
-    Tras el envío exitoso marca Encuesta_Enviada = 1 en la BD.
-    """
-    import time as _time
-
-    if horas_retraso > 0:
-        logger.info(
-            "[ENCUESTA] Esperando %d hora(s) antes de enviar correo a %s (cita %d)",
-            horas_retraso, correo_paciente, cita_id
-        )
-        _time.sleep(horas_retraso * 3600)
-
-    con = None
-    try:
-        con = _get_conn()
-        cur = con.cursor()
-        # Re-verificar el kill-switch DESPUÉS del retraso (REQ 9)
-        cur.execute("SELECT Estado_Envio FROM config_ranking LIMIT 1")
-        cfg = cur.fetchone()
-        if cfg and cfg['Estado_Envio'] == 0:
-            logger.info(
-                "[ENCUESTA] Kill-switch INACTIVO: no se envía correo para cita %d", cita_id
-            )
-            return
-
-        from app import enviar_correo_smtp
-
-        asunto      = "Califica tu experiencia en Stylo Dental ★"
-        cuerpo_html = _html_encuesta_cita(nombre_paciente, nombre_especialista, login_url)
-
-        ok, error = enviar_correo_smtp(correo_paciente, asunto, cuerpo_html)
-
-        if ok:
-            cur.execute(
-                "UPDATE cita SET Encuesta_Enviada = 1 WHERE Cita_ID = ?", (cita_id,)
-            )
-            con.commit()
-            logger.info(
-                "[ENCUESTA] ✓ Correo enviado para cita %d a %s", cita_id, correo_paciente
-            )
-        else:
-            logger.error(
-                "[ENCUESTA] Fallo al enviar correo para cita %d: %s", cita_id, error
-            )
-    except Exception as exc:
-        logger.error("[ENCUESTA] Error en hilo de envío (cita %d): %s", cita_id, exc)
-    finally:
-        if con: con.close()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# USUARIOS  —  GET /api/usuarios
+# USUARIOS — GET /api/usuarios
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/usuarios', methods=['GET'])
@@ -408,7 +392,7 @@ def get_usuarios():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PACIENTE POR USUARIO  —  GET /api/paciente/por-usuario/<usuario_id>
+# PACIENTE POR USUARIO — GET /api/paciente/por-usuario/<usuario_id>
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/paciente/por-usuario/<int:usuario_id>', methods=['GET'])
@@ -434,7 +418,7 @@ def get_paciente_por_usuario(usuario_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ESPECIALISTAS  —  GET /api/especialistas
+# ESPECIALISTAS — GET /api/especialistas
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/especialistas', methods=['GET'])
@@ -464,7 +448,7 @@ def get_especialistas():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PERFIL DEL ESPECIALISTA  —  GET /api/especialista/perfil/<usuario_id>
+# PERFIL DEL ESPECIALISTA — GET /api/especialista/perfil/<usuario_id>
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/especialista/perfil/<int:usuario_id>', methods=['GET'])
@@ -503,7 +487,6 @@ def get_perfil_especialista(usuario_id):
             return _json_error('Especialista no encontrado para ese usuario.', 404)
 
         perfil = dict(fila)
-
         defaults = {
             "NumeroDocumento":     "No registrado",
             "Correo":              "No registrado",
@@ -517,7 +500,6 @@ def get_perfil_especialista(usuario_id):
                 perfil[campo] = defecto
 
         perfil["NombreCompleto"] = f"{perfil['Nombres']} {perfil['Apellidos']}".strip()
-
         return _json_ok({"ok": True, "perfil": perfil})
     except Exception as exc:
         return _json_error(str(exc), 500)
@@ -526,60 +508,7 @@ def get_perfil_especialista(usuario_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CREAR USUARIO  —  POST /api/usuarios
-# ─────────────────────────────────────────────────────────────────────────────
-
-@citas_bp.route('/usuarios', methods=['POST'])
-def crear_usuario():
-    datos = request.get_json(silent=True) or {}
-    nombres             = (datos.get('Nombres') or '').strip()
-    apellidos           = (datos.get('Apellidos') or '').strip()
-    numero_documento    = (datos.get('NumeroDocumento') or '').strip()
-    correo              = (datos.get('Correo') or '').strip()
-    telefono            = (datos.get('Telefono') or '').strip()
-    contrasena          = datos.get('Contrasena')
-    rol_id              = datos.get('Rol_ID')
-    estado_id           = datos.get('Estado_ID', 1)
-    fecha_nacimiento    = datos.get('FechaNacimiento')
-    tarjeta_profesional = (datos.get('Tarjeta_Profesional') or '').strip()
-
-    if not all([nombres, apellidos, numero_documento, correo, contrasena, rol_id]):
-        return _json_error(
-            'Nombres, Apellidos, NumeroDocumento, Correo, Contrasena y Rol_ID son obligatorios.'
-        )
-
-    rol_id = int(rol_id)
-    if rol_id == 2 and (len(tarjeta_profesional) < 4 or len(tarjeta_profesional) > 10):
-        return _json_error('Tarjeta_Profesional debe tener entre 4 y 10 caracteres.')
-
-    con = None
-    try:
-        con = _get_conn()
-        cur = con.cursor()
-        cur.execute("""
-            INSERT INTO usuarios
-                (Nombres, Apellidos, NumeroDocumento, Correo, Telefono,
-                 Contrasena, Rol_ID, Estado_ID, FechaNacimiento)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (nombres, apellidos, numero_documento, correo, telefono,
-              contrasena, rol_id, estado_id, fecha_nacimiento))
-        usuario_id = cur.lastrowid
-        if rol_id == 2:
-            cur.execute(
-                "INSERT INTO especialista (Usuario_ID, Tarjeta_Profesional) VALUES (?, ?)",
-                (usuario_id, tarjeta_profesional)
-            )
-        con.commit()
-        return _json_ok({"ok": True, "Usuario_ID": usuario_id}, 201)
-    except Exception as exc:
-        if con: con.rollback()
-        return _json_error(str(exc), 500)
-    finally:
-        if con: con.close()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# AGENDA  —  GET /api/agenda?especialista_id=&fecha=
+# AGENDA — GET /api/agenda   POST /api/agenda   DELETE /api/agenda/<id>
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/agenda', methods=['GET'])
@@ -618,10 +547,6 @@ def get_agenda():
     finally:
         if con: con.close()
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# CREAR SLOT DE AGENDA  —  POST /api/agenda
-# ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/agenda', methods=['POST'])
 def crear_agenda():
@@ -671,10 +596,6 @@ def crear_agenda():
         if con: con.close()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# ELIMINAR SLOT DE AGENDA  —  DELETE /api/agenda/<agenda_id>
-# ─────────────────────────────────────────────────────────────────────────────
-
 @citas_bp.route('/agenda/<int:agenda_id>', methods=['DELETE'])
 def eliminar_agenda(agenda_id):
     con = None
@@ -701,7 +622,7 @@ def eliminar_agenda(agenda_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CITAS  —  GET /api/citas   |   POST /api/citas
+# CITAS — GET /api/citas   POST /api/citas
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas', methods=['GET'])
@@ -724,7 +645,13 @@ def get_citas():
                    ea.Nombre_Estado AS EstadoAgenda,
                    e.Especialista_ID,
                    ue.Nombres || ' ' || ue.Apellidos AS NombreEspecialista,
-                   esp.Nombre_Especialidad
+                   esp.Nombre_Especialidad,
+                   CASE
+                     WHEN EXISTS (
+                       SELECT 1 FROM respuesta_ranking rr WHERE rr.Cita_ID = c.Cita_ID
+                     ) THEN 1
+                     ELSE COALESCE(c.Encuesta_Enviada, 0)
+                   END AS Encuesta_Completada
             FROM cita c
             JOIN paciente p   ON p.Paciente_ID     = c.Paciente_ID
             JOIN usuarios up  ON up.Usuario_ID     = p.Usuario_ID
@@ -842,7 +769,7 @@ def crear_cita():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CITA INDIVIDUAL  —  GET /api/citas/<id>
+# CITA INDIVIDUAL — GET /api/citas/<id>
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>', methods=['GET'])
@@ -862,7 +789,13 @@ def get_cita(cita_id):
                    a.Fecha, a.Hora_Inicio,
                    a.Hora_Final AS Hora_Fin,
                    ea.Nombre_Estado AS EstadoAgenda,
-                   ue.Nombres || ' ' || ue.Apellidos AS NombreEspecialista
+                   ue.Nombres || ' ' || ue.Apellidos AS NombreEspecialista,
+                   CASE
+                     WHEN EXISTS (
+                       SELECT 1 FROM respuesta_ranking rr WHERE rr.Cita_ID = c.Cita_ID
+                     ) THEN 1
+                     ELSE COALESCE(c.Encuesta_Enviada, 0)
+                   END AS Encuesta_Completada
             FROM cita c
             JOIN paciente p    ON p.Paciente_ID = c.Paciente_ID
             JOIN usuarios up   ON up.Usuario_ID = p.Usuario_ID
@@ -884,43 +817,7 @@ def get_cita(cita_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MARCAR CITA EN PROCESO  —  PUT /api/citas/<id>/en-proceso  (legado)
-# ─────────────────────────────────────────────────────────────────────────────
-
-@citas_bp.route('/citas/<int:cita_id>/en-proceso', methods=['PUT'])
-def marcar_en_proceso(cita_id):
-    con = None
-    try:
-        con = _get_conn()
-        cur = con.cursor()
-        cur.execute("SELECT Agenda_ID FROM cita WHERE Cita_ID = ?", (cita_id,))
-        row = cur.fetchone()
-        if not row:
-            return _json_error('Cita no encontrada.', 404)
-        agenda_id = row['Agenda_ID']
-        cur.execute("""
-            SELECT EstadoAgenda_ID FROM estado_agenda
-            WHERE LOWER(Nombre_Estado) LIKE '%proceso%'
-               OR LOWER(Nombre_Estado) LIKE '%atendiendo%'
-            LIMIT 1
-        """)
-        estado_fila = cur.fetchone()
-        nuevo_estado_id = estado_fila['EstadoAgenda_ID'] if estado_fila else 2
-        cur.execute(
-            "UPDATE agenda SET EstadoAgenda_ID = ? WHERE Agenda_ID = ?",
-            (nuevo_estado_id, agenda_id)
-        )
-        con.commit()
-        return _json_ok({"ok": True, "status": "Cita marcada como En proceso."})
-    except Exception as exc:
-        if con: con.rollback()
-        return _json_error(str(exc), 500)
-    finally:
-        if con: con.close()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# REQ 3 — ATENDER CITA  —  PUT /api/citas/<id>/atender
+# ATENDER CITA — PUT /api/citas/<id>/atender
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>/atender', methods=['PUT'])
@@ -954,7 +851,7 @@ def atender_cita(cita_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MARCAR CITA ATENDIDA  —  PUT /api/citas/<id>/atendido
+# MARCAR CITA ATENDIDA — PUT /api/citas/<id>/atendido
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>/atendido', methods=['PUT'])
@@ -963,8 +860,8 @@ def marcar_atendido(cita_id):
     diagnosticos = datos.get('Diagnosticos') or datos.get('diagnosticos') or []
     if isinstance(diagnosticos, str):
         diagnosticos = [diagnosticos]
-    evolucion    = datos.get('Evolucion')   or datos.get('evolucion')   or ''
-    tratamiento  = datos.get('Tratamiento') or datos.get('tratamiento') or ''
+    evolucion   = datos.get('Evolucion')   or datos.get('evolucion')   or ''
+    tratamiento = datos.get('Tratamiento') or datos.get('tratamiento') or ''
 
     con = None
     try:
@@ -979,17 +876,14 @@ def marcar_atendido(cita_id):
             cur.execute("ROLLBACK")
             return _json_error('Cita no encontrada.', 404)
 
-        agenda_id = row['Agenda_ID']
+        agenda_id      = row['Agenda_ID']
+        fecha_hora_fin = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        # ── REQ 1: UPDATE real con commit — estado Cumplida (4) ──────────────
         cur.execute(
             "UPDATE agenda SET EstadoAgenda_ID = 4 WHERE Agenda_ID = ?",
             (agenda_id,)
         )
 
-        # ── REQ 1: Registrar fecha/hora de finalización real ─────────────────
-        fecha_hora_fin = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        # Verificar si la columna FechaAtencion existe; si no, la añadimos
         cur.execute("PRAGMA table_info(cita)")
         columnas_cita = [col[1] for col in cur.fetchall()]
         if 'FechaAtencion' not in columnas_cita:
@@ -1028,7 +922,7 @@ def marcar_atendido(cita_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# REQ 3/4 — FINALIZAR CONSULTA  —  PUT /api/citas/<id>/finalizar-consulta
+# FINALIZAR CONSULTA — PUT /api/citas/<id>/finalizar-consulta
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>/finalizar-consulta', methods=['PUT'])
@@ -1065,7 +959,6 @@ def finalizar_consulta(cita_id):
                 'Solo se puede finalizar una cita en estado Disponible u Ocupado.'
             )
 
-        # ── REQ 1: UPDATE estado + FechaAtencion + commit real ───────────────
         fecha_hora_fin = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         cur.execute(
@@ -1073,7 +966,6 @@ def finalizar_consulta(cita_id):
             (row['Agenda_ID'],)
         )
 
-        # Añadir columna si no existe
         cur.execute("PRAGMA table_info(cita)")
         columnas_cita = [col[1] for col in cur.fetchall()]
         if 'FechaAtencion' not in columnas_cita:
@@ -1087,27 +979,18 @@ def finalizar_consulta(cita_id):
             (fecha_hora_fin, cita_id)
         )
 
-        # ── REQ 3: Vincular con ranking — marcar encuesta pendiente ──────────
-        # Obtener preguntas activas para crear registros pendientes
-        cur.execute(
-            "SELECT Preguntas_ID FROM preguntas_ranking WHERE Activa = 1 ORDER BY Preguntas_ID"
-        )
-        preguntas_activas = cur.fetchall()
-
-        # Verificar/crear tabla encuesta_pendiente si no existe
         cur.execute("""
             CREATE TABLE IF NOT EXISTS encuesta_pendiente (
-                Pendiente_ID  INTEGER PRIMARY KEY AUTOINCREMENT,
-                Cita_ID       INT NOT NULL,
-                Paciente_ID   INT NOT NULL,
+                Pendiente_ID   INTEGER PRIMARY KEY AUTOINCREMENT,
+                Cita_ID        INT NOT NULL,
+                Paciente_ID    INT NOT NULL,
                 Fecha_Creacion TEXT NOT NULL,
-                Completada    INTEGER NOT NULL DEFAULT 0,
+                Completada     INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (Cita_ID)     REFERENCES cita(Cita_ID),
                 FOREIGN KEY (Paciente_ID) REFERENCES paciente(Paciente_ID)
             )
         """)
 
-        # Insertar encuesta pendiente solo si no existe ya
         cur.execute(
             "SELECT Pendiente_ID FROM encuesta_pendiente WHERE Cita_ID = ?", (cita_id,)
         )
@@ -1116,23 +999,15 @@ def finalizar_consulta(cita_id):
                 INSERT INTO encuesta_pendiente (Cita_ID, Paciente_ID, Fecha_Creacion, Completada)
                 VALUES (?, ?, ?, 0)
             """, (cita_id, row['Paciente_ID'], fecha_hora_fin))
-            logger.info(
-                "[RANKING] Encuesta pendiente creada para cita %d, paciente %d",
-                cita_id, row['Paciente_ID']
-            )
 
         con.commit()
 
-        # ── REQ 8/9: Leer configuración de envío ─────────────────────────────
         cur.execute("SELECT Horas_Envio, Estado_Envio FROM config_ranking LIMIT 1")
         cfg = cur.fetchone()
         horas_envio  = cfg['Horas_Envio']  if cfg else 2
         estado_envio = cfg['Estado_Envio'] if cfg else 1
 
         if estado_envio == 0:
-            logger.info(
-                "[ENCUESTA] Kill-switch INACTIVO: cita %d finalizada sin envío.", cita_id
-            )
             return _json_ok({
                 "ok": True,
                 "status": "Consulta finalizada. Envío de encuesta desactivado (kill-switch).",
@@ -1151,21 +1026,23 @@ def finalizar_consulta(cita_id):
             hilo = threading.Thread(
                 target=_despachar_correo_encuesta,
                 args=(
-                    cita_id, correo_paciente, nombre_paciente,
-                    nombre_especialista, horas_envio, login_url,
+                    cita_id,
+                    correo_paciente,
+                    nombre_paciente,
+                    nombre_especialista,
+                    horas_envio,
+                    login_url,
                 ),
                 daemon=True,
                 name=f"encuesta-cita-{cita_id}",
             )
             hilo.start()
-            logger.info(
-                "[ENCUESTA] Hilo iniciado para cita %d → %s (retraso %dh)",
-                cita_id, correo_paciente, horas_envio
+            correo_msg = (
+                f"Correo de encuesta programado para {correo_paciente} "
+                f"con {horas_envio}h de retraso."
             )
-            correo_msg = f"Correo programado para {correo_paciente} con {horas_envio}h de retraso."
         else:
             correo_msg = "No se encontró correo del paciente; no se enviará notificación."
-            logger.warning("[ENCUESTA] Cita %d sin correo de paciente.", cita_id)
 
         return _json_ok({
             "ok": True,
@@ -1184,9 +1061,7 @@ def finalizar_consulta(cita_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# REQ 3 — ENCUESTAS PENDIENTES DEL PACIENTE  (NUEVO)
-# GET /api/paciente/<id>/encuestas-pendientes
-# Consumido por el panel del paciente para mostrar notificación visual.
+# ENCUESTAS PENDIENTES — GET /api/paciente/<id>/encuestas-pendientes
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/paciente/<int:paciente_id>/encuestas-pendientes', methods=['GET'])
@@ -1196,14 +1071,13 @@ def get_encuestas_pendientes(paciente_id):
         con = _get_conn()
         cur = con.cursor()
 
-        # Crear tabla si no existe (primera ejecución)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS encuesta_pendiente (
-                Pendiente_ID  INTEGER PRIMARY KEY AUTOINCREMENT,
-                Cita_ID       INT NOT NULL,
-                Paciente_ID   INT NOT NULL,
+                Pendiente_ID   INTEGER PRIMARY KEY AUTOINCREMENT,
+                Cita_ID        INT NOT NULL,
+                Paciente_ID    INT NOT NULL,
                 Fecha_Creacion TEXT NOT NULL,
-                Completada    INTEGER NOT NULL DEFAULT 0
+                Completada     INTEGER NOT NULL DEFAULT 0
             )
         """)
         con.commit()
@@ -1234,33 +1108,7 @@ def get_encuestas_pendientes(paciente_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CANCELAR CITA (legado)  —  PUT /api/citas/<id>/cancelar
-# ─────────────────────────────────────────────────────────────────────────────
-
-@citas_bp.route('/citas/<int:cita_id>/cancelar', methods=['PUT'])
-def cancelar_cita(cita_id):
-    con = None
-    try:
-        con = _get_conn()
-        cur = con.cursor()
-        cur.execute("SELECT Agenda_ID FROM cita WHERE Cita_ID = ?", (cita_id,))
-        row = cur.fetchone()
-        if not row:
-            return _json_error('Cita no encontrada.', 404)
-        agenda_id = row['Agenda_ID']
-        cur.execute("UPDATE agenda SET EstadoAgenda_ID = 3 WHERE Agenda_ID = ?", (agenda_id,))
-        cur.execute("INSERT INTO multa (Cita_ID, EstadoMulta_ID) VALUES (?, 1)", (cita_id,))
-        con.commit()
-        return _json_ok({"ok": True, "status": "Cita cancelada y multa generada."})
-    except Exception as exc:
-        if con: con.rollback()
-        return _json_error(str(exc), 500)
-    finally:
-        if con: con.close()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# CANCELAR SIN MULTA  —  PUT /api/citas/<id>/cancelar-sin-multa
+# CANCELAR CITA SIN MULTA — PUT /api/citas/<id>/cancelar-sin-multa
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>/cancelar-sin-multa', methods=['PUT'])
@@ -1294,7 +1142,7 @@ def cancelar_cita_sin_multa(cita_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CANCELAR CON MULTA  —  PUT /api/citas/<id>/cancelar-con-multa
+# CANCELAR CITA CON MULTA — PUT /api/citas/<id>/cancelar-con-multa
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>/cancelar-con-multa', methods=['PUT'])
@@ -1324,7 +1172,7 @@ def cancelar_cita_con_multa(cita_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CITAS POR PACIENTE  —  GET /api/paciente/<id>/citas
+# CITAS POR PACIENTE — GET /api/paciente/<id>/citas
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/paciente/<int:paciente_id>/citas', methods=['GET'])
@@ -1334,25 +1182,34 @@ def get_citas_paciente(paciente_id):
         con = _get_conn()
         cur = con.cursor()
         cur.execute("""
-            SELECT c.Cita_ID, c.Motivo_Consulta, c.Encuesta_Enviada,
-                   a.Fecha, a.Hora_Inicio,
-                   a.Hora_Final AS Hora_Fin,
-                   ea.Nombre_Estado AS EstadoAgenda,
-                   ue.Nombres || ' ' || ue.Apellidos AS NombreEspecialista,
+            SELECT c.Cita_ID,
+                   c.Motivo_Consulta,
+                   c.Encuesta_Enviada,
+                   a.Fecha,
+                   a.Hora_Inicio,
+                   a.Hora_Final                          AS Hora_Fin,
+                   ea.Nombre_Estado                      AS EstadoAgenda,
+                   ue.Nombres || ' ' || ue.Apellidos     AS NombreEspecialista,
                    esp.Nombre_Especialidad,
-                   up.Nombres || ' ' || up.Apellidos AS NombrePaciente,
+                   up.Nombres || ' ' || up.Apellidos     AS NombrePaciente,
                    up.NumeroDocumento,
-                   COALESCE(em.Nombre_Estado, 'Sin multa') AS EstadoMulta
+                   COALESCE(em.Nombre_Estado, 'Sin multa') AS EstadoMulta,
+                   CASE
+                     WHEN EXISTS (
+                       SELECT 1 FROM respuesta_ranking rr WHERE rr.Cita_ID = c.Cita_ID
+                     ) THEN 1
+                     ELSE COALESCE(c.Encuesta_Enviada, 0)
+                   END AS Encuesta_Completada
             FROM cita c
-            JOIN agenda a      ON a.Agenda_ID    = c.Agenda_ID
+            JOIN agenda a         ON a.Agenda_ID       = c.Agenda_ID
             JOIN estado_agenda ea ON ea.EstadoAgenda_ID = a.EstadoAgenda_ID
             JOIN especialista e   ON e.Especialista_ID  = a.Especialista_ID
-            JOIN usuarios ue   ON ue.Usuario_ID  = e.Usuario_ID
-            JOIN paciente p    ON p.Paciente_ID  = c.Paciente_ID
-            JOIN usuarios up   ON up.Usuario_ID  = p.Usuario_ID
+            JOIN usuarios ue      ON ue.Usuario_ID      = e.Usuario_ID
+            JOIN paciente p       ON p.Paciente_ID      = c.Paciente_ID
+            JOIN usuarios up      ON up.Usuario_ID      = p.Usuario_ID
             LEFT JOIN especialista_especialidad ee ON ee.Especialista_ID = e.Especialista_ID
-            LEFT JOIN especialidad esp ON esp.Especialidad_ID = ee.Especialidad_ID
-            LEFT JOIN multa m  ON m.Cita_ID = c.Cita_ID
+            LEFT JOIN especialidad esp             ON esp.Especialidad_ID = ee.Especialidad_ID
+            LEFT JOIN multa m      ON m.Cita_ID         = c.Cita_ID
             LEFT JOIN estado_multa em ON em.EstadoMulta_ID = m.EstadoMulta_ID
             WHERE c.Paciente_ID = ?
             ORDER BY a.Fecha DESC, a.Hora_Inicio DESC
@@ -1365,8 +1222,7 @@ def get_citas_paciente(paciente_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CITAS POR ESPECIALISTA  —  GET /api/especialista/<id>/citas
-# REQ 1: incluye FechaAtencion para calcular "Atendidos Hoy" en tiempo real
+# CITAS POR ESPECIALISTA — GET /api/especialista/<id>/citas
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/especialista/<int:especialista_id>/citas', methods=['GET'])
@@ -1376,7 +1232,6 @@ def get_citas_especialista(especialista_id):
         con = _get_conn()
         cur = con.cursor()
 
-        # Verificar si columna FechaAtencion existe
         cur.execute("PRAGMA table_info(cita)")
         columnas_cita = [col[1] for col in cur.fetchall()]
         fecha_atencion_col = "c.FechaAtencion" if 'FechaAtencion' in columnas_cita else "NULL AS FechaAtencion"
@@ -1450,9 +1305,15 @@ def pagar_multa(multa_id):
     try:
         con = _get_conn()
         cur = con.cursor()
-        cur.execute("UPDATE multa SET EstadoMulta_ID = 2 WHERE Multa_ID = ?", (multa_id,))
-        if cur.rowcount == 0:
+        cur.execute(
+            "SELECT Multa_ID, EstadoMulta_ID FROM multa WHERE Multa_ID = ?", (multa_id,)
+        )
+        row = cur.fetchone()
+        if not row:
             return _json_error('Multa no encontrada.', 404)
+        if row['EstadoMulta_ID'] == 2:
+            return _json_error('La multa ya está marcada como Pagada.', 409)
+        cur.execute("UPDATE multa SET EstadoMulta_ID = 2 WHERE Multa_ID = ?", (multa_id,))
         con.commit()
         return _json_ok({"ok": True, "status": "Multa marcada como Pagada."})
     except Exception as exc:
@@ -1483,7 +1344,7 @@ def multa_activa(paciente_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# HISTORIAL CLÍNICO  —  POST /api/historial-clinico
+# HISTORIAL CLÍNICO — POST /api/historial-clinico
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/historial-clinico', methods=['POST'])
@@ -1521,7 +1382,7 @@ def crear_historial_clinico():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# GET HISTORIAL CLÍNICO  —  GET /api/historial-clinico/<cita_id>
+# HISTORIAL CLÍNICO — GET /api/historial-clinico/<cita_id>
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/historial-clinico/<int:cita_id>', methods=['GET'])
@@ -1589,7 +1450,7 @@ def get_historial_clinico(cita_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# REQ 5/6 — RANKING: REGISTRAR RESPUESTA  —  POST /api/respuesta
+# RANKING — POST /api/respuesta
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/respuesta', methods=['POST'])
@@ -1684,7 +1545,6 @@ def crear_respuesta_ranking():
                 especialista_id, nuevo_promedio
             )
 
-        # ── Marcar encuesta pendiente como completada si todas las preguntas respondidas
         cur.execute(
             "SELECT COUNT(*) AS total FROM preguntas_ranking WHERE Activa = 1"
         )
@@ -1698,11 +1558,11 @@ def crear_respuesta_ranking():
         if total_respondidas >= total_preguntas:
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS encuesta_pendiente (
-                    Pendiente_ID  INTEGER PRIMARY KEY AUTOINCREMENT,
-                    Cita_ID       INT NOT NULL,
-                    Paciente_ID   INT NOT NULL,
+                    Pendiente_ID   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Cita_ID        INT NOT NULL,
+                    Paciente_ID    INT NOT NULL,
                     Fecha_Creacion TEXT NOT NULL,
-                    Completada    INTEGER NOT NULL DEFAULT 0
+                    Completada     INTEGER NOT NULL DEFAULT 0
                 )
             """)
             cur.execute(
@@ -1722,7 +1582,7 @@ def crear_respuesta_ranking():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# VERIFICAR CONTRASEÑA  —  POST /api/verificar-password
+# VERIFICAR CONTRASEÑA — POST /api/verificar-password
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/verificar-password', methods=['POST'])
@@ -1761,12 +1621,12 @@ def verificar_password():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ACTUALIZAR PERFIL PACIENTE  —  POST /api/actualizar-perfil-paciente
+# ACTUALIZAR PERFIL PACIENTE — POST /api/actualizar-perfil-paciente
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/actualizar-perfil-paciente', methods=['POST'])
 def actualizar_perfil_paciente():
-    from werkzeug.security import generate_password_hash
+    from werkzeug.security import generate_password_hash, check_password_hash
 
     datos             = request.get_json(silent=True) or {}
     usuario_id        = datos.get('usuario_id')
@@ -1774,6 +1634,7 @@ def actualizar_perfil_paciente():
     telefono          = datos.get('telefono')
     nacimiento        = datos.get('nacimiento')
     nueva_pass        = datos.get('nuevaPass')
+    contrasena_actual = datos.get('contrasena_actual') or datos.get('ContrasenaActual')
     nombres           = datos.get('nombres')
     apellidos         = datos.get('apellidos')
     documento         = datos.get('documento')
@@ -1791,14 +1652,32 @@ def actualizar_perfil_paciente():
         campos  = []
         valores = []
 
-        if nombres:          campos.append("Nombres = ?");         valores.append(nombres)
-        if apellidos:        campos.append("Apellidos = ?");       valores.append(apellidos)
-        if documento:        campos.append("NumeroDocumento = ?"); valores.append(documento)
-        if tipo_documento_id: campos.append("TipoDoc_ID = ?");    valores.append(tipo_documento_id)
-        if correo:           campos.append("Correo = ?");          valores.append(correo)
-        if telefono:         campos.append("Telefono = ?");        valores.append(telefono)
-        if nacimiento:       campos.append("FechaNacimiento = ?"); valores.append(nacimiento)
+        if nombres:           campos.append("Nombres = ?");          valores.append(nombres)
+        if apellidos:         campos.append("Apellidos = ?");        valores.append(apellidos)
+        if documento:         campos.append("NumeroDocumento = ?");  valores.append(documento)
+        if tipo_documento_id: campos.append("TipoDoc_ID = ?");       valores.append(tipo_documento_id)
+        if correo:            campos.append("Correo = ?");           valores.append(correo)
+        if telefono:          campos.append("Telefono = ?");         valores.append(telefono)
+        if nacimiento:        campos.append("FechaNacimiento = ?");  valores.append(nacimiento)
+
         if nueva_pass:
+            if not contrasena_actual:
+                return _json_error('Debes ingresar tu contraseña actual para cambiarla.', 400)
+
+            cur.execute("SELECT Contrasena FROM usuarios WHERE Usuario_ID = ?", (usuario_id,))
+            fila_pwd = cur.fetchone()
+            if not fila_pwd:
+                return _json_error('Usuario no encontrado.', 404)
+
+            hash_bd = fila_pwd['Contrasena']
+            if hash_bd.startswith('scrypt:') or hash_bd.startswith('pbkdf2:'):
+                pwd_ok = check_password_hash(hash_bd, contrasena_actual)
+            else:
+                pwd_ok = (hash_bd == contrasena_actual)
+
+            if not pwd_ok:
+                return _json_error('La contraseña actual es incorrecta.', 401)
+
             ok, msg = _validar_politica_password(nueva_pass)
             if not ok:
                 return _json_error(msg, 400)

@@ -1,4 +1,4 @@
-// Archivo: paciente.js  — Stylo Dental Pro v3.0
+// Archivo: paciente.js  — Stylo Dental Pro
 'use strict';
 
 // ─── ESTADO GLOBAL ────────────────────────────────────────────────────────────
@@ -11,15 +11,19 @@ let _cancelarConMulta      = false;
 let _accionPendienteSimple = null;
 let _dropdownOpen          = false;
 
+let _encuestaCitaId        = null;
+let _encuestaPreguntas     = [];
+let _encuestaExitoTimer    = null;
+
 // ─── MAPA DE VISTAS ───────────────────────────────────────────────────────────
 const VISTAS_PACIENTE = {
     inicio   : { el: 'vista-inicio',    btn: 'btn-inicio',    titulo: 'Paciente'           },
     historial: { el: 'vista-historial', btn: 'btn-historial', titulo: 'Historial de Citas' },
-    multas   : { el: 'vista-multas',    btn: 'btn-multas',    titulo: 'Mis Multas'          },
+    multas   : { el: 'vista-multas',    btn: 'btn-multas',    titulo: 'Mis Multas'         },
     config   : { el: 'vista-config',    btn: 'btn-config',    titulo: 'Mi Perfil'          },
 };
 
-// ─── MODALES PERSONALIZADOS ───────────────────────────────────────────────────
+// ─── MODALES ──────────────────────────────────────────────────────────────────
 function _mostrarNotificacion(titulo, mensaje, tipo) {
     const modal   = document.getElementById('modalNotificacion');
     const content = document.getElementById('modalNotificacion-content');
@@ -38,8 +42,8 @@ function _mostrarNotificacion(titulo, mensaje, tipo) {
         iconEl.innerHTML  = '<i class="fas fa-circle-info text-sky-500"></i>';
     }
 
-    titEl.textContent = titulo;
-    msgEl.textContent = mensaje;
+    titEl.textContent   = titulo;
+    msgEl.textContent   = mensaje;
     modal.style.display = 'flex';
 }
 
@@ -59,24 +63,22 @@ function _cargarSesion() {
     _usuarioId      = u.Usuario_ID;
 
     const nombreCompleto = `${u.Nombres || ''} ${u.Apellidos || ''}`.trim();
-    const inicial = (u.Nombres || '').trim().charAt(0).toUpperCase() || 'P';
+    const inicial        = (u.Nombres || '').trim().charAt(0).toUpperCase() || 'P';
 
     _setText('avatar-letras',         inicial);
     _setText('nombre-usuario-header', nombreCompleto);
     _setText('perfil-avatar-grande',  inicial);
     _setText('nombre-menu',           nombreCompleto.toUpperCase());
     _setText('doc-menu',              u.NumeroDocumento || '');
-
-    _setText('nombre-usuario',    nombreCompleto);
-    _setText('perfil-nombres',    u.Nombres    || '');
-    _setText('perfil-apellidos',  u.Apellidos  || '');
-    _setText('perfil-correo',     u.Correo     || '');
-    _setText('perfil-numDoc',     u.NumeroDocumento || '');
-    _setText('perfil-telefono',   u.Telefono   || '');
-    _setText('perfil-nacimiento', u.FechaNacimiento || '');
-
-    _setText('email-menu',    u.Correo   || '—');
-    _setText('telefono-menu', u.Telefono || '—');
+    _setText('nombre-usuario',        nombreCompleto);
+    _setText('perfil-nombres',        u.Nombres    || '');
+    _setText('perfil-apellidos',      u.Apellidos  || '');
+    _setText('perfil-correo',         u.Correo     || '');
+    _setText('perfil-numDoc',         u.NumeroDocumento || '');
+    _setText('perfil-telefono',       u.Telefono   || '');
+    _setText('perfil-nacimiento',     u.FechaNacimiento || '');
+    _setText('email-menu',            u.Correo     || '—');
+    _setText('telefono-menu',         u.Telefono   || '—');
 
     _cargarTipoDocumento(u.TipoDoc_ID, u.NumeroDocumento);
 
@@ -99,7 +101,7 @@ async function _cargarTipoDocumento(tipoDocId, numeroDoc) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const lista = await res.json();
 
-        const tipo = lista.find(t => String(t.TipoDoc_ID) === String(tipoDocId));
+        const tipo       = lista.find(t => String(t.TipoDoc_ID) === String(tipoDocId));
         const nombreTipo = tipo
             ? (tipo.Nombre_Tipo_Documento || tipo.Descripcion || tipo.Nombre_Tipo || 'Doc.')
             : 'Doc.';
@@ -111,10 +113,12 @@ async function _cargarTipoDocumento(tipoDocId, numeroDoc) {
     }
 }
 
-// ─── EPS COMPLETA (dropdown header) ──────────────────────────────────────────
+// ─── EPS COMPLETA ─────────────────────────────────────────────────────────────
 async function _cargarAfiliacionCompleta() {
     if (!_usuarioId) return;
     try {
+        // /api/afiliacion devuelve array plano; /api/eps y /api/regimen-eps devuelven {ok,data}
+        // /api/tipo-eps devuelve {ok,data}
         const [resAfil, resEps, resRegimen, resTipo] = await Promise.all([
             fetch('/api/afiliacion'),
             fetch('/api/eps'),
@@ -122,7 +126,7 @@ async function _cargarAfiliacionCompleta() {
             fetch('/api/tipo-eps'),
         ]);
 
-        if (!resAfil.ok) { console.warn('[paciente] /api/afiliacion no respondió OK'); return; }
+        if (!resAfil.ok) return;
 
         const dataAfil    = await resAfil.json();
         const dataEps     = resEps.ok     ? await resEps.json()     : [];
@@ -137,39 +141,50 @@ async function _cargarAfiliacionCompleta() {
         const afil = listaAfil.find(
             a => String(a.Usuario_ID || a.ID_Usuario) === String(_usuarioId)
         );
-        if (!afil) { console.warn('[paciente] No se encontró afiliación para Usuario_ID:', _usuarioId); return; }
+        if (!afil) return;
 
         const epsId     = afil.EPS_ID     || afil.Id_EPS     || afil.eps_id     || null;
         const tipoEpsId = afil.TipoEPS_ID || afil.ID_Tipo_EPS || afil.tipoeps_id || null;
 
-        let nombreEPS = afil.Nombre_EPS || afil.nombre_eps || '';
-        if (!nombreEPS && epsId) {
-            const epsObj = listaEps.find(e => String(e.EPS_ID || e.Id_EPS || e.eps_id || e.ID_EPS) === String(epsId));
-            nombreEPS = epsObj ? (epsObj.Nombre_EPS || epsObj.nombre_eps || epsObj.Nombre || '—') : '—';
+        // Nombre EPS
+        let nombreEPS = '';
+        if (epsId) {
+            const epsObj = listaEps.find(e =>
+                String(e.EPS_ID || e.Id_EPS || e.eps_id || e.ID_EPS) === String(epsId)
+            );
+            nombreEPS = epsObj ? (epsObj.Nombre_EPS || epsObj.nombre_eps || '—') : '—';
         }
         _setText('eps-menu',   nombreEPS || '—');
         _setText('perfil-eps', nombreEPS || '—');
 
-        let nombreRegimen = afil.Nombre_Regimen || afil.nombre_regimen || '';
-        if (!nombreRegimen) {
-            let regimenId = afil.Regimen_ID || afil.ID_Regimen_EPS || afil.regimen_id || null;
-            if (!regimenId && epsId) {
-                const epsObj = listaEps.find(e => String(e.EPS_ID || e.Id_EPS || e.eps_id || e.ID_EPS) === String(epsId));
-                regimenId = epsObj ? (epsObj.Regimen_ID || epsObj.regimen_id || epsObj.ID_Regimen_EPS || null) : null;
-            }
-            if (regimenId) {
-                const regObj = listaRegimen.find(r => String(r.Regimen_ID || r.ID_Regimen_EPS || r.regimen_id) === String(regimenId));
-                nombreRegimen = regObj ? (regObj.Descripcion || regObj.Nombre_Regimen || regObj.nombre_regimen || '—') : '—';
-            } else {
-                nombreRegimen = '—';
-            }
+        // Nombre Régimen
+        let nombreRegimen = '';
+        let regimenId = afil.Regimen_ID || afil.ID_Regimen_EPS || afil.regimen_id || null;
+        if (!regimenId && epsId) {
+            const epsObj = listaEps.find(e =>
+                String(e.EPS_ID || e.Id_EPS || e.eps_id || e.ID_EPS) === String(epsId)
+            );
+            regimenId = epsObj ? (epsObj.Regimen_ID || epsObj.regimen_id || null) : null;
         }
-        _setText('regimen-menu', nombreRegimen);
+        if (regimenId) {
+            const regObj = listaRegimen.find(r =>
+                String(r.Regimen_ID || r.ID_Regimen_EPS || r.regimen_id) === String(regimenId)
+            );
+            nombreRegimen = regObj
+                ? (regObj.Descripcion || regObj.Nombre_Regimen || regObj.nombre_regimen || '—')
+                : '—';
+        }
+        _setText('regimen-menu', nombreRegimen || '—');
 
-        let nombreTipoEPS = afil.Nombre_Tipo || afil.nombre_tipo || '';
-        if (!nombreTipoEPS && tipoEpsId) {
-            const tipoObj = listaTipos.find(t => String(t.TipoEPS_ID || t.ID_Tipo_EPS || t.tipoeps_id) === String(tipoEpsId));
-            nombreTipoEPS = tipoObj ? (tipoObj.Nombre_Tipo || tipoObj.nombre_tipo || tipoObj.Nombre || '—') : '—';
+        // Nombre Tipo EPS
+        let nombreTipoEPS = '';
+        if (tipoEpsId) {
+            const tipoObj = listaTipos.find(t =>
+                String(t.TipoEPS_ID || t.ID_Tipo_EPS || t.tipoeps_id) === String(tipoEpsId)
+            );
+            nombreTipoEPS = tipoObj
+                ? (tipoObj.Nombre_Tipo || tipoObj.nombre_tipo || tipoObj.Nombre || '—')
+                : '—';
         }
         _setText('tipoeps-menu', nombreTipoEPS || '—');
 
@@ -196,10 +211,7 @@ function _setVal(id, val) {
     if (el) el.value = val ?? '';
 }
 
-function _show(id) { document.getElementById(id)?.classList.remove('hidden'); }
-function _hide(id) { document.getElementById(id)?.classList.add('hidden');    }
-
-// ─── RELOJ Y ESTADO LABORAL ───────────────────────────────────────────────────
+// ─── RELOJ ────────────────────────────────────────────────────────────────────
 function _actualizarReloj() {
     const ahora = new Date();
     const dia   = ahora.getDay();
@@ -286,7 +298,7 @@ async function _cargarCitasPaciente() {
 
 // ─── HELPERS DE ESTADO ───────────────────────────────────────────────────────
 function _resolverEstado(c) {
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy    = new Date().toISOString().split('T')[0];
     const estado = (c.EstadoAgenda || '').toLowerCase();
 
     if (estado === 'cancelado') {
@@ -295,16 +307,13 @@ function _resolverEstado(c) {
         }
         return { label: 'Cancelada', clase: 'bg-red-100 text-red-600' };
     }
-    if (estado === 'cumplida' || estado === 'ocupado' && c.Fecha < hoy) {
-        if (estado === 'ocupado' && c.Fecha < hoy) {
-            return { label: 'Cancelada con multa', clase: 'bg-amber-100 text-amber-700' };
-        }
+    if (estado === 'cumplida') {
         return { label: 'Cumplida', clase: 'bg-green-100 text-green-700' };
     }
-    if (estado === 'ocupado') {
-        return { label: 'Pendiente', clase: 'bg-sky-100 text-sky-700' };
+    if (estado === 'ocupado' && c.Fecha < hoy) {
+        return { label: 'Cancelada con multa', clase: 'bg-amber-100 text-amber-700' };
     }
-    if (estado === 'disponible') {
+    if (estado === 'ocupado' || estado === 'disponible') {
         return { label: 'Pendiente', clase: 'bg-sky-100 text-sky-700' };
     }
     return { label: c.EstadoAgenda || '—', clase: 'bg-slate-100 text-slate-500' };
@@ -314,17 +323,21 @@ const ESTADOS_EXCLUIDOS_DE_INICIO = ['Cancelada', 'Cancelada con multa'];
 
 function _esCitaActiva(c) {
     const estadoInfo = _resolverEstado(c);
-    if (ESTADOS_EXCLUIDOS_DE_INICIO.includes(estadoInfo.label)) {
-        return false;
-    }
-
-    const hoy   = new Date().toISOString().split('T')[0];
+    if (ESTADOS_EXCLUIDOS_DE_INICIO.includes(estadoInfo.label)) return false;
+    const hoy    = new Date().toISOString().split('T')[0];
     const estado = (c.EstadoAgenda || '').toLowerCase();
     return (estado === 'ocupado' || estado === 'disponible') && c.Fecha >= hoy;
 }
 
 function _esCitaHistorial(c) {
     return !_esCitaActiva(c);
+}
+
+function _citaEncuestaCompletada(c) {
+    return c.Encuesta_Completada === 1
+        || c.Encuesta_Completada === true
+        || c.Encuesta_Enviada === 1
+        || c.Encuesta_Enviada === true;
 }
 
 // ─── RENDER TABLA PRINCIPAL (INICIO) ─────────────────────────────────────────
@@ -335,7 +348,6 @@ function _renderTablaCitas() {
     if (!tbody) return;
 
     const activas = _citasData.filter(_esCitaActiva);
-
     if (countEl) countEl.textContent = activas.length;
 
     tbody.innerHTML = '';
@@ -347,8 +359,6 @@ function _renderTablaCitas() {
 
     activas.forEach(c => {
         const estadoInfo = _resolverEstado(c);
-        const esCumplida = (c.EstadoAgenda || '').toLowerCase() === 'cumplida';
-
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td class="p-5 font-black text-slate-700 uppercase text-xs">${c.NombrePaciente || '—'}</td>
@@ -368,15 +378,6 @@ function _renderTablaCitas() {
                        </button>`
                     : '<span class="text-slate-300 text-[10px] font-bold">—</span>'
                 }
-            </td>
-            <td class="p-5 text-center">
-                ${esCumplida
-                    ? `<button onclick="_abrirRanking(${c.Cita_ID})"
-                           class="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-4 py-2 rounded-xl font-black hover:bg-amber-100 transition-all uppercase">
-                           <i class="fas fa-star mr-1"></i> Evaluar
-                       </button>`
-                    : '<span class="text-slate-300 text-[10px] font-bold">—</span>'
-                }
             </td>`;
         tbody.appendChild(tr);
     });
@@ -391,13 +392,34 @@ function _renderHistorial() {
     const historial = _citasData.filter(_esCitaHistorial);
 
     if (historial.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="p-10 text-center text-slate-400 font-bold italic text-xs uppercase">Sin historial registrado.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="p-10 text-center text-slate-400 font-bold italic text-xs uppercase">Sin historial registrado.</td></tr>`;
         return;
     }
 
     historial.forEach(c => {
-        const estadoInfo = _resolverEstado(c);
+        const estadoInfo   = _resolverEstado(c);
+        const esCumplida   = (c.EstadoAgenda || '').toLowerCase() === 'cumplida';
+        const yaCompletada = _citaEncuestaCompletada(c);
+
+        let encuestaCelda = '<span class="text-slate-300 text-[10px] font-bold">—</span>';
+        if (esCumplida) {
+            if (yaCompletada) {
+                encuestaCelda = `
+                    <button disabled
+                        class="btn-encuesta-completada text-[10px] bg-green-50 text-green-600 border border-green-200 px-4 py-2 rounded-xl font-black uppercase cursor-not-allowed opacity-80">
+                        <i class="fas fa-check-circle mr-1"></i> Completada
+                    </button>`;
+            } else {
+                encuestaCelda = `
+                    <button onclick="abrirModalEncuesta(${c.Cita_ID})"
+                        class="btn-encuesta-pendiente text-[10px] bg-orange-50 text-orange-500 border border-orange-200 px-4 py-2 rounded-xl font-black hover:bg-orange-100 transition-all uppercase">
+                        <i class="fas fa-star mr-1"></i> Encuesta
+                    </button>`;
+            }
+        }
+
         const tr = document.createElement('tr');
+        tr.id = `historial-row-${c.Cita_ID}`;
         tr.innerHTML = `
             <td class="p-5 text-xs font-bold">${c.Fecha}<br><span class="text-slate-400">${c.Hora_Inicio || ''}</span></td>
             <td class="p-5 font-black text-sky-600 uppercase text-[10px]">${c.Nombre_Especialidad || '—'}</td>
@@ -409,86 +431,289 @@ function _renderHistorial() {
             </td>
             <td class="p-5 text-center">
                 <span class="text-[10px] font-bold text-slate-400">${c.Motivo_Consulta || '—'}</span>
-            </td>`;
+            </td>
+            <td class="p-5 text-center">${encuestaCelda}</td>`;
         tbody.appendChild(tr);
     });
 }
 
-// ─── MULTAS DEL PACIENTE ──────────────────────────────────────────────────────
+// ─── RENDER MULTAS DEL PACIENTE ───────────────────────────────────────────────
 async function _renderMultasPaciente() {
-    const tbody  = document.getElementById('tabla-multas-paciente-body');
-    const noMsg  = document.getElementById('no-multas-msg');
-    const badge  = document.getElementById('badge-multas-pendientes');
-    if (!tbody) return;
+    const tbody = document.getElementById('tabla-multas-body');
+    const noMsg = document.getElementById('no-multas-msg');
+    if (!tbody || !_pacienteId) return;
 
-    if (!_pacienteId) {
-        tbody.innerHTML = `<tr><td colspan="6" class="p-10 text-center text-slate-400 font-bold italic text-xs uppercase">Cargando información...</td></tr>`;
-        return;
-    }
+    tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400 text-xs">Cargando...</td></tr>';
 
     try {
         const res  = await fetch(`/api/multas/paciente/${_pacienteId}`);
-        const json = await res.json();
-        const multas = json.ok ? json.data : [];
-
-        const pendientes = multas.filter(m => m.EstadoMulta_ID === 1 || (m.EstadoMulta || '').toLowerCase() === 'pendiente');
-
-        // Actualizar badge en el botón del sidebar
-        if (badge) {
-            if (pendientes.length > 0) {
-                badge.textContent = pendientes.length;
-                badge.classList.remove('hidden');
-            } else {
-                badge.classList.add('hidden');
-            }
-        }
+        const data = await res.json();
+        const lista = data.ok ? _normalizar(data) : [];
 
         tbody.innerHTML = '';
 
-        if (multas.length === 0) {
+        if (lista.length === 0) {
             noMsg?.classList.remove('hidden');
             return;
         }
         noMsg?.classList.add('hidden');
 
-        multas.forEach(m => {
-            const esPagada = m.EstadoMulta_ID === 2 || (m.EstadoMulta || '').toLowerCase() === 'pagada';
-            const badgeCls = esPagada
-                ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                : 'bg-amber-100 text-amber-700 border border-amber-200 animate-pulse-soft';
-            const badgeIcon = esPagada ? 'fa-circle-check' : 'fa-clock';
-
+        lista.forEach(m => {
+            const pagada = m.EstadoMulta_ID === 2;
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td class="p-5 font-black text-slate-500 text-[11px]">#${m.Multa_ID}</td>
-                <td class="p-5 text-[10px] font-bold text-slate-600 uppercase">${m.Concepto || '—'}</td>
-                <td class="p-5 font-black text-sky-600 text-[10px] uppercase">${m.Nombre_Especialidad || '—'}</td>
-                <td class="p-5 text-[10px] font-bold text-slate-600">
-                    ${m.Fecha || '—'}<br>
-                    <span class="text-slate-400">${m.Hora_Inicio || ''}</span>
-                </td>
-                <td class="p-5 text-[10px] font-bold text-slate-600">Dr(a). ${m.NombreEspecialista || '—'}</td>
-                <td class="p-5 text-center">
-                    <span class="inline-flex items-center gap-1.5 text-[9px] font-black uppercase px-3 py-1.5 rounded-full ${badgeCls}">
-                        <i class="fas ${badgeIcon} text-[10px]"></i>
-                        ${esPagada ? 'Pagada' : 'Pendiente'}
+                <td class="p-5 text-xs font-bold">${m.Fecha || '—'}<br><span class="text-slate-400">${m.Hora_Inicio || ''}</span></td>
+                <td class="p-5 text-xs text-slate-600">Dr(a). ${m.NombreEspecialista || '—'}</td>
+                <td class="p-5 font-black text-sky-600 uppercase text-[10px]">${m.Nombre_Especialidad || '—'}</td>
+                <td class="p-5 text-xs text-slate-500">${m.Concepto || '—'}</td>
+                <td class="p-5">
+                    <span class="text-[9px] font-black uppercase px-2 py-1 rounded-full ${pagada ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}">
+                        ${m.EstadoMulta || '—'}
                     </span>
+                </td>
+                <td class="p-5 text-center">
+                    ${!pagada
+                        ? `<button onclick="abrirModalPagarMulta(${m.Multa_ID})"
+                               class="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-4 py-2 rounded-xl font-black hover:bg-amber-100 transition-all uppercase">
+                               <i class="fas fa-money-bill-wave mr-1"></i> Pagar
+                           </button>`
+                        : '<span class="text-slate-300 text-[10px] font-bold">—</span>'
+                    }
                 </td>`;
             tbody.appendChild(tr);
         });
-
     } catch (err) {
         console.error('[paciente] Error cargando multas:', err);
-        tbody.innerHTML = `<tr><td colspan="6" class="p-10 text-center text-red-400 font-bold italic text-xs uppercase">Error al cargar multas.</td></tr>`;
+        tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-red-400 text-xs font-bold">Error al cargar multas.</td></tr>';
     }
 }
 
-// ─── LÓGICA DE CANCELACIÓN CON DETECCIÓN DE MULTA ────────────────────────────
+window.abrirModalPagarMulta = function (multaId) {
+    const modal = document.getElementById('modalPagarMulta');
+    if (!modal) return;
+    modal.dataset.multaId  = multaId;
+    modal.style.display    = 'flex';
+};
+
+window.cerrarModalPagarMulta = function () {
+    const modal = document.getElementById('modalPagarMulta');
+    if (modal) modal.style.display = 'none';
+};
+
+window.confirmarPagoMulta = async function () {
+    const modal   = document.getElementById('modalPagarMulta');
+    const multaId = modal?.dataset.multaId;
+    if (!multaId) return;
+
+    try {
+        const res  = await fetch(`/api/multas/${multaId}/pagar`, { method: 'PUT' });
+        const data = await res.json();
+        cerrarModalPagarMulta();
+        if (data.ok) {
+            _mostrarNotificacion('Multa Pagada', 'La multa fue marcada como pagada correctamente.', 'success');
+            _renderMultasPaciente();
+        } else {
+            _mostrarNotificacion('Error', data.error || 'No se pudo registrar el pago.', 'error');
+        }
+    } catch (err) {
+        cerrarModalPagarMulta();
+        _mostrarNotificacion('Error de Conexión', 'No se pudo conectar al servidor.', 'error');
+    }
+};
+
+// ─── MODAL ENCUESTA ───────────────────────────────────────────────────────────
+window.abrirModalEncuesta = async function (citaId) {
+    _encuestaCitaId    = citaId;
+    _encuestaPreguntas = [];
+
+    const container = document.getElementById('encuesta-preguntas-container');
+    const errEl     = document.getElementById('encuesta-error');
+    if (container) container.innerHTML = '<p class="text-center text-slate-400 text-xs font-bold py-6">Cargando preguntas...</p>';
+    if (errEl)     errEl.style.display = 'none';
+
+    document.getElementById('modalEncuesta').style.display = 'flex';
+
+    try {
+        const res  = await fetch('/api/pregunta?activas=true');
+        const data = await res.json();
+
+        if (!data.ok || !Array.isArray(data.data) || data.data.length === 0) {
+            if (container) container.innerHTML = '<p class="text-center text-slate-400 text-xs font-bold py-6">No hay preguntas de evaluación configuradas.</p>';
+            return;
+        }
+
+        _encuestaPreguntas = data.data;
+        _renderPreguntasEncuesta(container, _encuestaPreguntas);
+
+    } catch (err) {
+        console.error('[encuesta] Error cargando preguntas:', err);
+        if (container) container.innerHTML = '<p class="text-center text-red-400 text-xs font-bold py-6">Error al cargar preguntas. Intente de nuevo.</p>';
+    }
+};
+
+function _renderPreguntasEncuesta(container, preguntas) {
+    container.innerHTML = '';
+    preguntas.forEach((p, idx) => {
+        const bloque = document.createElement('div');
+        bloque.className          = 'encuesta-pregunta-bloque';
+        bloque.dataset.preguntaId = p.ID_Pregunta;
+
+        bloque.innerHTML = `
+            <p class="text-[11px] font-black text-slate-700 uppercase tracking-wider mb-3">
+                <span class="text-orange-400 mr-1">${idx + 1}.</span>${p.Texto_Pregunta}
+            </p>
+            <div class="encuesta-estrellas flex gap-2 items-center" data-pregunta="${p.ID_Pregunta}">
+                ${[1,2,3,4,5].map(v => `
+                    <button type="button"
+                        class="estrella-btn text-3xl text-slate-300 hover:text-orange-400 transition-colors focus:outline-none"
+                        data-valor="${v}" aria-label="Calificación ${v} de 5" title="${v} estrella${v > 1 ? 's' : ''}">
+                        ☆
+                    </button>`).join('')}
+                <span class="text-[10px] text-slate-400 font-bold ml-2 estrella-label">Sin calificar</span>
+            </div>`;
+
+        const estrellasWrap = bloque.querySelector('.encuesta-estrellas');
+        const botones       = estrellasWrap.querySelectorAll('.estrella-btn');
+        const label         = estrellasWrap.querySelector('.estrella-label');
+
+        botones.forEach(btn => {
+            btn.addEventListener('click', function () {
+                const val = parseInt(this.dataset.valor);
+                estrellasWrap.dataset.seleccionado = val;
+                botones.forEach((b, i) => {
+                    b.textContent = i < val ? '★' : '☆';
+                    b.classList.toggle('text-orange-400', i < val);
+                    b.classList.toggle('text-slate-300',  i >= val);
+                });
+                const textos = ['Muy malo', 'Malo', 'Regular', 'Bueno', 'Excelente'];
+                if (label) label.textContent = textos[val - 1] || '';
+            });
+        });
+
+        container.appendChild(bloque);
+    });
+}
+
+window.cerrarModalEncuesta = function () {
+    document.getElementById('modalEncuesta').style.display = 'none';
+    _encuestaCitaId    = null;
+    _encuestaPreguntas = [];
+};
+
+window.enviarEncuesta = async function () {
+    const container = document.getElementById('encuesta-preguntas-container');
+    const errEl     = document.getElementById('encuesta-error');
+    if (errEl) errEl.style.display = 'none';
+
+    const bloques      = container ? container.querySelectorAll('.encuesta-pregunta-bloque') : [];
+    const respuestas   = [];
+    let todoRespondido = true;
+
+    bloques.forEach(bloque => {
+        const pid  = parseInt(bloque.dataset.preguntaId);
+        const wrap = bloque.querySelector('.encuesta-estrellas');
+        const val  = wrap ? parseInt(wrap.dataset.seleccionado || '0') : 0;
+        if (!val || val < 1 || val > 5) {
+            todoRespondido = false;
+        } else {
+            respuestas.push({ ID_Pregunta: pid, Texto_Respuesta: String(val) });
+        }
+    });
+
+    if (!todoRespondido) {
+        if (errEl) {
+            errEl.textContent   = '⚠ Por favor califica todas las preguntas antes de enviar.';
+            errEl.style.display = 'block';
+        }
+        return;
+    }
+
+    const btnEnviar = document.getElementById('btn-enviar-encuesta');
+    if (btnEnviar) { btnEnviar.disabled = true; btnEnviar.textContent = 'Enviando...'; }
+
+    const citaIdEnviada = _encuestaCitaId;
+
+    try {
+        for (const r of respuestas) {
+            const res = await fetch('/api/respuesta', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({
+                    ID_Pregunta:     r.ID_Pregunta,
+                    ID_Paciente:     _pacienteId,
+                    Texto_Respuesta: r.Texto_Respuesta,
+                    Cita_ID:         citaIdEnviada,
+                }),
+            });
+            const data = await res.json();
+            if (!data.ok) throw new Error(data.error || 'Error al enviar una respuesta.');
+        }
+
+        const citaLocal = _citasData.find(c => c.Cita_ID === citaIdEnviada);
+        if (citaLocal) {
+            citaLocal.Encuesta_Completada = 1;
+            citaLocal.Encuesta_Enviada    = 1;
+        }
+
+        _actualizarBotonEncuestaEnDOM(citaIdEnviada);
+        cerrarModalEncuesta();
+        _mostrarModalExitoEncuesta();
+
+    } catch (err) {
+        console.error('[encuesta] Error enviando respuestas:', err);
+        if (errEl) {
+            errEl.textContent   = err.message || 'Error de conexión. Intente de nuevo.';
+            errEl.style.display = 'block';
+        }
+    } finally {
+        if (btnEnviar) {
+            btnEnviar.disabled  = false;
+            btnEnviar.innerHTML = '<i class="fas fa-paper-plane mr-2"></i> Enviar Encuesta';
+        }
+    }
+};
+
+function _actualizarBotonEncuestaEnDOM(citaId) {
+    const row = document.getElementById(`historial-row-${citaId}`);
+    if (!row) return;
+    const celdaEncuesta = row.querySelector('td:last-child');
+    if (!celdaEncuesta) return;
+    celdaEncuesta.innerHTML = `
+        <button disabled
+            class="btn-encuesta-completada text-[10px] bg-green-50 text-green-600 border border-green-200 px-4 py-2 rounded-xl font-black uppercase cursor-not-allowed opacity-80">
+            <i class="fas fa-check-circle mr-1"></i> Completada
+        </button>`;
+}
+
+function _mostrarModalExitoEncuesta() {
+    const modal = document.getElementById('modalEncuestaExito');
+    const bar   = document.getElementById('encuesta-exito-bar');
+    if (!modal) return;
+
+    modal.style.display = 'flex';
+    if (bar) {
+        bar.style.transition = 'none';
+        bar.style.width      = '100%';
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                bar.style.transition = 'width 3s linear';
+                bar.style.width      = '0%';
+            });
+        });
+    }
+
+    if (_encuestaExitoTimer) clearTimeout(_encuestaExitoTimer);
+    _encuestaExitoTimer = setTimeout(() => {
+        modal.style.display = 'none';
+        _encuestaExitoTimer = null;
+    }, 3000);
+}
+
+// ─── CANCELAR CITA ────────────────────────────────────────────────────────────
 function _calcularMinutosRestantes(fecha, horaInicio) {
     try {
         const citaDateTime = new Date(`${fecha}T${horaInicio}`);
-        const ahora        = new Date();
-        return (citaDateTime - ahora) / 60000;
+        return (citaDateTime - new Date()) / 60000;
     } catch {
         return Infinity;
     }
@@ -502,7 +727,6 @@ function _formatearTiempoRestante(minutos) {
     return `${m} minutos`;
 }
 
-// ─── CANCELAR CITA ────────────────────────────────────────────────────────────
 window.abrirModalCancelar = function (citaId) {
     _citaParaCancelar = citaId;
     const cita = _citasData.find(c => c.Cita_ID === citaId);
@@ -540,7 +764,6 @@ window.cerrarModalCancelar = function () {
 
 window.solicitarConfirmacionFinal = function () {
     document.getElementById('modalCancelarCita').style.display = 'none';
-
     const cita = _citasData.find(c => c.Cita_ID === _citaParaCancelar);
     if (!cita) return;
 
@@ -548,9 +771,8 @@ window.solicitarConfirmacionFinal = function () {
 
     if (minutosRestantes <= 120) {
         _cancelarConMulta = true;
-        const tiempoTexto = _formatearTiempoRestante(minutosRestantes);
         const tiempoEl = document.getElementById('tiempo-restante-multa');
-        if (tiempoEl) tiempoEl.textContent = tiempoTexto;
+        if (tiempoEl) tiempoEl.textContent = _formatearTiempoRestante(minutosRestantes);
         document.getElementById('modalAdvertenciaMulta').style.display = 'flex';
     } else {
         _cancelarConMulta = false;
@@ -577,7 +799,7 @@ window.cerrarConfirmacionFinal = function () {
 window.confirmarAccionCancelado = async function () {
     if (!_citaParaCancelar) return;
     try {
-        const url = _cancelarConMulta
+        const url  = _cancelarConMulta
             ? `/api/citas/${_citaParaCancelar}/cancelar-con-multa`
             : `/api/citas/${_citaParaCancelar}/cancelar-sin-multa`;
 
@@ -605,122 +827,6 @@ window.confirmarAccionCancelado = async function () {
     }
 };
 
-// ─── RANKING ──────────────────────────────────────────────────────────────────
-window._abrirRanking = async function (citaId) {
-    try {
-        const resP  = await fetch('/api/pregunta');
-        const dataP = await resP.json();
-        if (!dataP.ok || !dataP.data.length) {
-            _mostrarNotificacion('Sin Preguntas', 'No hay preguntas de evaluación configuradas.', 'info');
-            return;
-        }
-        _mostrarFormRanking(citaId, dataP.data);
-    } catch (err) {
-        console.error('[ranking] Error cargando preguntas:', err);
-        _mostrarNotificacion('Error', 'Error al cargar preguntas de evaluación.', 'error');
-    }
-};
-
-function _mostrarFormRanking(citaId, preguntas) {
-    const existente = document.getElementById('modal-ranking-dinamico');
-    if (existente) existente.remove();
-
-    const modal = document.createElement('div');
-    modal.id        = 'modal-ranking-dinamico';
-    modal.className = 'modal-overlay';
-    modal.style.display = 'flex';
-
-    const preguntasHTML = preguntas.map(p => `
-        <div class="mb-4">
-            <p class="text-[11px] font-black text-slate-600 uppercase tracking-widest mb-2">${p.Texto_Pregunta}</p>
-            <div class="flex gap-3">
-                ${[1,2,3,4,5].map(v => `
-                    <label class="flex flex-col items-center cursor-pointer">
-                        <input type="radio" name="pregunta_${p.ID_Pregunta}" value="${v}" class="sr-only">
-                        <span class="text-2xl star-btn" data-val="${v}">☆</span>
-                        <span class="text-[9px] font-bold text-slate-400">${v}</span>
-                    </label>`).join('')}
-            </div>
-        </div>`).join('');
-
-    modal.innerHTML = `
-        <div class="modal-content" style="max-width:540px;">
-            <div class="bg-slate-900 p-6 rounded-t-[45px] text-white text-center">
-                <p class="text-slate-500 text-[9px] font-black uppercase tracking-widest mb-1">Evaluación</p>
-                <h3 class="font-black uppercase tracking-widest text-sm">Califica tu experiencia</h3>
-            </div>
-            <div class="p-8">
-                <form id="form-ranking">
-                    ${preguntasHTML}
-                    <div id="err-ranking" class="text-red-600 text-xs font-bold mt-2" style="display:none;"></div>
-                    <div class="flex gap-4 mt-8 pt-6 border-t border-slate-100">
-                        <button type="button" onclick="document.getElementById('modal-ranking-dinamico').remove()"
-                            class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">
-                            Cancelar
-                        </button>
-                        <button type="button" onclick="_enviarRanking(${citaId}, ${JSON.stringify(preguntas.map(p => p.ID_Pregunta))})"
-                            class="flex-1 bg-sky-600 text-white py-4 rounded-2xl font-black hover:bg-sky-700 transition-all uppercase text-[10px] tracking-widest shadow-lg">
-                            <i class="fas fa-paper-plane mr-2"></i> Enviar Evaluación
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>`;
-
-    document.body.appendChild(modal);
-
-    modal.querySelectorAll('.star-btn').forEach(star => {
-        star.addEventListener('click', function () {
-            const name = this.closest('div').querySelector('input[type=radio]').name;
-            const val  = parseInt(this.dataset.val);
-            modal.querySelectorAll(`input[name="${name}"]`).forEach(r => {
-                if (parseInt(r.value) === val) r.checked = true;
-            });
-            const allStars = this.parentElement.parentElement.querySelectorAll('.star-btn');
-            allStars.forEach((s, i) => { s.textContent = i < val ? '★' : '☆'; });
-        });
-    });
-}
-
-window._enviarRanking = async function (citaId, preguntaIds) {
-    const errEl = document.getElementById('err-ranking');
-    const respuestas = [];
-
-    for (const pid of preguntaIds) {
-        const selected = document.querySelector(`input[name="pregunta_${pid}"]:checked`);
-        if (!selected) {
-            if (errEl) { errEl.textContent = '⚠ Responde todas las preguntas.'; errEl.style.display = 'block'; }
-            return;
-        }
-        respuestas.push({ ID_Pregunta: pid, Texto_Respuesta: selected.value });
-    }
-
-    try {
-        for (const r of respuestas) {
-            const res = await fetch('/api/respuesta', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({
-                    ID_Pregunta:     r.ID_Pregunta,
-                    ID_Paciente:     _pacienteId,
-                    Texto_Respuesta: r.Texto_Respuesta,
-                    Cita_ID:         citaId
-                })
-            });
-            const data = await res.json();
-            if (!data.ok) {
-                if (errEl) { errEl.textContent = data.error || 'Error al enviar evaluación.'; errEl.style.display = 'block'; }
-                return;
-            }
-        }
-        document.getElementById('modal-ranking-dinamico')?.remove();
-        _mostrarNotificacion('¡Gracias!', 'Tu evaluación fue enviada correctamente.', 'success');
-    } catch (err) {
-        console.error('[ranking] Error enviando respuestas:', err);
-        if (errEl) { errEl.textContent = 'Error de conexión. Intente de nuevo.'; errEl.style.display = 'block'; }
-    }
-};
-
 // ─── VISIBILIDAD DE CONTRASEÑA ────────────────────────────────────────────────
 window.togglePassVisibility = function (inputId, btn) {
     const input = document.getElementById(inputId);
@@ -735,7 +841,7 @@ window.togglePassVisibility = function (inputId, btn) {
     }
 };
 
-// ─── VALIDACIÓN DE POLÍTICA DE CONTRASEÑA ────────────────────────────────────
+// ─── VALIDACIÓN POLÍTICA DE CONTRASEÑA ───────────────────────────────────────
 function _cumpleRequisitos(pass) {
     return {
         length:  pass.length >= 8,
@@ -749,7 +855,6 @@ function _cumpleRequisitos(pass) {
 window.validarRequisitosEnTiempoReal = function () {
     const pass = document.getElementById('conf-pass-nueva')?.value || '';
     const res  = _cumpleRequisitos(pass);
-
     _aplicarEstadoRequisito('req-length',  res.length,  false);
     _aplicarEstadoRequisito('req-upper',   res.upper,   false);
     _aplicarEstadoRequisito('req-lower',   res.lower,   false);
@@ -758,17 +863,17 @@ window.validarRequisitosEnTiempoReal = function () {
 };
 
 function _aplicarEstadoRequisito(id, cumple, marcarRojo) {
-    const el   = document.getElementById(id);
+    const el = document.getElementById(id);
     if (!el) return;
     const icon = el.querySelector('.req-icon');
     if (cumple) {
-        el.className  = 'req-item req-ok';
+        el.className = 'req-item req-ok';
         if (icon) icon.textContent = '✓';
     } else if (marcarRojo) {
-        el.className  = 'req-item req-error';
+        el.className = 'req-item req-error';
         if (icon) icon.textContent = '-';
     } else {
-        el.className  = 'req-item req-pending';
+        el.className = 'req-item req-pending';
         if (icon) icon.textContent = '-';
     }
 }
@@ -804,13 +909,11 @@ async function _cargarSelectsEps() {
         const selRegimen = document.getElementById('edit-regimen-eps');
         if (selRegimen) {
             selRegimen.innerHTML = '<option value="">Seleccione Régimen...</option>';
-            selRegimen.disabled  = false;
             _listaRegimenGlobal.forEach(r => {
                 const id  = r.Regimen_ID || r.ID_Regimen_EPS || r.regimen_id;
                 const nom = r.Descripcion || r.Nombre_Regimen || r.nombre_regimen || '';
                 const opt = document.createElement('option');
-                opt.value       = id;
-                opt.textContent = nom;
+                opt.value = id; opt.textContent = nom;
                 selRegimen.appendChild(opt);
             });
         }
@@ -822,8 +925,7 @@ async function _cargarSelectsEps() {
                 const id  = t.TipoEPS_ID || t.ID_Tipo_EPS || t.tipoeps_id;
                 const nom = t.Nombre_Tipo || t.nombre_tipo || t.Nombre || '';
                 const opt = document.createElement('option');
-                opt.value       = id;
-                opt.textContent = nom;
+                opt.value = id; opt.textContent = nom;
                 selTipo.appendChild(opt);
             });
         }
@@ -835,8 +937,7 @@ async function _cargarSelectsEps() {
                 const id  = e.EPS_ID || e.Id_EPS || e.eps_id || e.ID_EPS;
                 const nom = e.Nombre_EPS || e.nombre_eps || e.Nombre || '';
                 const opt = document.createElement('option');
-                opt.value       = id;
-                opt.textContent = nom;
+                opt.value = id; opt.textContent = nom;
                 selEps.appendChild(opt);
             });
         }
@@ -846,10 +947,9 @@ async function _cargarSelectsEps() {
     }
 }
 
-// ─── MI PERFIL — PRECARGA DESDE BD ───────────────────────────────────────────
+// ─── MI PERFIL — PRECARGA ────────────────────────────────────────────────────
 async function _precargarPerfil() {
     if (!_usuarioId) return;
-
     _resetearFlujoPassword();
 
     try {
@@ -866,10 +966,9 @@ async function _precargarPerfil() {
     }
 
     const u = _sesionPaciente;
-    const nombreCompleto = `${u.Nombres || ''} ${u.Apellidos || ''}`.trim();
-    _setVal('edit-nombres',   nombreCompleto);
-    _setVal('edit-correo',    u.Correo   || '');
-    _setVal('edit-telefono',  u.Telefono || '');
+    _setVal('edit-nombres',  `${u.Nombres || ''} ${u.Apellidos || ''}`.trim());
+    _setVal('edit-correo',   u.Correo   || '');
+    _setVal('edit-telefono', u.Telefono || '');
 
     await _cargarSelectsEps();
 
@@ -900,7 +999,6 @@ async function _precargarPerfil() {
                 const selRegimen = document.getElementById('edit-regimen-eps');
                 const selEps     = document.getElementById('edit-eps');
                 const selTipo    = document.getElementById('edit-tipo-eps');
-
                 if (selRegimen && regimenIdActual) selRegimen.value = regimenIdActual;
                 if (selEps     && epsId)           selEps.value     = String(epsId);
                 if (selTipo    && tipoEpsId)       selTipo.value    = String(tipoEpsId);
@@ -923,16 +1021,12 @@ async function _precargarPerfil() {
 function _sugerirRegimenSegunEps(epsId) {
     const selRegimen = document.getElementById('edit-regimen-eps');
     if (!selRegimen || !epsId) return;
-
     const epsObj = _listaEpsGlobal.find(e =>
         String(e.EPS_ID || e.Id_EPS || e.eps_id || e.ID_EPS) === String(epsId)
     );
     if (!epsObj) return;
-
     const regimenId = epsObj.Regimen_ID || epsObj.regimen_id || epsObj.ID_Regimen_EPS || null;
-    if (regimenId) {
-        selRegimen.value = String(regimenId);
-    }
+    if (regimenId) selRegimen.value = String(regimenId);
 }
 
 function _resetearFlujoPassword() {
@@ -968,6 +1062,7 @@ window.validarPasswordActual = function () {
         return;
     }
 
+    // Endpoint: POST /api/verificar-password  — body: { usuario_id, password }
     fetch('/api/verificar-password', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -983,9 +1078,7 @@ window.validarPasswordActual = function () {
             document.getElementById('modalErrorPassword').style.display = 'flex';
         }
     })
-    .catch(() => {
-        _mostrarNotificacion('Error de Conexión', 'No se pudo verificar la contraseña.', 'error');
-    });
+    .catch(() => _mostrarNotificacion('Error de Conexión', 'No se pudo verificar la contraseña.', 'error'));
 };
 
 // ─── GUARDAR PERFIL ───────────────────────────────────────────────────────────
@@ -996,14 +1089,14 @@ window.guardarPerfilPaciente = function () {
     const nombres        = partes.slice(0, mitad).join(' ');
     const apellidos      = partes.slice(mitad).join(' ');
 
-    const correo      = (document.getElementById('edit-correo')?.value   || '').trim();
-    const telefono    = (document.getElementById('edit-telefono')?.value || '').trim();
-    const passActual  = document.getElementById('pass-actual')?.value        || '';
-    const passNueva   = document.getElementById('conf-pass-nueva')?.value    || '';
-    const passConf    = document.getElementById('conf-pass-confirmar')?.value || '';
-    const errActual   = document.getElementById('error-pass-actual');
-    const errNueva    = document.getElementById('error-pass-nueva');
-    const step2       = document.getElementById('pass-step2');
+    const correo     = (document.getElementById('edit-correo')?.value   || '').trim();
+    const telefono   = (document.getElementById('edit-telefono')?.value || '').trim();
+    const passActual = document.getElementById('pass-actual')?.value         || '';
+    const passNueva  = document.getElementById('conf-pass-nueva')?.value     || '';
+    const passConf   = document.getElementById('conf-pass-confirmar')?.value || '';
+    const errActual  = document.getElementById('error-pass-actual');
+    const errNueva   = document.getElementById('error-pass-nueva');
+    const step2      = document.getElementById('pass-step2');
 
     const selEps     = document.getElementById('edit-eps');
     const selTipoEps = document.getElementById('edit-tipo-eps');
@@ -1023,13 +1116,19 @@ window.guardarPerfilPaciente = function () {
             return;
         }
         if (!passActual.trim()) {
-            if (errActual) { errActual.textContent = 'Ingresa tu contraseña actual para poder cambiarla.'; errActual.style.display = 'block'; }
+            if (errActual) {
+                errActual.textContent  = 'Ingresa tu contraseña actual para poder cambiarla.';
+                errActual.style.display = 'block';
+            }
             return;
         }
     }
     if (errNueva)  errNueva.style.display  = 'none';
     if (errActual) errActual.style.display = 'none';
 
+    // Endpoint: POST /api/actualizar-perfil-paciente
+    // Body esperado por el backend: { usuario_id, nombres, apellidos, correo, telefono,
+    //   nuevaPass, contrasena_actual, eps_id, tipo_eps_id }
     const payload = {
         usuario_id:        _usuarioId,
         nombres:           nombres   || undefined,
@@ -1038,9 +1137,9 @@ window.guardarPerfilPaciente = function () {
         telefono:          telefono  || undefined,
         nuevaPass:         cambiandoPassword ? passNueva  : null,
         contrasena_actual: cambiandoPassword ? passActual : null,
-        eps_id:      epsId     ? parseInt(epsId)     : null,
-        tipo_eps_id: tipoEpsId ? parseInt(tipoEpsId) : null,
-        regimen_id:  regimenId ? parseInt(regimenId) : null,
+        eps_id:            epsId     ? parseInt(epsId)     : null,
+        tipo_eps_id:       tipoEpsId ? parseInt(tipoEpsId) : null,
+        regimen_id:        regimenId ? parseInt(regimenId) : null,
     };
 
     fetch('/api/actualizar-perfil-paciente', {
@@ -1048,7 +1147,7 @@ window.guardarPerfilPaciente = function () {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
     })
-    .then(async (r) => {
+    .then(async r => {
         const data = await r.json().catch(() => ({}));
         if (data.ok) {
             if (_sesionPaciente) {
@@ -1062,7 +1161,10 @@ window.guardarPerfilPaciente = function () {
             cambiarVista('inicio');
             _mostrarNotificacion('Perfil Actualizado', 'Tus datos han sido guardados correctamente.', 'success');
         } else if (r.status === 401 && cambiandoPassword) {
-            if (errActual) { errActual.textContent = data.error || 'Contraseña actual incorrecta.'; errActual.style.display = 'block'; }
+            if (errActual) {
+                errActual.textContent   = data.error || 'Contraseña actual incorrecta.';
+                errActual.style.display = 'block';
+            }
         } else {
             _mostrarNotificacion('Error', data.mensaje || data.error || 'No se pudo guardar. Intenta de nuevo.', 'error');
         }

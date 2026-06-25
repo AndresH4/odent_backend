@@ -1,5 +1,5 @@
 """
-modulo_usuarios/routes.py — Stylo Dental (versión fusionada)
+modulo_usuarios/routes.py — Stylo Dental
 """
 
 from flask import Blueprint, request, jsonify, render_template
@@ -53,8 +53,6 @@ def _verificar_password_contra_hash(hash_bd, password_ingresada):
 
 @usuarios_bp.route('/auth/login', methods=['POST'])
 def login():
-    from werkzeug.security import check_password_hash
-
     datos      = request.get_json(silent=True) or {}
     correo     = (datos.get('correo') or '').strip().lower()
     contrasena = datos.get('contrasena') or ''
@@ -73,13 +71,7 @@ def login():
         if fila is None:
             return jsonify({"ok": False, "error": "Correo o contraseña incorrectos"}), 401
 
-        hash_bd = fila['Contrasena']
-        if hash_bd.startswith('scrypt:') or hash_bd.startswith('pbkdf2:'):
-            autenticado = check_password_hash(hash_bd, contrasena)
-        else:
-            autenticado = (hash_bd == contrasena)
-
-        if not autenticado:
+        if not _verificar_password_contra_hash(fila['Contrasena'], contrasena):
             return jsonify({"ok": False, "error": "Correo o contraseña incorrectos"}), 401
 
         usuario_data = dict(fila)
@@ -150,9 +142,9 @@ def get_usuarios():
         cursor   = conexion.cursor()
         cursor.execute("""
             SELECT
-                u.Usuario_ID         AS Usuario_ID,
-                esp.Especialista_ID  AS Especialista_ID,
-                pac.Paciente_ID      AS Paciente_ID,
+                u.Usuario_ID,
+                esp.Especialista_ID,
+                pac.Paciente_ID,
                 u.Nombres,
                 u.Apellidos,
                 u.TipoDoc_ID,
@@ -177,7 +169,7 @@ def get_usuarios():
 
 
 # =============================================================================
-# USUARIOS — GET por ID
+# USUARIOS — GET / PUT / DELETE por ID
 # =============================================================================
 
 @usuarios_bp.route('/usuarios/<int:id>', methods=['GET', 'PUT', 'DELETE'])
@@ -293,11 +285,11 @@ def crud_usuario(id):
 
 
 # =============================================================================
-# VERIFICAR CONTRASEÑA
+# VERIFICAR CONTRASEÑA — POST /api/usuarios/verificar-password
 # =============================================================================
 
 @usuarios_bp.route('/usuarios/verificar-password', methods=['POST'])
-def verificar_password():
+def verificar_password_usuario():
     datos             = request.get_json(silent=True) or {}
     usuario_id        = datos.get('usuario_id')
     contrasena_actual = datos.get('contrasena_actual')
@@ -330,7 +322,7 @@ def verificar_password():
 
 
 # =============================================================================
-# CAMBIAR CONTRASEÑA
+# CAMBIAR CONTRASEÑA — POST /api/usuarios/cambiar-password
 # =============================================================================
 
 @usuarios_bp.route('/usuarios/cambiar-password', methods=['POST'])
@@ -346,10 +338,7 @@ def cambiar_password():
     if not usuario_id:
         return jsonify({"ok": False, "error": "usuario_id es obligatorio."}), 400
     if not contrasena_actual:
-        return jsonify({
-            "ok": False,
-            "error": "contrasena_actual es obligatoria para cambiar la contraseña."
-        }), 400
+        return jsonify({"ok": False, "error": "contrasena_actual es obligatoria."}), 400
     if not contrasena_nueva:
         return jsonify({"ok": False, "error": "contrasena_nueva es obligatoria."}), 400
     if not contrasena_confirmar:
@@ -681,6 +670,28 @@ def get_tipo_afiliacion_eps():
 
 
 # =============================================================================
+# TIPO EPS — alias para el frontend (/api/tipo-eps)
+# =============================================================================
+
+@usuarios_bp.route('/tipo-eps', methods=['GET'])
+def get_tipo_eps():
+    conexion = None
+    try:
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
+        cursor.execute(
+            "SELECT TipoEPS_ID, Nombre_Tipo FROM tipo_afiliacion_eps ORDER BY TipoEPS_ID"
+        )
+        filas = cursor.fetchall()
+        return jsonify({"ok": True, "data": [dict(fila) for fila in filas]}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if conexion:
+            conexion.close()
+
+
+# =============================================================================
 # EPS
 # =============================================================================
 
@@ -964,7 +975,7 @@ def actualizar_afiliacion(id):
 
 
 # =============================================================================
-# ACTUALIZAR PERFIL PACIENTE
+# ACTUALIZAR PERFIL PACIENTE — POST /api/actualizar-perfil-paciente
 # =============================================================================
 
 @usuarios_bp.route('/actualizar-perfil-paciente', methods=['POST'])
@@ -992,9 +1003,8 @@ def actualizar_perfil_paciente():
     try:
         conexion = _get_conn()
         cursor   = conexion.cursor()
-
-        campos  = []
-        valores = []
+        campos   = []
+        valores  = []
 
         if nombres:           campos.append("Nombres = ?");         valores.append(nombres)
         if apellidos:         campos.append("Apellidos = ?");       valores.append(apellidos)
@@ -1114,7 +1124,7 @@ def get_multas():
 
 
 # =============================================================================
-# MULTAS — GET por paciente (Paciente)
+# MULTAS — GET por paciente
 # =============================================================================
 
 @usuarios_bp.route('/multas/paciente/<int:paciente_id>', methods=['GET'])
@@ -1155,7 +1165,7 @@ def get_multas_paciente(paciente_id):
 
 
 # =============================================================================
-# MULTAS — PUT marcar como pagada (Administrador)
+# MULTAS — PUT marcar como pagada
 # =============================================================================
 
 @usuarios_bp.route('/multas/<int:multa_id>/pagar', methods=['PUT'])

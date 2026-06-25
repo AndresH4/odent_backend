@@ -165,20 +165,19 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 Envío Automático
             </div>
-            <div class="form-row">
-                <div class="form-group tiempo-group">
-                    <label>Enviar encuesta</label>
-                    <div style="display:flex; align-items:center; gap:10px; margin-top:6px;">
-                        <input type="number" id="horas-envio" min="1" max="72" value="2" style="width:70px; text-align:center;">
-                        <span style="font-size:13px; color:#475569; font-weight:500;">horas después de la cita</span>
-                    </div>
+
+            <div class="envio-toggle-row">
+                <div class="envio-toggle-info">
+                    <span class="envio-toggle-titulo">Estado del envío automático</span>
+                    <span class="envio-toggle-desc">Activa o desactiva el envío automático de encuestas a los pacientes.</span>
                 </div>
-                <div class="form-group">
-                    <label>Estado del envío automático</label>
-                    <button class="btn-toggle" id="btn-toggle-estado" onclick="toggleEstado()">
-                        <span class="toggle-dot"></span>
-                        <span class="toggle-label" id="toggle-label-text">Activo</span>
+                <div class="envio-toggle-control">
+                    <button class="btn-toggle-pill" id="btn-toggle-estado" onclick="toggleEstado()" aria-pressed="true">
+                        <span class="pill-track">
+                            <span class="pill-thumb"></span>
+                        </span>
                     </button>
+                    <span class="pill-label" id="toggle-label-text">Activo</span>
                 </div>
             </div>
         </div>

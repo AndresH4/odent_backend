@@ -85,10 +85,14 @@ function toggleEstado() {
     const label = document.getElementById('toggle-label-text');
     if (estadoEnvioActivo) {
         btn.classList.remove('inactivo');
+        btn.setAttribute('aria-pressed', 'true');
         label.textContent = 'Activo';
+        label.classList.remove('inactivo');
     } else {
         btn.classList.add('inactivo');
+        btn.setAttribute('aria-pressed', 'false');
         label.textContent = 'Inactivo';
+        label.classList.add('inactivo');
     }
 }
 
@@ -113,7 +117,6 @@ async function cargarRanking() {
 
         const ranking = data.data;
 
-        // Estadísticas generales
         const totalEspecialistas = ranking.length;
         const totalEvaluaciones  = ranking.reduce((acc, e) => acc + e.Total_Evaluaciones, 0);
         const promedioGeneral    = totalEvaluaciones > 0
