@@ -1,3 +1,5 @@
+### modulo_usuarios/routes.py
+
 """
 modulo_usuarios/routes.py — Stylo Dental
 """
@@ -1084,7 +1086,7 @@ def actualizar_perfil_paciente():
 
 
 # =============================================================================
-# MULTAS — GET todas (Administrador)
+# MULTAS — GET todas (Administrador) con JOINs completos
 # =============================================================================
 
 @usuarios_bp.route('/multas', methods=['GET'])
@@ -1097,21 +1099,32 @@ def get_multas():
             SELECT
                 m.Multa_ID,
                 m.Cita_ID,
-                u.Nombres || ' ' || u.Apellidos   AS NombrePaciente,
+                u.Nombres || ' ' || u.Apellidos        AS NombrePaciente,
                 u.NumeroDocumento,
                 td.Nombre_Tipo_Documento,
-                c.Motivo_Consulta                 AS Concepto,
+                c.Motivo_Consulta                      AS Concepto,
                 a.Fecha,
                 a.Hora_Inicio,
-                em.Nombre_Estado                  AS EstadoMulta,
-                m.EstadoMulta_ID
+                COALESCE(esp.Nombre_Especialidad, '—') AS Especialidad,
+                em.Nombre_Estado                       AS EstadoMulta,
+                m.EstadoMulta_ID,
+                re.Descripcion                         AS RegimenEPS,
+                e.Nombre_EPS                           AS NombreEPS,
+                tae.Nombre_Tipo                        AS TipoAfiliacion
             FROM multa m
-            JOIN cita c       ON c.Cita_ID         = m.Cita_ID
-            JOIN agenda a     ON a.Agenda_ID        = c.Agenda_ID
-            JOIN paciente p   ON p.Paciente_ID      = c.Paciente_ID
-            JOIN usuarios u   ON u.Usuario_ID       = p.Usuario_ID
-            LEFT JOIN tipo_documento td ON td.TipoDoc_ID = u.TipoDoc_ID
-            JOIN estado_multa em ON em.EstadoMulta_ID = m.EstadoMulta_ID
+            JOIN cita c                   ON c.Cita_ID            = m.Cita_ID
+            JOIN agenda a                 ON a.Agenda_ID           = c.Agenda_ID
+            JOIN paciente p               ON p.Paciente_ID         = c.Paciente_ID
+            JOIN usuarios u               ON u.Usuario_ID          = p.Usuario_ID
+            LEFT JOIN tipo_documento td   ON td.TipoDoc_ID         = u.TipoDoc_ID
+            LEFT JOIN afiliacion af       ON af.Usuario_ID         = u.Usuario_ID
+            LEFT JOIN eps e               ON e.EPS_ID              = af.EPS_ID
+            LEFT JOIN regimen_eps re      ON re.Regimen_ID         = e.Regimen_ID
+            LEFT JOIN tipo_afiliacion_eps tae ON tae.TipoEPS_ID   = af.TipoEPS_ID
+            LEFT JOIN especialista_especialidad ee ON ee.Especialista_ID = a.Especialista_ID
+            LEFT JOIN especialidad esp    ON esp.Especialidad_ID   = ee.Especialidad_ID
+            JOIN estado_multa em          ON em.EstadoMulta_ID     = m.EstadoMulta_ID
+            GROUP BY m.Multa_ID
             ORDER BY m.Multa_ID DESC
         """)
         filas = cursor.fetchall()
@@ -1165,7 +1178,58 @@ def get_multas_paciente(paciente_id):
 
 
 # =============================================================================
-# MULTAS — PUT marcar como pagada
+# MULTAS — PUT cambiar estado (genérico, usado por el admin)
+# =============================================================================
+
+@usuarios_bp.route('/multas/<int:multa_id>/estado', methods=['PUT'])
+def cambiar_estado_multa(multa_id):
+    datos           = request.get_json(silent=True) or {}
+    nuevo_estado_id = datos.get('EstadoMulta_ID')
+
+    if nuevo_estado_id is None:
+        return jsonify({"ok": False, "error": "EstadoMulta_ID es obligatorio."}), 400
+
+    conexion = None
+    try:
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
+        cursor.execute(
+            "SELECT Multa_ID FROM multa WHERE Multa_ID = ?", (multa_id,)
+        )
+        if not cursor.fetchone():
+            return jsonify({"ok": False, "error": "Multa no encontrada."}), 404
+
+        cursor.execute(
+            "UPDATE multa SET EstadoMulta_ID = ? WHERE Multa_ID = ?",
+            (int(nuevo_estado_id), multa_id)
+        )
+        conexion.commit()
+
+        cursor.execute(
+            "SELECT Nombre_Estado FROM estado_multa WHERE EstadoMulta_ID = ?",
+            (int(nuevo_estado_id),)
+        )
+        row = cursor.fetchone()
+        nombre_estado = row['Nombre_Estado'] if row else '—'
+
+        return jsonify({
+            "ok": True,
+            "mensaje": f"Multa #{multa_id} actualizada a '{nombre_estado}'.",
+            "EstadoMulta_ID": int(nuevo_estado_id),
+            "EstadoMulta": nombre_estado
+        }), 200
+    except Exception as e:
+        if conexion:
+            try: conexion.rollback()
+            except Exception: pass
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if conexion:
+            conexion.close()
+
+
+# =============================================================================
+# MULTAS — PUT marcar como pagada (compatibilidad)
 # =============================================================================
 
 @usuarios_bp.route('/multas/<int:multa_id>/pagar', methods=['PUT'])
@@ -1192,6 +1256,80 @@ def pagar_multa(multa_id):
         if conexion:
             try: conexion.rollback()
             except Exception: pass
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if conexion:
+            conexion.close()
+
+
+# =============================================================================
+# ESPECIALISTAS — GET vista admin con ROW_NUMBER secuencial
+# =============================================================================
+
+@usuarios_bp.route('/especialistas-admin', methods=['GET'])
+def get_especialistas_admin():
+    conexion = None
+    try:
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
+        cursor.execute("""
+            SELECT
+                ROW_NUMBER() OVER (ORDER BY e.Especialista_ID) AS ID_Secuencial,
+                e.Especialista_ID,
+                u.Nombres || ' ' || u.Apellidos                AS NombreCompleto,
+                COALESCE(GROUP_CONCAT(esp.Nombre_Especialidad, ', '), '—') AS Especialidad,
+                COALESCE(eu.Nombre_Estado, '—')                AS EstadoUsuario,
+                u.Estado_ID
+            FROM especialista e
+            JOIN usuarios u               ON u.Usuario_ID       = e.Usuario_ID
+            LEFT JOIN especialista_especialidad ee ON ee.Especialista_ID = e.Especialista_ID
+            LEFT JOIN especialidad esp    ON esp.Especialidad_ID = ee.Especialidad_ID
+            LEFT JOIN estado_usuario eu   ON eu.Estado_ID        = u.Estado_ID
+            GROUP BY e.Especialista_ID
+            ORDER BY e.Especialista_ID
+        """)
+        filas = cursor.fetchall()
+        return jsonify({"ok": True, "data": [dict(f) for f in filas]}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if conexion:
+            conexion.close()
+
+
+# =============================================================================
+# PACIENTES — GET vista admin con ROW_NUMBER secuencial y datos EPS
+# =============================================================================
+
+@usuarios_bp.route('/pacientes-admin', methods=['GET'])
+def get_pacientes_admin():
+    conexion = None
+    try:
+        conexion = _get_conn()
+        cursor   = conexion.cursor()
+        cursor.execute("""
+            SELECT
+                ROW_NUMBER() OVER (ORDER BY p.Paciente_ID) AS ID_Secuencial,
+                p.Paciente_ID,
+                u.Nombres || ' ' || u.Apellidos            AS NombreCompleto,
+                COALESCE(re.Descripcion, '—')              AS RegimenEPS,
+                COALESCE(tae.Nombre_Tipo, '—')             AS TipoAfiliacion,
+                COALESCE(e.Nombre_EPS, '—')                AS NombreEPS,
+                COALESCE(eu.Nombre_Estado, '—')            AS EstadoUsuario,
+                u.Estado_ID
+            FROM paciente p
+            JOIN usuarios u                   ON u.Usuario_ID    = p.Usuario_ID
+            LEFT JOIN afiliacion af           ON af.Usuario_ID   = u.Usuario_ID
+            LEFT JOIN eps e                   ON e.EPS_ID        = af.EPS_ID
+            LEFT JOIN regimen_eps re          ON re.Regimen_ID   = e.Regimen_ID
+            LEFT JOIN tipo_afiliacion_eps tae ON tae.TipoEPS_ID  = af.TipoEPS_ID
+            LEFT JOIN estado_usuario eu       ON eu.Estado_ID    = u.Estado_ID
+            GROUP BY p.Paciente_ID
+            ORDER BY p.Paciente_ID
+        """)
+        filas = cursor.fetchall()
+        return jsonify({"ok": True, "data": [dict(f) for f in filas]}), 200
+    except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
     finally:
         if conexion:

@@ -120,6 +120,9 @@ function _extraerId(u, ...claves) {
 }
 
 // ─── Especialistas y Pacientes ────────────────────────────────────────────────
+// Usa los endpoints administrativos reales (/api/especialistas-admin y
+// /api/pacientes-admin) que traen el 100% de los registros desde 'odent.db'
+// sin filtros de estado, con las columnas exactas requeridas para cada vista.
 async function renderUsuarios(rolNombre) {
     _vistaActualLista = rolNombre;
 
@@ -127,44 +130,31 @@ async function renderUsuarios(rolNombre) {
         let filas = [];
 
         if (rolNombre === 'Especialista') {
-            const [resEsp, resUsr] = await Promise.all([
-                fetch('/api/especialistas'),
-                fetch('/api/usuarios'),
-            ]);
-            const dataEsp = await resEsp.json();
-            const dataUsr = await resUsr.json();
+            const res  = await fetch('/api/especialistas-admin');
+            const json = await res.json();
+            const data = (json && json.ok && Array.isArray(json.data)) ? json.data : [];
 
-            const especialistas = Array.isArray(dataEsp) ? dataEsp : [];
-            const usuarios      = Array.isArray(dataUsr) ? dataUsr : [];
-            const usrEsp        = usuarios.filter(u => u.Rol_ID === 2);
-
-            const mapaEspecialidad = {};
-            especialistas.forEach(e => {
-                mapaEspecialidad[(e.NombreCompleto || '').toUpperCase()] = e.Especialidades || '—';
-            });
-
-            filas = usrEsp.map(u => ({
-                Usuario_ID:      u.Usuario_ID,
-                Especialista_ID: _extraerId(u, 'Especialista_ID', 'especialista_id'),
-                NombreCompleto:  `${u.Nombres || ''} ${u.Apellidos || ''}`.trim(),
-                Correo:          u.Correo   || '—',
-                Telefono:        u.Telefono || '—',
-                Especialidades:  mapaEspecialidad[`${u.Nombres || ''} ${u.Apellidos || ''}`.trim().toUpperCase()] || '—',
-                Estado_ID:       u.Estado_ID,
+            filas = data.map(e => ({
+                Especialista_ID: e.Especialista_ID,
+                NombreCompleto:  e.NombreCompleto || '—',
+                Especialidad:    e.Especialidad   || '—',
+                EstadoUsuario:   e.EstadoUsuario   || '—',
+                Estado_ID:       e.Estado_ID,
             }));
 
         } else if (rolNombre === 'Paciente') {
-            const res      = await fetch('/api/usuarios');
-            const data     = await res.json();
-            const usrPac   = (Array.isArray(data) ? data : []).filter(u => u.Rol_ID === 3);
+            const res  = await fetch('/api/pacientes-admin');
+            const json = await res.json();
+            const data = (json && json.ok && Array.isArray(json.data)) ? json.data : [];
 
-            filas = usrPac.map(u => ({
-                Usuario_ID:     u.Usuario_ID,
-                Paciente_ID:    _extraerId(u, 'Paciente_ID', 'paciente_id'),
-                NombreCompleto: `${u.Nombres || ''} ${u.Apellidos || ''}`.trim(),
-                Correo:         u.Correo   || '—',
-                Telefono:       u.Telefono || '—',
-                Estado_ID:      u.Estado_ID,
+            filas = data.map(p => ({
+                Paciente_ID:    p.Paciente_ID,
+                NombreCompleto: p.NombreCompleto  || '—',
+                RegimenEPS:     p.RegimenEPS      || '—',
+                TipoAfiliacion: p.TipoAfiliacion  || '—',
+                NombreEPS:      p.NombreEPS       || '—',
+                EstadoUsuario:  p.EstadoUsuario   || '—',
+                Estado_ID:      p.Estado_ID,
             }));
         }
 
@@ -234,22 +224,21 @@ function _mostrarListaDinamica(tipo, filas, conToggle) {
     if (head) {
         if (tipo === 'Especialista') {
             head.innerHTML = `
-                <th class="p-5">ID</th>
-                <th class="p-5">Nombre</th>
+                <th class="p-5">ID Especialista</th>
+                <th class="p-5">Nombre completo</th>
                 <th class="p-5">Especialidad</th>
-                <th class="p-5">Correo</th>
-                <th class="p-5">Teléfono</th>
-                <th class="p-5">Estado</th>`;
+                <th class="p-5">Estado usuario</th>`;
         } else if (tipo === 'Paciente') {
             head.innerHTML = `
-                <th class="p-5">ID</th>
-                <th class="p-5">Nombre</th>
-                <th class="p-5">Correo</th>
-                <th class="p-5">Teléfono</th>
-                <th class="p-5">Estado</th>`;
+                <th class="p-5">ID Paciente</th>
+                <th class="p-5">Nombre completo</th>
+                <th class="p-5">Régimen EPS</th>
+                <th class="p-5">Tipo de afiliación</th>
+                <th class="p-5">EPS</th>
+                <th class="p-5">Estado usuario</th>`;
         } else {
             head.innerHTML = `
-                <th class="p-5">ID</th>
+                <th class="p-5">ID Usuario</th>
                 <th class="p-5">Nombre Completo</th>
                 <th class="p-5">Tipo Documento</th>
                 <th class="p-5">Número Documento</th>
@@ -263,6 +252,8 @@ function _mostrarListaDinamica(tipo, filas, conToggle) {
 }
 
 // ─── Pintar filas ─────────────────────────────────────────────────────────────
+// El ID mostrado en pantalla SIEMPRE es secuencial (índice del bucle + 1),
+// independiente de los IDs internos reales de la base de datos.
 function _renderFilas(filas, tipo) {
     const body = document.getElementById('body-lista-dinamica');
     const noD  = document.getElementById('no-datos-lista');
@@ -273,38 +264,39 @@ function _renderFilas(filas, tipo) {
     if (filas.length === 0) { noD?.classList.remove('hidden'); return; }
     noD?.classList.add('hidden');
 
-    filas.forEach(u => {
+    filas.forEach((u, idx) => {
         const tr          = document.createElement('tr');
         tr.className      = 'hover:bg-sky-50/50 transition-all';
         tr.dataset.nombre = (u.NombreCompleto || '').toUpperCase();
 
+        const idSecuencial = idx + 1;
         const estadoActivo = u.Estado_ID === 1;
         const badgeEstado  = estadoActivo
             ? '<span class="text-[9px] font-bold uppercase px-2 py-1 rounded-full bg-green-100 text-green-700">Activo</span>'
             : '<span class="text-[9px] font-bold uppercase px-2 py-1 rounded-full bg-red-100 text-red-700">Inactivo</span>';
 
         if (tipo === 'Especialista') {
-            const idEsp = u.Especialista_ID == null ? '—' : `#${u.Especialista_ID}`;
+            // Estado de solo lectura: sin botones ni interruptores de cambio.
             tr.innerHTML = `
-                <td class="p-5 font-black text-slate-500 text-[11px]">${idEsp}</td>
+                <td class="p-5 font-black text-slate-500 text-[11px]">#${idSecuencial}</td>
                 <td class="p-5 font-black text-slate-800 text-[11px] uppercase">${u.NombreCompleto}</td>
-                <td class="p-5 text-[10px] font-bold text-sky-600 uppercase">${u.Especialidades || '—'}</td>
-                <td class="p-5 text-[10px] font-bold text-slate-600">${u.Correo}</td>
-                <td class="p-5 text-[10px] font-bold text-slate-600">${u.Telefono}</td>
+                <td class="p-5 text-[10px] font-bold text-sky-600 uppercase">${u.Especialidad || '—'}</td>
                 <td class="p-5">${badgeEstado}</td>`;
 
         } else if (tipo === 'Paciente') {
-            const idPac = u.Paciente_ID == null ? '—' : `#${u.Paciente_ID}`;
+            // Estado de solo lectura: sin botones ni interruptores de cambio.
             tr.innerHTML = `
-                <td class="p-5 font-black text-slate-500 text-[11px]">${idPac}</td>
+                <td class="p-5 font-black text-slate-500 text-[11px]">#${idSecuencial}</td>
                 <td class="p-5 font-black text-slate-800 text-[11px] uppercase">${u.NombreCompleto}</td>
-                <td class="p-5 text-[10px] font-bold text-slate-600">${u.Correo}</td>
-                <td class="p-5 text-[10px] font-bold text-slate-600">${u.Telefono}</td>
+                <td class="p-5 text-[10px] font-bold text-slate-600 uppercase">${u.RegimenEPS || '—'}</td>
+                <td class="p-5 text-[10px] font-bold text-slate-600 uppercase">${u.TipoAfiliacion || '—'}</td>
+                <td class="p-5 text-[10px] font-bold text-slate-600 uppercase">${u.NombreEPS || '—'}</td>
                 <td class="p-5">${badgeEstado}</td>`;
 
         } else {
+            // Único lugar con botón de activar/desactivar usuario.
             tr.innerHTML = `
-                <td class="p-5 font-black text-slate-500 text-[11px]">#${u.Usuario_ID}</td>
+                <td class="p-5 font-black text-slate-500 text-[11px]">#${idSecuencial}</td>
                 <td class="p-5 font-black text-slate-800 text-[11px] uppercase">${u.NombreCompleto}</td>
                 <td class="p-5 text-[10px] font-bold text-slate-600">${u.TipoDoc || '—'}</td>
                 <td class="p-5 text-[10px] font-bold text-slate-600">${u.NumeroDocumento}</td>
@@ -327,12 +319,15 @@ function _renderFilas(filas, tipo) {
 }
 
 // ─── Toggle estado usuario ────────────────────────────────────────────────────
+// Corregido: el endpoint real registrado en el backend es '/api/usuarios/<id>'
+// (plural), no '/api/usuario/<id>'. La URL incorrecta impedía que el cambio
+// de estado se guardara realmente en 'odent.db'.
 async function toggleEstadoUsuario(usuarioId, estadoActual, btnEl) {
     const nuevoEstado = estadoActual === 1 ? 2 : 1;
     const nuevoLabel  = nuevoEstado  === 1 ? 'Activo' : 'Inactivo';
 
     try {
-        const res  = await fetch(`/api/usuario/${usuarioId}`, {
+        const res  = await fetch(`/api/usuarios/${usuarioId}`, {
             method:  'PUT',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({ Estado_ID: nuevoEstado }),
