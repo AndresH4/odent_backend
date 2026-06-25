@@ -7,6 +7,7 @@ SEGURO PARA BD EXISTENTE:
   - CREATE TABLE IF NOT EXISTS  → nunca destruye datos existentes.
   - INSERT OR IGNORE             → evita duplicados en catálogos.
   - ALTER TABLE dinámico         → añade columnas faltantes sin recrear tablas.
+  - CREATE INDEX IF NOT EXISTS   → añade restricciones nuevas sin recrear tablas.
   - Sin DROP TABLE en ningún caso.
 """
 
@@ -261,6 +262,25 @@ CREATE TABLE IF NOT EXISTS tratamiento (
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
+# DDL: índices (todos con IF NOT EXISTS, no destructivos)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# REQ 4 — VALIDACIÓN ESTRICTA DE DISPONIBILIDADES DUPLICADAS.
+# Índice UNIQUE parcial: un mismo especialista no puede tener dos filas en
+# 'agenda' con la misma Fecha + Hora_Inicio mientras el bloque esté activo
+# (EstadoAgenda_ID 1=Disponible o 2=Ocupado). Slots Cancelados (3) o
+# Cumplidos (4) no participan en la restricción, de modo que el historial
+# nunca se ve afectado y un horario liberado puede reutilizarse sin choques.
+# Esto es la defensa de última línea a nivel de BD; el backend en
+# modulo_citas/routes.py ya valida esto explícitamente antes de insertar,
+# pero el índice evita condiciones de carrera entre solicitudes concurrentes.
+SQL_INDICES = """
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agenda_unica_activa
+ON agenda (Especialista_ID, Fecha, Hora_Inicio)
+WHERE EstadoAgenda_ID IN (1, 2);
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
 # DML: catálogos con INSERT OR IGNORE (nunca duplica)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -505,12 +525,28 @@ def create_database_and_tables():
         )
         connection.commit()
 
-        # ── 4. Insertar catálogos (INSERT OR IGNORE) ──────────────────────────
+        # ── 4. Crear índices (IF NOT EXISTS) ───────────────────────────────────
+        # REQ 4: si la BD ya tenía filas duplicadas activas antes de este
+        # cambio, CREATE UNIQUE INDEX fallará con "UNIQUE constraint failed".
+        # En ese caso se informa por consola sin abortar el resto del script,
+        # para que el operador pueda limpiar manualmente esas filas legacy.
+        print("Verificando índices adicionales...")
+        try:
+            cursor.executescript(SQL_INDICES)
+            connection.commit()
+            print("  ✚ índice único 'idx_agenda_unica_activa' verificado en 'agenda'")
+        except sqlite3.IntegrityError as idx_err:
+            print(
+                "  ⚠ No se pudo crear 'idx_agenda_unica_activa': existen filas "
+                f"duplicadas activas en 'agenda'. Detalle: {idx_err}"
+            )
+
+        # ── 5. Insertar catálogos (INSERT OR IGNORE) ──────────────────────────
         print("Insertando datos de catálogos...")
         cursor.executescript(SQL_CATALOGOS)
         connection.commit()
 
-        # ── 5. Insertar usuarios con contraseñas hasheadas ────────────────────
+        # ── 6. Insertar usuarios con contraseñas hasheadas ────────────────────
         print("Insertando usuarios con contraseñas hasheadas (solo nuevos)...")
         for u in USUARIOS_DATA:
             (nombres, apellidos, tipo_doc, documento, contrasena_plana,
@@ -536,7 +572,7 @@ def create_database_and_tables():
 
         connection.commit()
 
-        # ── 6. Insertar relaciones y datos dependientes ───────────────────────
+        # ── 7. Insertar relaciones y datos dependientes ───────────────────────
         print("Insertando relaciones (INSERT OR IGNORE)...")
         cursor.executescript(SQL_RELACIONES)
         connection.commit()

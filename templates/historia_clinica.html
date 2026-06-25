@@ -7,424 +7,12 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --primary:        #0ea5e9;
-            --primary-dark:   #0369a1;
-            --primary-light:  #e0f2fe;
-            --primary-soft:   #f0f9ff;
-            --surface:        #ffffff;
-            --border:         #e2e8f0;
-            --border-focus:   #0ea5e9;
-            --text:           #1e293b;
-            --text-muted:     #64748b;
-            --text-light:     #94a3b8;
-            --danger:         #ef4444;
-            --success:        #059669;
-            --radius:         20px;
-            --radius-sm:      12px;
-            --shadow:         0 4px 24px rgba(14,165,233,.10), 0 1px 4px rgba(0,0,0,.07);
-        }
-
-        *, *::before, *::after { box-sizing: border-box; }
-
-        body {
-            background: #f1f5f9;
-            font-family: 'Inter', sans-serif;
-            color: var(--text);
-            min-height: 100vh;
-            padding: 0;
-        }
-
-        /* ── HEADER ───────────────────────────────────── */
-        .hc-header {
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            padding: 28px 40px 24px;
-            border-bottom: 4px solid var(--primary);
-            position: relative;
-            overflow: hidden;
-        }
-        .hc-header::before {
-            content: '';
-            position: absolute;
-            top: -60px; right: -60px;
-            width: 220px; height: 220px;
-            background: rgba(14,165,233,.08);
-            border-radius: 50%;
-        }
-        .hc-header-inner {
-            max-width: 1100px;
-            margin: 0 auto;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
-        .hc-brand {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-        .hc-logo {
-            width: 52px; height: 52px;
-            background: linear-gradient(135deg, var(--primary) 0%, #0369a1 100%);
-            border-radius: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            font-weight: 900;
-            font-style: italic;
-            color: white;
-            box-shadow: 0 8px 20px rgba(14,165,233,.35);
-            flex-shrink: 0;
-        }
-        .hc-brand-text h1 {
-            font-size: 20px;
-            font-weight: 900;
-            color: var(--primary);
-            margin: 0;
-            letter-spacing: -0.5px;
-        }
-        .hc-brand-text p {
-            font-size: 11px;
-            color: #94a3b8;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.15em;
-            margin: 3px 0 0;
-        }
-        .hc-header-actions {
-            display: flex;
-            gap: 10px;
-            flex-shrink: 0;
-        }
-        .btn-hc {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 20px;
-            border-radius: var(--radius-sm);
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            cursor: pointer;
-            border: none;
-            transition: all 0.2s ease;
-        }
-        .btn-hc:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,.15); }
-        .btn-hc:active { transform: scale(0.97); }
-        .btn-back   { background: rgba(255,255,255,.07); color: #94a3b8; border: 1px solid rgba(255,255,255,.1); }
-        .btn-back:hover { background: rgba(255,255,255,.12); color: white; }
-        .btn-save   { background: var(--primary); color: white; box-shadow: 0 4px 12px rgba(14,165,233,.4); }
-        .btn-save:hover { background: #0284c7; }
-        .btn-finish { background: #10b981; color: white; box-shadow: 0 4px 12px rgba(16,185,129,.35); }
-        .btn-finish:hover { background: #059669; }
-
-        /* ── PACIENTE CARD (header) ───────────────────── */
-        .hc-patient-bar {
-            background: rgba(255,255,255,.04);
-            border-top: 1px solid rgba(255,255,255,.06);
-            padding: 18px 40px;
-        }
-        .hc-patient-bar-inner {
-            max-width: 1100px;
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 20px;
-        }
-        .hc-info-chip { display: flex; flex-direction: column; }
-        .hc-info-chip .lbl {
-            font-size: 9px;
-            font-weight: 800;
-            color: #475569;
-            text-transform: uppercase;
-            letter-spacing: 0.15em;
-            margin-bottom: 3px;
-        }
-        .hc-info-chip .val {
-            font-size: 13px;
-            font-weight: 700;
-            color: #e2e8f0;
-        }
-        .hc-info-chip .val.accent { color: var(--primary); }
-
-        /* ── TOAST ────────────────────────────────────── */
-        #hc-toast-container {
-            position: fixed;
-            bottom: 24px; right: 24px;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .hc-toast {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 14px 20px;
-            border-radius: 14px;
-            font-size: 13px;
-            font-weight: 700;
-            color: white;
-            box-shadow: 0 8px 24px rgba(0,0,0,.2);
-            animation: toastIn 0.4s cubic-bezier(0.23,1,0.32,1);
-        }
-        .hc-toast.success { background: #10b981; }
-        .hc-toast.error   { background: #ef4444; }
-        .hc-toast.info    { background: var(--primary); }
-        @keyframes toastIn {
-            from { opacity: 0; transform: translateX(40px); }
-            to   { opacity: 1; transform: translateX(0); }
-        }
-
-        /* ── MAIN LAYOUT ──────────────────────────────── */
-        .hc-main {
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 32px 20px 60px;
-        }
-
-        /* ── CARDS ────────────────────────────────────── */
-        .aseg-card {
-            background: white;
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 28px 32px;
-            box-shadow: var(--shadow);
-            margin-bottom: 20px;
-            animation: fadeUp .35s ease both;
-        }
-        @keyframes fadeUp {
-            from { opacity: 0; transform: translateY(14px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-        .aseg-card-label {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 11px;
-            font-weight: 800;
-            letter-spacing: 0.6px;
-            text-transform: uppercase;
-            color: var(--primary-dark);
-            margin-bottom: 20px;
-            padding-bottom: 12px;
-            border-bottom: 1.5px solid var(--primary-light);
-        }
-
-        /* ── INPUTS ───────────────────────────────────── */
-        .hc-input, .hc-textarea, .hc-select {
-            width: 100%;
-            padding: 11px 14px;
-            border: 1.5px solid var(--border);
-            border-radius: var(--radius-sm);
-            font-size: 13px;
-            font-weight: 500;
-            color: var(--text);
-            background: #f8fafc;
-            outline: none;
-            transition: border-color .2s, box-shadow .2s, background .2s;
-            font-family: 'Inter', sans-serif;
-        }
-        .hc-input:focus, .hc-textarea:focus, .hc-select:focus {
-            border-color: var(--border-focus);
-            background: white;
-            box-shadow: 0 0 0 3px rgba(14,165,233,.12);
-        }
-        .hc-textarea { resize: vertical; min-height: 90px; line-height: 1.6; }
-        .hc-select { appearance: auto; cursor: pointer; }
-        .hc-label {
-            display: block;
-            font-size: 11px;
-            font-weight: 700;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.2px;
-            margin-bottom: 6px;
-        }
-        .form-group { margin-bottom: 16px; }
-        .form-row { display: flex; gap: 14px; }
-        .form-row .form-group { flex: 1; }
-
-        /* ── ODONTOGRAMA ──────────────────────────────── */
-        .odontograma-wrap {
-            background: #f8fafc;
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            padding: 24px;
-            position: relative;
-        }
-        .diente {
-            width: 36px; height: 48px;
-            border: 2px solid #cbd5e1;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            font-weight: 800;
-            cursor: pointer;
-            background: white;
-            transition: all .25s ease;
-            user-select: none;
-        }
-        .diente:hover { border-color: var(--primary); transform: scale(1.12); z-index: 10; }
-        .diente.rojo  { background: #fee2e2; border-color: #ef4444; color: #b91c1c; }
-        .diente.azul  { background: #dbeafe; border-color: #3b82f6; color: #1d4ed8; }
-        .diente.verde { background: #dcfce7; border-color: #22c55e; color: #15803d; }
-        .diente.amarillo { background: #fef9c3; border-color: #eab308; color: #854d0e; }
-
-        .odo-divider {
-            width: 100%;
-            height: 1px;
-            background: linear-gradient(to right, transparent, #cbd5e1, transparent);
-            margin: 14px 0;
-        }
-
-        #selector-estado {
-            display: none;
-            position: absolute;
-            z-index: 200;
-            background: white;
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            box-shadow: 0 20px 40px rgba(0,0,0,.12);
-            padding: 12px;
-            width: 170px;
-        }
-        .sel-btn {
-            width: 100%;
-            text-align: left;
-            padding: 9px 10px;
-            border-radius: 10px;
-            border: none;
-            background: none;
-            cursor: pointer;
-            font-size: 11px;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 9px;
-            transition: background .15s;
-        }
-        .sel-btn:hover { background: #f1f5f9; }
-        .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-
-        /* ── HALLAZGOS ────────────────────────────────── */
-        .hallazgo-row {
-            display: grid;
-            grid-template-columns: 1fr 2fr 32px;
-            gap: 10px;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-        .hallazgo-del {
-            width: 32px; height: 32px;
-            border-radius: 8px;
-            border: none;
-            background: #fee2e2;
-            color: #ef4444;
-            cursor: pointer;
-            font-size: 13px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background .15s;
-            flex-shrink: 0;
-        }
-        .hallazgo-del:hover { background: #fecaca; }
-
-        /* ── EVOLUCIONES PREVIAS ──────────────────────── */
-        .evolucion-item {
-            background: #f8fafc;
-            border: 1px solid var(--border);
-            border-left: 4px solid var(--primary);
-            border-radius: var(--radius-sm);
-            padding: 16px 20px;
-            margin-bottom: 12px;
-        }
-        .evolucion-meta {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
-            flex-wrap: wrap;
-        }
-        .evolucion-fecha {
-            font-size: 11px;
-            font-weight: 800;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.15em;
-        }
-        .evolucion-esp {
-            font-size: 11px;
-            font-weight: 700;
-            color: var(--primary);
-            background: var(--primary-light);
-            padding: 3px 10px;
-            border-radius: 30px;
-        }
-        .evolucion-body p {
-            font-size: 13px;
-            color: var(--text-muted);
-            margin: 4px 0;
-            line-height: 1.5;
-        }
-        .evolucion-body strong { color: var(--text); font-weight: 700; }
-
-        /* ── SKELETON ─────────────────────────────────── */
-        .skeleton {
-            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
-            background-size: 200% 100%;
-            animation: skeletonAnim 1.3s ease infinite;
-            border-radius: 8px;
-        }
-        @keyframes skeletonAnim {
-            0%   { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-        }
-        .skeleton-line { height: 14px; margin-bottom: 10px; }
-        .skeleton-line.w-60 { width: 60%; }
-        .skeleton-line.w-40 { width: 40%; }
-
-        /* ── STATUS BADGE ─────────────────────────────── */
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            padding: 4px 12px;
-            border-radius: 30px;
-            font-size: 10px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.15em;
-        }
-        .badge-ocupado   { background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; }
-        .badge-cumplida  { background: #f0fdf4; color: #15803d; border: 1px solid #dcfce7; }
-        .badge-cancelada { background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; }
-
-        /* ── RESPONSIVE ───────────────────────────────── */
-        @media (max-width: 640px) {
-            .hc-header { padding: 20px; }
-            .hc-patient-bar { padding: 14px 20px; }
-            .aseg-card { padding: 18px; }
-            .hc-main { padding: 16px 12px 48px; }
-            .form-row { flex-direction: column; gap: 0; }
-            .hallazgo-row { grid-template-columns: 1fr 32px; }
-            .hallazgo-row .hc-select:first-child { grid-column: 1 / -1; }
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/historia_clinica.css') }}">
 </head>
-<body onclick="cerrarSelector(event)">
+<body
+    data-paciente-id="{{ paciente_id | default(0) | int }}"
+    data-cita-id="{{ cita_id | default(0) | int }}">
 
-    <!-- ══════════════════════════════════════════════
-         HEADER PRINCIPAL
-    ══════════════════════════════════════════════ -->
     <header class="hc-header">
         <div class="hc-header-inner">
             <div class="hc-brand">
@@ -448,12 +36,8 @@
         </div>
     </header>
 
-    <!-- ══════════════════════════════════════════════
-         BARRA DE DATOS DEL PACIENTE
-    ══════════════════════════════════════════════ -->
     <div class="hc-patient-bar" id="patient-bar">
-        <div class="hc-patient-bar-inner" id="patient-bar-inner">
-            <!-- Skeleton mientras carga -->
+        <div class="hc-patient-bar-inner">
             <div class="hc-info-chip">
                 <span class="lbl">Paciente</span>
                 <span class="val accent skeleton skeleton-line w-60" id="p-nombre" style="height:16px;"></span>
@@ -481,9 +65,6 @@
         </div>
     </div>
 
-    <!-- ══════════════════════════════════════════════
-         CONTENIDO PRINCIPAL
-    ══════════════════════════════════════════════ -->
     <main class="hc-main">
 
         <!-- 1. MOTIVO DE LA CONSULTA -->
@@ -506,13 +87,10 @@
             </div>
 
             <div class="odontograma-wrap" id="odontograma-wrap">
-                <!-- Arcada Superior -->
                 <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;" id="odo-sup"></div>
                 <div class="odo-divider"></div>
-                <!-- Arcada Inferior -->
                 <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;" id="odo-inf"></div>
 
-                <!-- Selector estado diente -->
                 <div id="selector-estado" onclick="event.stopPropagation()">
                     <p style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;
                                letter-spacing:.15em;margin:0 0 8px 2px;">
@@ -536,35 +114,25 @@
                 </div>
             </div>
 
-            <!-- Leyenda -->
             <div style="display:flex;gap:16px;margin:14px 0 20px;flex-wrap:wrap;">
-                <span style="font-size:11px;font-weight:700;color:#1d4ed8;display:flex;align-items:center;gap:5px;">
-                    <span class="dot" style="background:#3b82f6;width:10px;height:10px;border-radius:50%;display:inline-block;"></span>Tratamiento
+                <span class="leyenda-item" style="color:#1d4ed8;">
+                    <span class="dot" style="background:#3b82f6;"></span>Tratamiento
                 </span>
-                <span style="font-size:11px;font-weight:700;color:#b91c1c;display:flex;align-items:center;gap:5px;">
-                    <span class="dot" style="background:#ef4444;width:10px;height:10px;border-radius:50%;display:inline-block;"></span>Daño/Caries
+                <span class="leyenda-item" style="color:#b91c1c;">
+                    <span class="dot" style="background:#ef4444;"></span>Daño/Caries
                 </span>
-                <span style="font-size:11px;font-weight:700;color:#15803d;display:flex;align-items:center;gap:5px;">
-                    <span class="dot" style="background:#22c55e;width:10px;height:10px;border-radius:50%;display:inline-block;"></span>Sano
+                <span class="leyenda-item" style="color:#15803d;">
+                    <span class="dot" style="background:#22c55e;"></span>Sano
                 </span>
-                <span style="font-size:11px;font-weight:700;color:#854d0e;display:flex;align-items:center;gap:5px;">
-                    <span class="dot" style="background:#eab308;width:10px;height:10px;border-radius:50%;display:inline-block;"></span>Observación
+                <span class="leyenda-item" style="color:#854d0e;">
+                    <span class="dot" style="background:#eab308;"></span>Observación
                 </span>
             </div>
 
-            <!-- Hallazgos -->
-            <div style="background:var(--primary-soft);border:1px solid var(--primary-light);
-                        border-radius:var(--radius-sm);padding:20px;">
-                <p style="font-size:10px;font-weight:800;color:var(--primary-dark);
-                           text-transform:uppercase;letter-spacing:.15em;margin:0 0 14px;">
-                    Observaciones y Hallazgos
-                </p>
+            <div class="hallazgos-wrap">
+                <p class="hallazgos-titulo">Observaciones y Hallazgos</p>
                 <div id="lista-hallazgos"></div>
-                <button onclick="agregarHallazgo()"
-                    style="margin-top:10px;font-size:11px;font-weight:800;color:var(--primary);
-                           background:none;border:none;cursor:pointer;display:flex;
-                           align-items:center;gap:6px;padding:6px 0;
-                           transition:color .2s;">
+                <button onclick="agregarHallazgo()" class="btn-agregar-hallazgo">
                     <i class="fas fa-plus-circle" style="font-size:15px;"></i>
                     Añadir hallazgo
                 </button>
@@ -577,13 +145,11 @@
                 <i class="fas fa-clipboard-check"></i>
                 3. Evolución Clínica
             </div>
-
             <div class="form-group">
                 <label class="hc-label">Evolución / Procedimiento realizado</label>
                 <textarea id="hc-evolucion" class="hc-textarea"
                     placeholder="Describa los avances y procedimientos realizados en esta sesión..."></textarea>
             </div>
-
             <div class="form-row">
                 <div class="form-group">
                     <label class="hc-label">Diagnóstico</label>
@@ -615,339 +181,9 @@
 
     </main>
 
-    <!-- ══════════════════════════════════════════════
-         TOAST CONTAINER
-    ══════════════════════════════════════════════ -->
     <div id="hc-toast-container"></div>
 
-    <script>
-    'use strict';
-
-    // ─── CONFIG ────────────────────────────────────────────────────────────────
-    const PACIENTE_ID = parseInt('{{ paciente_id }}', 10) || 0;
-    const CITA_ID     = parseInt('{{ cita_id }}',     10) || 0;
-
-    let mapaDental         = {};     // { "18": "rojo", "21": "azul", ... }
-    let dienteSeleccionado = null;   // elemento DOM del diente activo
-    let hallazgosData      = [];     // [{ procedimiento, detalle }]
-
-    // ─── TOAST ─────────────────────────────────────────────────────────────────
-    function toast(msg, tipo = 'info') {
-        const c     = document.getElementById('hc-toast-container');
-        const el    = document.createElement('div');
-        el.className = `hc-toast ${tipo}`;
-        const icono = { success: 'fa-check-circle', error: 'fa-times-circle', info: 'fa-info-circle' };
-        el.innerHTML = `<i class="fas ${icono[tipo] || icono.info}"></i><span>${msg}</span>`;
-        c.appendChild(el);
-        setTimeout(() => {
-            el.style.opacity    = '0';
-            el.style.transition = 'opacity .4s';
-            setTimeout(() => el.remove(), 400);
-        }, 3500);
-    }
-
-    // ─── CARGA DE DATOS DEL PACIENTE ───────────────────────────────────────────
-    async function cargarDatosPaciente() {
-        if (!PACIENTE_ID) return;
-        try {
-            const res  = await fetch(`/api/historial/paciente/${PACIENTE_ID}/info`);
-            const data = await res.json();
-            if (!data.ok || !data.data) {
-                toast('No se pudieron cargar los datos del paciente.', 'error');
-                return;
-            }
-            const p = data.data;
-            const set = (id, val) => {
-                const el = document.getElementById(id);
-                if (!el) return;
-                el.className = el.className.replace(/skeleton[\w\s]*/g, '').trim();
-                el.style = '';
-                el.textContent = val || '—';
-            };
-            set('p-nombre',  p.NombreCompleto);
-            set('p-doc',     `${p.TipoDocumento || ''} ${p.NumeroDocumento || ''}`.trim());
-            set('p-edad',    p.Edad ? `${p.Edad} años` : '—');
-            set('p-eps',     p.NombreEPS ? `${p.NombreEPS} (${p.Regimen || ''})` : '—');
-            set('p-tel',     p.Telefono);
-            set('p-correo',  p.Correo);
-        } catch (err) {
-            console.error('[HC] cargarDatosPaciente:', err);
-        }
-    }
-
-    // ─── CARGA DE EVOLUCIONES PREVIAS ──────────────────────────────────────────
-    async function cargarEvoluciones() {
-        if (!PACIENTE_ID) return;
-        const cont = document.getElementById('evoluciones-container');
-        try {
-            const url  = `/api/historial/paciente/${PACIENTE_ID}/evoluciones` +
-                         (CITA_ID ? `?cita_id=${CITA_ID}` : '');
-            const res  = await fetch(url);
-            const data = await res.json();
-
-            if (!data.ok || !data.data || data.data.length === 0) {
-                cont.innerHTML = `
-                    <div style="text-align:center;padding:32px 0;">
-                        <i class="fas fa-folder-open" style="font-size:36px;color:#cbd5e1;margin-bottom:12px;display:block;"></i>
-                        <p style="color:#94a3b8;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.1em;">
-                            Sin evoluciones previas registradas
-                        </p>
-                    </div>`;
-                return;
-            }
-
-            // Si hay cita activa, pre-llenar el formulario con los últimos datos
-            const citaActual = CITA_ID
-                ? data.data.find(d => d.Cita_ID === CITA_ID)
-                : data.data[0];
-
-            if (citaActual) {
-                if (citaActual.Motivo_Consulta)
-                    document.getElementById('hc-motivo').value = citaActual.Motivo_Consulta;
-                if (citaActual.Diagnostico && citaActual.Diagnostico !== 'Sin diagnóstico')
-                    document.getElementById('hc-diag').value   = citaActual.Diagnostico;
-                if (citaActual.Evolucion)
-                    document.getElementById('hc-evolucion').value = citaActual.Evolucion;
-                if (citaActual.Tratamiento)
-                    document.getElementById('hc-plan').value   = citaActual.Tratamiento;
-
-                // Mapa dental
-                try {
-                    // Se cargará desde la BD si existe (futuro)
-                } catch(_) {}
-            }
-
-            // Renderizar todas las evoluciones
-            cont.innerHTML = data.data.map(ev => {
-                const estadoBadge = {
-                    'Cumplida':   'badge-cumplida',
-                    'Cancelado':  'badge-cancelada',
-                    'Cancelada':  'badge-cancelada',
-                }[ev.EstadoAgenda] || 'badge-ocupado';
-
-                return `
-                <div class="evolucion-item">
-                    <div class="evolucion-meta">
-                        <span class="evolucion-fecha">
-                            <i class="fas fa-calendar-alt" style="margin-right:4px;"></i>
-                            ${ev.Fecha || '—'} · ${ev.Hora_Inicio || ''}
-                        </span>
-                        <span class="evolucion-esp">${ev.NombreEspecialista || '—'}</span>
-                        <span class="badge ${estadoBadge}">${ev.EstadoAgenda || '—'}</span>
-                        ${ev.Nombre_Especialidad ? `<span style="font-size:11px;color:#64748b;font-weight:600;">${ev.Nombre_Especialidad}</span>` : ''}
-                    </div>
-                    <div class="evolucion-body">
-                        ${ev.Motivo_Consulta
-                            ? `<p><strong>Motivo:</strong> ${ev.Motivo_Consulta}</p>` : ''}
-                        ${ev.Diagnostico && ev.Diagnostico !== 'Sin diagnóstico'
-                            ? `<p><strong>Diagnóstico:</strong> ${ev.Diagnostico}</p>` : ''}
-                        ${ev.Evolucion
-                            ? `<p><strong>Evolución:</strong> ${ev.Evolucion}</p>` : ''}
-                        ${ev.Tratamiento
-                            ? `<p><strong>Plan:</strong> ${ev.Tratamiento}</p>` : ''}
-                        ${!ev.Diagnostico && !ev.Evolucion && !ev.Tratamiento
-                            ? `<p style="color:#94a3b8;font-style:italic;">Sin historial clínico registrado aún.</p>` : ''}
-                    </div>
-                </div>`;
-            }).join('');
-
-        } catch (err) {
-            console.error('[HC] cargarEvoluciones:', err);
-            cont.innerHTML = '<p style="color:#ef4444;font-size:13px;font-weight:600;">Error al cargar el historial.</p>';
-        }
-    }
-
-    // ─── ODONTOGRAMA ────────────────────────────────────────────────────────────
-    function initOdontograma() {
-        const sup = [18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28];
-        const inf = [48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
-
-        const crear = (num, cont) => {
-            const div     = document.createElement('div');
-            div.className = 'diente';
-            div.id        = `d-${num}`;
-            div.textContent = num;
-            div.addEventListener('click', (e) => {
-                e.stopPropagation();
-                abrirSelector(div, num, e);
-            });
-            cont.appendChild(div);
-        };
-
-        const s = document.getElementById('odo-sup');
-        const i = document.getElementById('odo-inf');
-        sup.forEach(n => crear(n, s));
-        inf.forEach(n => crear(n, i));
-    }
-
-    function abrirSelector(el, num, event) {
-        event.stopPropagation();
-        dienteSeleccionado = el;
-        document.getElementById('num-diente-sel').textContent = num;
-        const sel  = document.getElementById('selector-estado');
-        const wrap = document.getElementById('odontograma-wrap');
-        const wRect = wrap.getBoundingClientRect();
-        const eRect = el.getBoundingClientRect();
-        sel.style.display = 'block';
-        sel.style.top  = (eRect.bottom - wRect.top + wrap.scrollTop + 6) + 'px';
-        sel.style.left = Math.min(eRect.left - wRect.left - 20,
-                                   wrap.clientWidth - 180) + 'px';
-    }
-
-    function asignarEstado(clase) {
-        if (!dienteSeleccionado) return;
-        const num = dienteSeleccionado.textContent.trim();
-        dienteSeleccionado.classList.remove('rojo', 'azul', 'verde', 'amarillo');
-        if (clase) {
-            dienteSeleccionado.classList.add(clase);
-            mapaDental[num] = clase;
-        } else {
-            delete mapaDental[num];
-        }
-        document.getElementById('selector-estado').style.display = 'none';
-        dienteSeleccionado = null;
-    }
-
-    function cerrarSelector(event) {
-        const sel = document.getElementById('selector-estado');
-        if (sel) sel.style.display = 'none';
-    }
-
-    // ─── HALLAZGOS ──────────────────────────────────────────────────────────────
-    const PROCEDIMIENTOS = [
-        'Caries Detectada', 'Ausente / Perdido', 'Cirugía Pendiente',
-        'Endodoncia', 'Limpieza Profunda', 'Restauración', 'Extracción',
-        'Blanqueamiento', 'Brackets', 'Control Periódico', 'Otro...'
-    ];
-
-    function agregarHallazgo() {
-        const cont = document.getElementById('lista-hallazgos');
-        const idx  = cont.children.length;
-        const div  = document.createElement('div');
-        div.className = 'hallazgo-row';
-        div.dataset.idx = idx;
-        div.innerHTML = `
-            <select class="hc-select h-sel" onchange="syncHallazgo(${idx}, 'proc', this.value)">
-                <option value="">-- Procedimiento --</option>
-                ${PROCEDIMIENTOS.map(p => `<option value="${p}">${p}</option>`).join('')}
-            </select>
-            <input type="text" class="hc-input h-inp" placeholder="Detalles específicos..."
-                   oninput="syncHallazgo(${idx}, 'detalle', this.value)">
-            <button class="hallazgo-del" onclick="eliminarHallazgo(this)" type="button"
-                    title="Eliminar hallazgo">
-                <i class="fas fa-times"></i>
-            </button>`;
-        cont.appendChild(div);
-        hallazgosData.push({ procedimiento: '', detalle: '' });
-    }
-
-    function syncHallazgo(idx, campo, val) {
-        if (!hallazgosData[idx]) hallazgosData[idx] = {};
-        hallazgosData[idx][campo === 'proc' ? 'procedimiento' : 'detalle'] = val;
-    }
-
-    function eliminarHallazgo(btn) {
-        const row = btn.closest('.hallazgo-row');
-        const idx = parseInt(row.dataset.idx, 10);
-        hallazgosData.splice(idx, 1);
-        row.remove();
-        // Re-indexar
-        const cont = document.getElementById('lista-hallazgos');
-        Array.from(cont.children).forEach((r, i) => {
-            r.dataset.idx = i;
-            const sel = r.querySelector('.h-sel');
-            const inp = r.querySelector('.h-inp');
-            if (sel) sel.onchange = (e) => syncHallazgo(i, 'proc',   e.target.value);
-            if (inp) inp.oninput  = (e) => syncHallazgo(i, 'detalle', e.target.value);
-        });
-    }
-
-    // ─── GUARDAR HISTORIA CLÍNICA ───────────────────────────────────────────────
-    async function guardarHistoria(finalizar = false) {
-        if (!CITA_ID) {
-            toast('No se puede guardar: no hay cita activa vinculada.', 'error');
-            return;
-        }
-
-        const btnG = document.getElementById('btn-guardar');
-        const btnF = document.getElementById('btn-finalizar');
-        btnG.disabled = true;
-        btnF.disabled = true;
-        btnG.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
-
-        const payload = {
-            Cita_ID:        CITA_ID,
-            MotivoConsulta: document.getElementById('hc-motivo').value.trim(),
-            Diagnostico:    document.getElementById('hc-diag').value.trim(),
-            Evolucion:      document.getElementById('hc-evolucion').value.trim(),
-            Tratamiento:    document.getElementById('hc-plan').value.trim(),
-            MapaDental:     JSON.stringify(mapaDental),
-            Hallazgos:      JSON.stringify(
-                hallazgosData.filter(h => h.procedimiento || h.detalle)
-            ),
-        };
-
-        const endpoint = finalizar
-            ? '/api/historial/finalizar'
-            : '/api/historial/guardar';
-
-        try {
-            const res  = await fetch(endpoint, {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify(payload),
-            });
-            const data = await res.json().catch(() => ({}));
-
-            if (!res.ok || !data.ok) {
-                toast(data.error || 'Error al guardar la historia clínica.', 'error');
-                return;
-            }
-
-            if (finalizar) {
-                // Intentar también llamar a finalizar-consulta para correo/encuesta
-                try {
-                    await fetch(`/api/citas/${CITA_ID}/finalizar-consulta`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-                } catch (_) {}
-
-                toast('Consulta finalizada y registrada exitosamente.', 'success');
-                setTimeout(() => volverAlPanel(), 1800);
-            } else {
-                toast('Historia clínica guardada correctamente.', 'success');
-                // Refrescar sección de evoluciones
-                await cargarEvoluciones();
-            }
-        } catch (err) {
-            console.error('[HC] guardarHistoria:', err);
-            toast('Error de conexión al guardar.', 'error');
-        } finally {
-            btnG.disabled = false;
-            btnF.disabled = false;
-            btnG.innerHTML = '<i class="fas fa-save"></i> Guardar';
-        }
-    }
-
-    // ─── NAVEGACIÓN ─────────────────────────────────────────────────────────────
-    function volverAlPanel() {
-        // Intentar cerrar si fue abierto como ventana emergente
-        if (window.opener) {
-            window.close();
-        } else {
-            window.location.href = '/especialista';
-        }
-    }
-
-    // ─── INIT ────────────────────────────────────────────────────────────────────
-    window.addEventListener('DOMContentLoaded', () => {
-        initOdontograma();
-        agregarHallazgo(); // Fila inicial
-        cargarDatosPaciente();
-        cargarEvoluciones();
-    });
-    </script>
+    <script src="{{ url_for('static', filename='js/historia_clinica.js') }}"></script>
 
 </body>
 </html>

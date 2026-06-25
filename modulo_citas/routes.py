@@ -550,6 +550,15 @@ def get_agenda():
 
 @citas_bp.route('/agenda', methods=['POST'])
 def crear_agenda():
+    """
+    Crea un nuevo bloque de disponibilidad para un especialista.
+
+    REQ 4 — VALIDACIÓN ESTRICTA DE DISPONIBILIDADES DUPLICADAS:
+    Un mismo especialista NO puede registrar dos veces la misma fecha en el
+    mismo rango de hora mientras ese bloque siga activo (Disponible u
+    Ocupado). Si ya existe, se rechaza con 409 (Conflict) y un mensaje claro,
+    en vez de devolver silenciosamente el slot existente como éxito (200).
+    """
     datos       = request.get_json(silent=True) or {}
     esp_id      = datos.get('Especialista_ID')
     fecha       = datos.get('Fecha')
@@ -569,28 +578,58 @@ def crear_agenda():
     con = None
     try:
         con = _get_conn()
+        con.execute("PRAGMA foreign_keys = ON")
         cur = con.cursor()
+        cur.execute("BEGIN TRANSACTION")
+
         cur.execute(
             "SELECT Especialista_ID FROM especialista WHERE Especialista_ID = ?", (esp_id,)
         )
         if not cur.fetchone():
+            cur.execute("ROLLBACK")
             return _json_error('Especialista no encontrado.', 404)
+
+        # ── Validación estricta de duplicados (misma fecha + misma hora de
+        # inicio, mientras el bloque esté activo: Disponible u Ocupado) ──────
         cur.execute("""
             SELECT Agenda_ID FROM agenda
-            WHERE Especialista_ID = ? AND Fecha = ? AND Hora_Inicio = ? AND EstadoAgenda_ID = 1
+            WHERE Especialista_ID = ? AND Fecha = ? AND Hora_Inicio = ?
+              AND EstadoAgenda_ID IN (1, 2)
         """, (esp_id, fecha, hora_inicio))
-        existente = cur.fetchone()
-        if existente:
-            return _json_ok({"ok": True, "Agenda_ID": existente['Agenda_ID']}, 200)
+        duplicado = cur.fetchone()
+        if duplicado:
+            cur.execute("ROLLBACK")
+            return _json_error(
+                'Ya existe una disponibilidad registrada para esta fecha y horario. '
+                'No es posible duplicar el mismo bloque de tiempo.',
+                409
+            )
+
         cur.execute("""
             INSERT INTO agenda (Especialista_ID, Fecha, Hora_Inicio, Hora_Final, EstadoAgenda_ID)
             VALUES (?, ?, ?, ?, ?)
         """, (esp_id, fecha, hora_inicio, hora_fin, estado_id))
         agenda_id = cur.lastrowid
-        con.commit()
+
+        # ── Salvaguarda a nivel de BD: si dos solicitudes concurrentes pasan
+        # la validación anterior casi al mismo tiempo, el índice UNIQUE
+        # parcial (ver init_db.py) hace que la segunda inserción falle con
+        # IntegrityError, capturado más abajo y traducido a 409 también. ────
+        cur.execute("COMMIT")
         return _json_ok({"ok": True, "Agenda_ID": agenda_id}, 201)
+    except sqlite3.IntegrityError:
+        if con:
+            try: con.execute("ROLLBACK")
+            except Exception: pass
+        return _json_error(
+            'Ya existe una disponibilidad registrada para esta fecha y horario. '
+            'No es posible duplicar el mismo bloque de tiempo.',
+            409
+        )
     except Exception as exc:
-        if con: con.rollback()
+        if con:
+            try: con.execute("ROLLBACK")
+            except Exception: pass
         return _json_error(str(exc), 500)
     finally:
         if con: con.close()
@@ -770,6 +809,9 @@ def crear_cita():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CITA INDIVIDUAL — GET /api/citas/<id>
+# Devuelve datos completos de una cita, incluyendo Paciente_ID.
+# Usado como fallback en irAHistoriaClinica() de especialista.js para
+# resolver Paciente_ID cuando el objeto en memoria no lo trae.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>', methods=['GET'])
@@ -779,15 +821,22 @@ def get_cita(cita_id):
         con = _get_conn()
         cur = con.cursor()
         cur.execute("""
-            SELECT c.Cita_ID, c.Motivo_Consulta, c.Encuesta_Enviada,
+            SELECT c.Cita_ID,
+                   c.Paciente_ID,
+                   c.Agenda_ID,
+                   c.Motivo_Consulta,
+                   c.Encuesta_Enviada,
                    p.Paciente_ID,
                    up.Nombres || ' ' || up.Apellidos AS NombrePaciente,
                    up.NumeroDocumento,
                    up.Correo AS CorreoPaciente,
                    up.Telefono AS TelefonoPaciente,
                    COALESCE(td.Nombre_Tipo_Documento, 'DOC') AS TipoDocumento,
-                   a.Fecha, a.Hora_Inicio,
+                   a.Agenda_ID,
+                   a.Fecha,
+                   a.Hora_Inicio,
                    a.Hora_Final AS Hora_Fin,
+                   a.EstadoAgenda_ID,
                    ea.Nombre_Estado AS EstadoAgenda,
                    ue.Nombres || ' ' || ue.Apellidos AS NombreEspecialista,
                    CASE
@@ -805,6 +854,7 @@ def get_cita(cita_id):
             JOIN especialista e   ON e.Especialista_ID  = a.Especialista_ID
             JOIN usuarios ue   ON ue.Usuario_ID = e.Usuario_ID
             WHERE c.Cita_ID = ?
+            LIMIT 1
         """, (cita_id,))
         row = cur.fetchone()
         if not row:
@@ -818,9 +868,12 @@ def get_cita(cita_id):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ATENDER CITA — PUT /api/citas/<id>/atender
+# (Alias de compatibilidad: /en-proceso apunta a la misma lógica, por si
+#  algún cliente cacheado en navegador todavía referencia el nombre viejo)
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>/atender', methods=['PUT'])
+@citas_bp.route('/citas/<int:cita_id>/en-proceso', methods=['PUT'])
 def atender_cita(cita_id):
     con = None
     try:
@@ -1172,6 +1225,104 @@ def cancelar_cita_con_multa(cita_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# REQ 2 — AUTOMATIZACIÓN DE MULTAS POR CUMPLIMIENTO DE TIEMPO
+# POST /api/multas/procesar-vencimientos
+#
+# Recorre todas las citas cuyo bloque de agenda sigue "Disponible" (1) u
+# "Ocupado" (2) — es decir, nunca se marcó como Atendida (4) ni Cancelada
+# (3) — y cuya fecha+hora de inicio ya pasó. Esas citas se interpretan como
+# inasistencia del paciente: se marca la agenda como Cancelado (3) y se
+# genera/registra una multa (EstadoMulta_ID = 1, Pendiente) vinculada a esa
+# cita, de forma 100% persistida en odent.db (con conn.commit() explícito).
+#
+# Es idempotente: si la cita ya tiene una multa registrada, no duplica.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _procesar_vencimientos_multas_interno(cur):
+    """
+    Lógica pura de negocio (reutilizable también desde un scheduler externo
+    si se decide automatizar con APScheduler/cron en el futuro). Recibe un
+    cursor ya abierto y NO hace commit — el llamador controla la transacción.
+    Devuelve la cantidad de citas procesadas.
+    """
+    ahora_dt  = datetime.now()
+    hoy_str   = ahora_dt.strftime('%Y-%m-%d')
+    hora_str  = ahora_dt.strftime('%H:%M:%S')
+
+    # Candidatas: citas con bloque de agenda aún activo (1=Disponible,
+    # 2=Ocupado) cuya fecha ya pasó, o cuya fecha es hoy pero la hora de
+    # inicio ya venció.
+    cur.execute("""
+        SELECT c.Cita_ID, a.Agenda_ID, a.Fecha, a.Hora_Inicio
+        FROM cita c
+        JOIN agenda a ON a.Agenda_ID = c.Agenda_ID
+        WHERE a.EstadoAgenda_ID IN (1, 2)
+          AND (
+                a.Fecha < ?
+                OR (a.Fecha = ? AND a.Hora_Inicio <= ?)
+              )
+    """, (hoy_str, hoy_str, hora_str))
+    candidatas = cur.fetchall()
+
+    procesadas = 0
+    for fila in candidatas:
+        cita_id   = fila['Cita_ID']
+        agenda_id = fila['Agenda_ID']
+
+        # Marcar el bloque de agenda como Cancelado (3) — la cita venció
+        # sin que el especialista la marcara como Atendida.
+        cur.execute(
+            "UPDATE agenda SET EstadoAgenda_ID = 3 WHERE Agenda_ID = ?",
+            (agenda_id,)
+        )
+
+        # Evitar duplicar multas si el job corre más de una vez sobre la
+        # misma cita (idempotencia).
+        cur.execute(
+            "SELECT Multa_ID FROM multa WHERE Cita_ID = ?", (cita_id,)
+        )
+        if cur.fetchone():
+            procesadas += 1
+            continue
+
+        cur.execute(
+            "INSERT INTO multa (Cita_ID, EstadoMulta_ID) VALUES (?, 1)",
+            (cita_id,)
+        )
+        procesadas += 1
+
+    return procesadas
+
+
+@citas_bp.route('/multas/procesar-vencimientos', methods=['POST'])
+def procesar_vencimientos_multas():
+    con = None
+    try:
+        con = _get_conn()
+        con.execute("PRAGMA foreign_keys = ON")
+        cur = con.cursor()
+        cur.execute("BEGIN TRANSACTION")
+
+        procesadas = _procesar_vencimientos_multas_interno(cur)
+
+        cur.execute("COMMIT")
+        con.commit()  # asegurar persistencia explícita en odent.db
+        return _json_ok({
+            "ok": True,
+            "procesadas": procesadas,
+            "mensaje": f"{procesadas} cita(s) vencida(s) procesada(s)." if procesadas
+                       else "No hay citas vencidas pendientes de procesar."
+        })
+    except Exception as exc:
+        if con:
+            try: con.execute("ROLLBACK")
+            except Exception: pass
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # CITAS POR PACIENTE — GET /api/paciente/<id>/citas
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1244,6 +1395,7 @@ def get_citas_especialista(especialista_id):
                    ea.Nombre_Estado AS EstadoAgenda,
                    up.Nombres || ' ' || up.Apellidos AS NombrePaciente,
                    up.NumeroDocumento,
+                   p.Paciente_ID,
                    COALESCE(td.Nombre_Tipo_Documento, 'DOC') AS TipoDocumento,
                    up.Telefono AS TelefonoPaciente,
                    esp.Nombre_Especialidad,

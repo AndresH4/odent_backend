@@ -62,7 +62,11 @@ CORS(app, supports_credentials=True)
 # REGISTRO DE BLUEPRINTS
 # =============================================================================
 app.register_blueprint(usuarios_bp,       url_prefix='/api')
-app.register_blueprint(historial_bp,      url_prefix='/api')
+# ── historial_bp se registra SIN prefijo:
+#    - Sus rutas de VISTA (/historial/paciente/<id>) son accesibles directamente.
+#    - Sus rutas de API llevan /api embebido en el decorador (@historial_bp.route).
+#    - NO define GET /api/citas/<id> para evitar colisión con citas_bp.
+app.register_blueprint(historial_bp)
 app.register_blueprint(tratamiento_bp,    url_prefix='/api')
 app.register_blueprint(tabla_diag_bp,     url_prefix='/api')
 app.register_blueprint(historial_diag_bp, url_prefix='/api')
@@ -335,6 +339,7 @@ def vista_creacion_usuario():
 def vista_administrador():
     return render_template('administrador.html')
 
+@app.route('/especialista')
 @app.route('/especialista.html')
 def vista_especialista():
     return render_template('especialista.html')
@@ -349,8 +354,9 @@ def vista_agendar():
     return render_template('agendar.html')
 
 @app.route('/historia_clinica.html')
-def vista_historia_clinica():
-    return render_template('historia_clinica.html')
+def vista_historia_clinica_legacy():
+    """Ruta legacy — sirve el template con parámetros vacíos para compatibilidad."""
+    return render_template('historia_clinica.html', paciente_id=0, cita_id='')
 
 @app.route('/ranking.html')
 def vista_ranking():
@@ -565,11 +571,6 @@ def test_smtp():
 
 @app.route('/api/usuario/<int:usuario_id>', methods=['GET'])
 def aseg_get_usuario_por_id(usuario_id):
-    """
-    GET /api/usuario/<id>  — Devuelve datos del usuario con Nombre_Tipo_Documento.
-    Consumido por el módulo de aseguramiento y por administrador.js
-    para el toggle de estado (PUT).
-    """
     con = None
     try:
         con = _app_conn()
@@ -626,12 +627,6 @@ def aseg_get_usuario_por_documento(numero_documento):
 
 @app.route('/api/usuario/<int:usuario_id>', methods=['PUT'])
 def aseg_actualizar_usuario(usuario_id):
-    """
-    PUT /api/usuario/<id>
-    Acepta: Nombres, Apellidos, TipoDoc_ID, NumeroDocumento, Telefono, Correo, Estado_ID.
-    El campo Estado_ID permite al administrador activar/desactivar usuarios.
-    NO requiere ContrasenaActual (es una operación de administrador).
-    """
     datos = request.get_json(silent=True) or {}
 
     campos  = []

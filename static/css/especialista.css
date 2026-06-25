@@ -1,5 +1,5 @@
 /* === especialista.css === */
-/* Stylo Dental Pro — v6.3 clean */
+/* Stylo Dental Pro — v6.4 clean */
 
 /* ===================================================================
    VARIABLES
@@ -297,8 +297,10 @@ body {
 
 /* ===================================================================
    SMART PICKER WRAPPER
-   Oculta iconos nativos del navegador; ícono FA posicionado
-   absolutamente a la derecha, sin solapamiento.
+   Oculta el texto/iconos nativos del navegador para inputs date/time
+   cuando están vacíos (bug visual de "dd/mm/aaaa" y "--:--" duplicados),
+   y muestra el texto real del valor en cuanto el usuario selecciona algo.
+   El ícono FA está posicionado absolutamente a la derecha, sin solaparse.
    =================================================================== */
 .smart-picker-wrapper {
     position:      relative;
@@ -331,6 +333,40 @@ body {
     -moz-appearance:    none;
     appearance:         none;
 }
+
+/* --- Estado VACÍO: el texto nativo del motor del navegador
+   (dd/mm/aaaa, --:-- --) se vuelve invisible por completo,
+   dejando que SOLO se vea nuestro placeholder estilizado. --- */
+.smart-picker-wrapper .input-smart-picker:not(.has-value)::-webkit-datetime-edit,
+.smart-picker-wrapper .input-smart-picker:not(.has-value)::-webkit-datetime-edit-fields-wrapper,
+.smart-picker-wrapper .input-smart-picker:not(.has-value)::-webkit-datetime-edit-text,
+.smart-picker-wrapper .input-smart-picker:not(.has-value)::-webkit-datetime-edit-month-field,
+.smart-picker-wrapper .input-smart-picker:not(.has-value)::-webkit-datetime-edit-day-field,
+.smart-picker-wrapper .input-smart-picker:not(.has-value)::-webkit-datetime-edit-year-field,
+.smart-picker-wrapper .input-smart-picker:not(.has-value)::-webkit-datetime-edit-hour-field,
+.smart-picker-wrapper .input-smart-picker:not(.has-value)::-webkit-datetime-edit-minute-field,
+.smart-picker-wrapper .input-smart-picker:not(.has-value)::-webkit-datetime-edit-ampm-field {
+    color: transparent !important;
+}
+
+/* --- Estado CON VALOR: el texto nativo vuelve a pintarse normal,
+   coherente con el resto de la tipografía del input. --- */
+.smart-picker-wrapper .input-smart-picker.has-value::-webkit-datetime-edit,
+.smart-picker-wrapper .input-smart-picker.has-value::-webkit-datetime-edit-fields-wrapper,
+.smart-picker-wrapper .input-smart-picker.has-value::-webkit-datetime-edit-text,
+.smart-picker-wrapper .input-smart-picker.has-value::-webkit-datetime-edit-month-field,
+.smart-picker-wrapper .input-smart-picker.has-value::-webkit-datetime-edit-day-field,
+.smart-picker-wrapper .input-smart-picker.has-value::-webkit-datetime-edit-year-field,
+.smart-picker-wrapper .input-smart-picker.has-value::-webkit-datetime-edit-hour-field,
+.smart-picker-wrapper .input-smart-picker.has-value::-webkit-datetime-edit-minute-field,
+.smart-picker-wrapper .input-smart-picker.has-value::-webkit-datetime-edit-ampm-field {
+    color: #1e293b !important;
+}
+
+/* Firefox: el valor nativo se controla con color directo en el input */
+.smart-picker-wrapper .input-smart-picker:not(.has-value) { color: transparent; }
+.smart-picker-wrapper .input-smart-picker.has-value       { color: #1e293b; }
+
 .smart-picker-wrapper .input-smart-picker::-webkit-calendar-picker-indicator {
     display:        none !important;
     opacity:        0;
@@ -341,7 +377,9 @@ body {
 }
 .smart-picker-wrapper .input-smart-picker::-moz-calendar-picker-indicator { display: none !important; }
 .smart-picker-wrapper .input-smart-picker[type="time"]::-webkit-inner-spin-button,
-.smart-picker-wrapper .input-smart-picker[type="time"]::-webkit-clear-button {
+.smart-picker-wrapper .input-smart-picker[type="time"]::-webkit-clear-button,
+.smart-picker-wrapper .input-smart-picker[type="date"]::-webkit-inner-spin-button,
+.smart-picker-wrapper .input-smart-picker[type="date"]::-webkit-clear-button {
     display:            none;
     -webkit-appearance: none;
 }
@@ -350,6 +388,10 @@ body {
     border-color: var(--primary);
     background:   #ffffff;
     box-shadow:   0 0 0 6px rgba(2,132,199,0.12);
+}
+.smart-picker-wrapper.input-error {
+    border-color: #ef4444;
+    background:   #fef2f2;
 }
 .smart-picker-icon {
     position:        absolute;

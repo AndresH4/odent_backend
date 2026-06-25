@@ -1,8 +1,19 @@
-// especialista.js v13.0
-// REQ 1: Atendidos Hoy usa FechaAtencion real de BD (no solo campo Fecha)
-// REQ 2: Fix maquetación inputs agenda — clase .has-value para placeholder
-// REQ 3: Notificación visual encuestas pendientes al finalizar consulta
-// REQ HC: irAHistoriaClinica redirige a /historial/paciente/<id>?cita_id=<id>
+// especialista.js v14.3
+// REQ 1: Fix maquetación inputs agenda — clase .has-value se sincroniza con CSS para ocultar texto nativo duplicado
+// REQ 2: Automatización de multas por incumplimiento de horario (ping al backend)
+// REQ 3: Conexión en tiempo real de agenda médica con vista de agendar (ya servida vía /api/agenda)
+// REQ 4: Validación estricta de disponibilidades duplicadas — manejo de respuesta 409 del backend
+// REQ 5: Conexión total de Historia Clínica — fix de endpoint roto (/en-proceso -> /atender) y redirección robusta
+// REQ 6: Fix de registro de historial_bp sin url_prefix en app.py — la ruta /historial/paciente/<id>
+//        ahora es alcanzable directamente. irAHistoriaClinica() resuelve Paciente_ID desde memoria
+//        y como fallback desde /api/citas/<id> (servido por citas_bp con url_prefix='/api').
+// REQ 7: Fix crítico de renderizado — irAHistoriaClinica() navega a /historial/paciente/<id>
+//        que devuelve render_template HTML. Eliminada toda llamada fetch() que causaba
+//        que el navegador mostrara JSON crudo en lugar de la vista visual.
+// REQ 8 (v14.3): Separación total Vista / API en irAHistoriaClinica():
+//        ▸ window.location.href → /historial/paciente/<id>?cita_id=<id>  (VISTA HTML)
+//        ▸ fetch()              → /api/historial/...  o  /api/citas/...  (JSON solamente)
+//        El navegador NUNCA visita un endpoint de API directamente.
 'use strict';
 
 let indexActualGlobal     = null;
@@ -78,9 +89,11 @@ function dispararPicker(wrapper) {
 function actualizarPlaceholderVisual(input) {
     if (!input) return;
     const placeholder = document.getElementById(`${input.id}-placeholder`);
+    const wrapper      = input.closest('.smart-picker-wrapper');
     if (input.value) {
         input.classList.add('has-value');
         if (placeholder) placeholder.style.display = 'none';
+        if (wrapper) wrapper.classList.remove('input-error');
     } else {
         input.classList.remove('has-value');
         if (placeholder) placeholder.style.display = 'flex';
@@ -261,7 +274,7 @@ const cargarDatosEspecialista = async () => {
         if (Array.isArray(data)) {
             historialTotal = data.map(c => ({
                 Cita_ID:       c.Cita_ID,
-                Paciente_ID:   c.Paciente_ID   || null,   // ← asegurar Paciente_ID
+                Paciente_ID:   c.Paciente_ID   || null,
                 nombre:        c.NombrePaciente || '—',
                 tipoDoc:       c.TipoDocumento  || 'DOC',
                 numDoc:        c.NumeroDocumento || '—',
@@ -537,13 +550,16 @@ const abrirEmpezarCita = async (indice) => {
 
         if (cita.Cita_ID && cita.estado === 'Pendiente') {
             try {
-                const resp = await fetch(`/api/citas/${cita.Cita_ID}/en-proceso`, { method: 'PUT' });
-                if (!resp.ok) console.warn('[especialista] No se pudo marcar en proceso:', resp.status);
+                const resp = await fetch(`/api/citas/${cita.Cita_ID}/atender`, { method: 'PUT' });
+                if (!resp.ok) {
+                    const errData = await resp.json().catch(() => ({}));
+                    console.warn('[especialista] No se pudo marcar en proceso:', resp.status, errData.error || '');
+                }
             } catch (err) {
                 console.warn('[especialista] Error marcando en proceso:', err);
             }
             historialTotal[indice].estado       = 'En proceso';
-            historialTotal[indice].EstadoAgenda = 'En proceso';
+            historialTotal[indice].EstadoAgenda = 'Ocupado';
             _renderTodas();
         }
     } catch (err) {
@@ -624,7 +640,28 @@ function logger_info(msg) {
     if (typeof console !== 'undefined') console.info(msg);
 }
 
+// ─── REQ 2: AUTOMATIZACIÓN DE MULTAS POR INCUMPLIMIENTO DE HORARIO ───────────
+async function _procesarVencimientosMultas() {
+    try {
+        const resp = await fetch('/api/multas/procesar-vencimientos', { method: 'POST' });
+        if (!resp.ok) return;
+        const data = await resp.json().catch(() => ({}));
+        if (data && data.ok && data.procesadas > 0) {
+            console.info(`[multas] ${data.procesadas} cita(s) vencida(s) procesada(s) automáticamente.`);
+            if (seccionActiva === 'inicio' || seccionActiva === 'pacientes') {
+                cargarDatosEspecialista();
+            }
+        }
+    } catch (err) {
+        console.warn('[especialista] No se pudo procesar vencimientos de multas:', err);
+    }
+}
+
 // ─── REPORTE PROFESIONAL ──────────────────────────────────────────────────────
+// NOTA: Esta función abre el MODAL de reporte en el panel del especialista.
+// NO navega al HTML de Historia Clínica. No llama a irAHistoriaClinica().
+// Si el botón del modal dice "Historia Clínica", debe llamar a irAHistoriaClinica(),
+// NO a esta función.
 const verReporteProfesional = async (indice) => {
     try {
         const cita = historialTotal[indice];
@@ -638,6 +675,7 @@ const verReporteProfesional = async (indice) => {
         let numDoc        = cita.numDoc  || '—';
 
         if (cita.Cita_ID) {
+            // Enriquecer con datos del historial clínico (fetch JSON, no navega)
             try {
                 const res = await fetch(`/api/historial-clinico/${cita.Cita_ID}`);
                 if (res.ok) {
@@ -655,6 +693,7 @@ const verReporteProfesional = async (indice) => {
 
             if (cita.FechaAtencion && fechaAtencion === 'N/A') fechaAtencion = cita.FechaAtencion;
 
+            // Enriquecer documento del paciente (fetch JSON, no navega)
             try {
                 const resCita = await fetch(`/api/citas/${cita.Cita_ID}`);
                 if (resCita.ok) {
@@ -684,9 +723,24 @@ const verReporteProfesional = async (indice) => {
     }
 };
 
-// ─── HISTORIA CLÍNICA — REDIRECCIÓN DINÁMICA ─────────────────────────────────
-// Captura el Paciente_ID y Cita_ID reales de la cita activa y navega a la
-// ruta Flask /historial/paciente/<paciente_id>?cita_id=<cita_id>
+// ══════════════════════════════════════════════════════════════════════════════
+// REQ 5 + REQ 6 + REQ 7 + REQ 8
+// irAHistoriaClinica() — NAVEGACIÓN A LA VISTA HTML DE HISTORIA CLÍNICA
+//
+// REGLA DE ORO:
+//   window.location.href → /historial/paciente/<id>?cita_id=<id>
+//   └─ Esta URL apunta a historial_bp → vista_historia_clinica()
+//   └─ Flask devuelve render_template('historia_clinica.html')   ← HTML
+//   └─ El navegador carga la interfaz visual normalmente
+//
+// NUNCA hacer:
+//   fetch('/historial/paciente/...') ← devolvería HTML al fetch y se ignora
+//   window.location.href = '/api/historial/...'  ← mostraría JSON crudo
+//
+// El único fetch() permitido aquí es el fallback para resolver Paciente_ID
+// desde /api/citas/<id> cuando no está en caché — ese endpoint devuelve JSON
+// limpio y no navega; solo alimenta el dato para construir la URL de vista.
+// ══════════════════════════════════════════════════════════════════════════════
 const irAHistoriaClinica = () => {
     try {
         const indice = citaActualEmpezar;
@@ -694,6 +748,7 @@ const irAHistoriaClinica = () => {
             mostrarToast('No hay cita activa.', 'warning');
             return;
         }
+
         const cita = historialTotal[indice];
         if (!cita) {
             mostrarToast('No se encontró la cita.', 'error');
@@ -703,37 +758,59 @@ const irAHistoriaClinica = () => {
             mostrarToast('La cita no tiene un ID válido.', 'error');
             return;
         }
- 
-        // Guardar referencias en sessionStorage (respaldo, no fuente principal)
-        sessionStorage.setItem('hc_cita_id',   String(cita.Cita_ID));
+
+        // Guardar respaldo en sessionStorage para resistir recargas de página
+        sessionStorage.setItem('hc_cita_id',     String(cita.Cita_ID));
         sessionStorage.setItem('hc_paciente_id', String(cita.Paciente_ID || ''));
- 
-        // Navegar a la ruta Flask con parámetros reales
-        // El Paciente_ID viene de cita.Paciente_ID si está disponible,
-        // o se resuelve en el backend a través del Cita_ID.
-        // Si el objeto de cita no trae Paciente_ID directamente,
-        // el backend lo resuelve via JOIN con la tabla cita.
+
+        /**
+         * navegarAHistoriaClinica(pacienteId)
+         * ─────────────────────────────────────
+         * Construye la URL de VISTA y navega con window.location.href.
+         * La ruta destino es:
+         *   GET /historial/paciente/<pacienteId>?cita_id=<citaId>
+         *   └─ historial_bp → vista_historia_clinica() → render_template HTML
+         *
+         * NO es una ruta de API. El navegador recibirá HTML, no JSON.
+         */
+        const navegarAHistoriaClinica = (pacienteId) => {
+            const params = new URLSearchParams({ cita_id: cita.Cita_ID });
+            // ✅ RUTA DE VISTA — render_template, siempre devuelve HTML
+            window.location.href = `/historial/paciente/${pacienteId}?${params.toString()}`;
+        };
+
         const pacienteId = cita.Paciente_ID || 0;
-        const params     = new URLSearchParams({ cita_id: cita.Cita_ID });
- 
+
         if (pacienteId) {
-            window.location.href = `/historial/paciente/${pacienteId}?${params}`;
-        } else {
-            // Fallback: resolver primero el Paciente_ID desde la API
-            fetch(`/api/citas/${cita.Cita_ID}`)
-                .then(r => r.json())
-                .then(d => {
-                    const pid = d.Paciente_ID;
-                    if (!pid) {
-                        mostrarToast('No se pudo resolver el paciente de esta cita.', 'error');
-                        return;
-                    }
-                    window.location.href = `/historial/paciente/${pid}?${params}`;
-                })
-                .catch(() => {
-                    mostrarToast('Error al obtener datos de la cita.', 'error');
-                });
+            // Caso directo: Paciente_ID ya está en caché → navegamos de inmediato
+            navegarAHistoriaClinica(pacienteId);
+            return;
         }
+
+        // Fallback: Paciente_ID no está en caché.
+        // Hacemos fetch a /api/citas/<id> (JSON puro, citas_bp) para obtenerlo.
+        // Este fetch NO navega — solo extrae el dato y llama a navegarAHistoriaClinica().
+        fetch(`/api/citas/${cita.Cita_ID}`)
+            .then(r => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.json();
+            })
+            .then(d => {
+                const pid = d.Paciente_ID;
+                if (!pid) {
+                    mostrarToast('No se pudo resolver el paciente de esta cita.', 'error');
+                    return;
+                }
+                // Actualizar caché en memoria para la próxima vez
+                historialTotal[indice].Paciente_ID = pid;
+                sessionStorage.setItem('hc_paciente_id', String(pid));
+                navegarAHistoriaClinica(pid);
+            })
+            .catch((err) => {
+                console.error('[especialista] No se pudo resolver Paciente_ID:', err);
+                mostrarToast('Error al obtener datos de la cita.', 'error');
+            });
+
     } catch (err) {
         console.error('[especialista] Error redirigiendo a historia clínica:', err);
         mostrarToast('Error al abrir la historia clínica.', 'error');
@@ -755,6 +832,10 @@ const guardarFranjaHoraria = async () => {
     const horaFin    = horaFinInput?.value?.trim()    || '';
 
     if (errorEl) { errorEl.innerText = ''; errorEl.classList.add('hidden'); }
+    [fechaInput, horaInicioInput, horaFinInput].forEach(inp => {
+        const wrapper = inp?.closest('.smart-picker-wrapper');
+        if (wrapper) wrapper.classList.remove('input-error');
+    });
 
     if (!fecha || !horaInicio || !horaFin) {
         if (errorEl) { errorEl.innerText = 'Completa todos los campos: fecha, hora de inicio y hora de fin.'; errorEl.classList.remove('hidden'); }
@@ -777,10 +858,23 @@ const guardarFranjaHoraria = async () => {
             body:    JSON.stringify({ Especialista_ID: especialistaId, Fecha: fecha, Hora_Inicio: horaInicio, Hora_Fin: horaFin, Estado_ID: 1 })
         });
         const data = await resp.json().catch(() => ({}));
+
+        if (resp.status === 409) {
+            const msg = data.error || 'Ya existe una disponibilidad registrada para esta fecha y horario.';
+            if (errorEl) { errorEl.innerText = `⚠ ${msg}`; errorEl.classList.remove('hidden'); }
+            [fechaInput, horaInicioInput, horaFinInput].forEach(inp => {
+                const wrapper = inp?.closest('.smart-picker-wrapper');
+                if (wrapper) wrapper.classList.add('input-error');
+            });
+            mostrarToast(msg, 'warning');
+            return;
+        }
+
         if (!resp.ok || !data.ok) {
             if (errorEl) { errorEl.innerText = data.error || 'No se pudo guardar la disponibilidad.'; errorEl.classList.remove('hidden'); }
             return;
         }
+
         if (fechaInput)      { fechaInput.value      = ''; actualizarPlaceholderVisual(fechaInput); }
         if (horaInicioInput) { horaInicioInput.value = ''; actualizarPlaceholderVisual(horaInicioInput); }
         if (horaFinInput)    { horaFinInput.value     = ''; actualizarPlaceholderVisual(horaFinInput); }
@@ -1064,6 +1158,10 @@ window.onload = () => {
         actualizarReloj();
         setInterval(actualizarReloj, 1000);
         cargarDatosEspecialista();
+
+        // REQ 2: procesar vencimientos de multas al cargar y luego cada 60s
+        _procesarVencimientosMultas();
+        setInterval(_procesarVencimientosMultas, 60000);
 
         const fechaEl = document.getElementById('fecha-actual');
         if (fechaEl) {
