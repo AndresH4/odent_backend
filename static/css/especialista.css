@@ -1,8 +1,9 @@
-/* ===================================================================
-   especialista.css — Stylo Dental Pro v6.3
-   FIX: maquetación de campos de agenda médica (iconos encimados)
-   =================================================================== */
+/* === especialista.css === */
+/* Stylo Dental Pro — v6.3 clean */
 
+/* ===================================================================
+   VARIABLES
+   =================================================================== */
 :root {
     --primary:            #0284c7;
     --primary-dark:       #0369a1;
@@ -22,10 +23,10 @@
 
 body {
     background-color: var(--bg-main);
-    font-family: 'Open Sans', sans-serif;
-    overflow-x: hidden;
-    min-height: 100vh;
-    color: #1e293b;
+    font-family:      'Open Sans', sans-serif;
+    overflow-x:       hidden;
+    min-height:       100vh;
+    color:            #1e293b;
 }
 
 /* ===================================================================
@@ -33,7 +34,7 @@ body {
    =================================================================== */
 .seccion-oculta  { display: none !important; }
 .seccion-visible {
-    display: block !important;
+    display:   block !important;
     animation: slideUp 0.35s cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 #contenedor-stats { display: grid !important; }
@@ -78,28 +79,28 @@ body {
    NAVEGACIÓN
    =================================================================== */
 .nav-btn {
-    width:          100%;
-    display:        flex;
-    align-items:    center;
-    gap:            14px;
-    padding:        16px 18px;
-    border-radius:  18px;
-    transition:     all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    font-weight:    700;
-    font-size:      13px;
-    color:          #94a3b8;
-    border:         none;
-    cursor:         pointer;
-    text-align:     left;
-    position:       relative;
-    overflow:       hidden;
-    margin-bottom:  10px;
-    background:     transparent;
+    width:         100%;
+    display:       flex;
+    align-items:   center;
+    gap:           14px;
+    padding:       16px 18px;
+    border-radius: 18px;
+    transition:    all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-weight:   700;
+    font-size:     13px;
+    color:         #94a3b8;
+    border:        none;
+    cursor:        pointer;
+    text-align:    left;
+    position:      relative;
+    overflow:      hidden;
+    margin-bottom: 10px;
+    background:    transparent;
 }
 .nav-btn:hover {
     background-color: rgba(255,255,255,0.05);
-    color:     var(--accent);
-    transform: translateX(10px);
+    color:            var(--accent);
+    transform:        translateX(10px);
 }
 .nav-btn.active {
     background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
@@ -118,7 +119,7 @@ body {
 }
 
 /* ===================================================================
-   RELOJ
+   RELOJ — AM/PM mismo tamaño que los números
    =================================================================== */
 .clock-widget {
     background:      rgba(15,23,42,0.4);
@@ -130,19 +131,33 @@ body {
     box-shadow:      inset 0 2px 10px rgba(0,0,0,0.3);
 }
 #reloj {
-    font-family:    'JetBrains Mono', monospace;
-    font-size:      1.65rem;
-    letter-spacing: -2px;
-    background:     linear-gradient(to right, #38bdf8, #818cf8, #38bdf8);
+    font-family:     'JetBrains Mono', monospace;
+    font-size:       1.55rem;
+    font-weight:     800;
+    letter-spacing:  -2px;
+    background:      linear-gradient(to right, #38bdf8, #818cf8, #38bdf8);
     background-size: 200% auto;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    font-weight:    800;
-    animation:      textShine 4s linear infinite;
-    text-align:     center;
+    animation:       textShine 4s linear infinite;
+    text-align:      center;
+    display:         flex;
+    align-items:     center;
+    justify-content: center;
+    gap:             6px;
+    white-space:     nowrap;
 }
+#reloj .reloj-hms,
+#reloj .reloj-ampm {
+    font-size:   inherit;
+    font-weight: 800;
+}
+#reloj .reloj-ampm { letter-spacing: 1px; }
 @keyframes textShine { to { background-position: 200% center; } }
 
+/* ===================================================================
+   STATUS DOT
+   =================================================================== */
 .status-dot {
     height:        11px;
     width:         11px;
@@ -196,30 +211,23 @@ body {
 /* ===================================================================
    ESTADOS DE CITA
    =================================================================== */
-.status-pendiente {
-    background-color: #fff7ed; color: #c2410c;
-    padding: 7px 16px; border-radius: 30px; font-size: 10px;
-    font-weight: 800; letter-spacing: 0.8px; border: 1px solid #ffedd5;
-    display: inline-flex; align-items: center; white-space: nowrap;
-}
-.status-atendido {
-    background-color: #f0fdf4; color: #15803d;
-    padding: 7px 16px; border-radius: 30px; font-size: 10px;
-    font-weight: 800; letter-spacing: 0.8px; border: 1px solid #dcfce7;
-    display: inline-flex; align-items: center; white-space: nowrap;
-}
-.status-en-proceso {
-    background-color: #eff6ff; color: #1d4ed8;
-    padding: 7px 16px; border-radius: 30px; font-size: 10px;
-    font-weight: 800; letter-spacing: 0.8px; border: 1px solid #bfdbfe;
-    display: inline-flex; align-items: center; white-space: nowrap;
-}
+.status-pendiente,
+.status-atendido,
+.status-en-proceso,
 .status-cancelada-esp {
-    background-color: #fff1f2; color: #be123c;
-    padding: 7px 16px; border-radius: 30px; font-size: 10px;
-    font-weight: 800; letter-spacing: 0.8px; border: 1px solid #fecdd3;
-    display: inline-flex; align-items: center; white-space: nowrap;
+    padding:      7px 16px;
+    border-radius: 30px;
+    font-size:    10px;
+    font-weight:  800;
+    letter-spacing: 0.8px;
+    display:      inline-flex;
+    align-items:  center;
+    white-space:  nowrap;
 }
+.status-pendiente     { background-color: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; }
+.status-atendido      { background-color: #f0fdf4; color: #15803d; border: 1px solid #dcfce7; }
+.status-en-proceso    { background-color: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.status-cancelada-esp { background-color: #fff1f2; color: #be123c; border: 1px solid #fecdd3; }
 
 /* ===================================================================
    MODALES
@@ -255,11 +263,9 @@ body {
     box-shadow:    0 40px 80px -20px rgba(0,0,0,0.4);
     border:        1px solid rgba(255,255,255,0.5);
 }
-
 .modal-header-dark {
     background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
 }
-
 .avatar-cita-modal {
     background: linear-gradient(135deg, var(--avatar-sobrio-bg) 0%, var(--avatar-sobrio-bg-2) 100%);
     color:      #ffffff;
@@ -290,11 +296,9 @@ body {
 }
 
 /* ===================================================================
-   SMART PICKER WRAPPER — FIX CRÍTICO DE MAQUETACIÓN
-   Problema: los iconos nativos del navegador (calendario/reloj) y el
-   ícono FontAwesome se superponían creando el error visual de la imagen.
-   Solución: eliminar el ícono FA decorativo, ocultar los controles
-   nativos del input y controlar toda la apariencia desde el wrapper.
+   SMART PICKER WRAPPER
+   Oculta iconos nativos del navegador; ícono FA posicionado
+   absolutamente a la derecha, sin solapamiento.
    =================================================================== */
 .smart-picker-wrapper {
     position:      relative;
@@ -305,91 +309,69 @@ body {
     border:        2px solid #e2e8f0;
     background:    #f8fafc;
     transition:    box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
-    overflow:      hidden;          /* evita que el input nativo sobresalga */
-    height:        58px;            /* altura fija = sin colapso */
+    overflow:      hidden;
+    height:        58px;
 }
-
-/* El input ocupa todo el espacio menos el padding derecho del ícono */
 .smart-picker-wrapper .input-smart-picker {
-    flex:            1;
-    width:           100%;
-    height:          100%;
-    border:          none !important;
-    background:      transparent !important;
-    box-shadow:      none !important;
-    padding:         0 52px 0 20px;  /* 52px a la derecha = espacio para el ícono FA */
-    margin:          0;
-    border-radius:   0;
-    cursor:          pointer;
-    font-size:       14px;
-    font-weight:     600;
-    color:           #1e293b;
-    outline:         none;
-
-    /* Ocultar los iconos nativos del navegador (calendario, reloj) */
+    flex:        1;
+    width:       100%;
+    height:      100%;
+    border:      none !important;
+    background:  transparent !important;
+    box-shadow:  none !important;
+    padding:     0 52px 0 20px;
+    margin:      0;
+    border-radius: 0;
+    cursor:      pointer;
+    font-size:   14px;
+    font-weight: 600;
+    color:       #1e293b;
+    outline:     none;
     -webkit-appearance: none;
     -moz-appearance:    none;
     appearance:         none;
 }
-
-/* Webkit: ocultar botón de calendario nativo */
 .smart-picker-wrapper .input-smart-picker::-webkit-calendar-picker-indicator {
-    display:    none !important;
-    opacity:    0;
-    width:      0;
-    height:     0;
-    position:   absolute;
+    display:        none !important;
+    opacity:        0;
+    width:          0;
+    height:         0;
+    position:       absolute;
     pointer-events: none;
 }
-
-/* Firefox: ocultar botón de calendario nativo */
-.smart-picker-wrapper .input-smart-picker::-moz-calendar-picker-indicator {
-    display: none !important;
-}
-
-/* Ocultar controles de tiempo nativos en todos los navegadores */
+.smart-picker-wrapper .input-smart-picker::-moz-calendar-picker-indicator { display: none !important; }
 .smart-picker-wrapper .input-smart-picker[type="time"]::-webkit-inner-spin-button,
 .smart-picker-wrapper .input-smart-picker[type="time"]::-webkit-clear-button {
-    display: none;
+    display:            none;
     -webkit-appearance: none;
 }
-
-.smart-picker-wrapper .input-smart-picker:focus {
-    transform: none; /* evitar que el scale del .input-consulta rompa el layout */
-}
-
+.smart-picker-wrapper .input-smart-picker:focus { transform: none; }
 .smart-picker-wrapper:focus-within {
     border-color: var(--primary);
     background:   #ffffff;
     box-shadow:   0 0 0 6px rgba(2,132,199,0.12);
 }
-
-/* Ícono FA: posicionado absolutamente a la derecha, sobre el input */
 .smart-picker-icon {
-    position:       absolute;
-    right:          18px;
-    top:            50%;
-    transform:      translateY(-50%);
-    color:          #94a3b8;
-    font-size:      16px;
-    pointer-events: none;       /* el clic pasa al wrapper y llega al input */
-    z-index:        2;
-    transition:     color 0.2s ease;
-    line-height:    1;
-    display:        flex;
-    align-items:    center;
+    position:        absolute;
+    right:           18px;
+    top:             50%;
+    transform:       translateY(-50%);
+    color:           #94a3b8;
+    font-size:       16px;
+    pointer-events:  none;
+    z-index:         2;
+    transition:      color 0.2s ease;
+    display:         flex;
+    align-items:     center;
     justify-content: center;
-    width:          20px;
-    height:         20px;
+    width:           20px;
+    height:          20px;
 }
-
 .smart-picker-wrapper:focus-within .smart-picker-icon { color: var(--primary); }
-
-/* Placeholder personalizado: solo visible cuando el input está vacío */
 .smart-picker-placeholder {
     position:       absolute;
     left:           20px;
-    right:          52px;           /* no solapar el ícono */
+    right:          52px;
     top:            0;
     bottom:         0;
     display:        flex;
@@ -401,16 +383,12 @@ body {
     font-size:      13.5px;
     text-transform: uppercase;
     letter-spacing: 0.3px;
-    pointer-events: none;   /* nunca interfiere con clics */
+    pointer-events: none;
     z-index:        1;
     transition:     color 0.2s ease;
     user-select:    none;
 }
-
 .smart-picker-wrapper:focus-within .smart-picker-placeholder { color: #64748b; }
-
-/* Cuando el input tiene valor, el placeholder no debe superponerse.
-   Usamos la clase .has-value añadida por JS (ver especialista.js) */
 .smart-picker-wrapper .input-smart-picker.has-value + .smart-picker-placeholder,
 .smart-picker-wrapper .input-smart-picker:not(:placeholder-shown) + .smart-picker-placeholder {
     display: none;
@@ -419,10 +397,7 @@ body {
 /* ===================================================================
    WRAPPER CONTRASEÑA CON ÍCONO OJO
    =================================================================== */
-.pass-input-wrapper {
-    position: relative;
-    width:    100%;
-}
+.pass-input-wrapper { position: relative; width: 100%; }
 .pass-input-wrapper .input-consulta { padding-right: 56px; }
 .pass-toggle-btn {
     position:        absolute;
@@ -444,7 +419,7 @@ body {
 .pass-toggle-btn:hover { color: var(--primary); }
 
 /* ===================================================================
-   LISTA DE REQUISITOS DE CONTRASEÑA
+   REQUISITOS DE CONTRASEÑA
    =================================================================== */
 .req-item {
     display:     flex;
@@ -466,26 +441,26 @@ body {
     flex-shrink:     0;
     transition:      background-color 0.25s ease, color 0.25s ease;
 }
-.req-item.req-pending          { color: #94a3b8; }
+.req-item.req-pending           { color: #94a3b8; }
 .req-item.req-pending .req-icon { background-color: #e2e8f0; color: #64748b; }
-.req-item.req-ok               { color: #15803d; }
-.req-item.req-ok .req-icon     { background-color: #dcfce7; color: #15803d; }
-.req-item.req-error            { color: #dc2626; }
-.req-item.req-error .req-icon  { background-color: #fee2e2; color: #dc2626; }
+.req-item.req-ok                { color: #15803d; }
+.req-item.req-ok .req-icon      { background-color: #dcfce7; color: #15803d; }
+.req-item.req-error             { color: #dc2626; }
+.req-item.req-error .req-icon   { background-color: #fee2e2; color: #dc2626; }
 
 /* ===================================================================
    TABLAS
    =================================================================== */
 table {
-    table-layout: fixed;
-    width:        100%;
+    table-layout:    fixed;
+    width:           100%;
     border-collapse: collapse;
 }
 th, td {
-    box-sizing:  border-box;
-    overflow:    hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    box-sizing:     border-box;
+    overflow:       hidden;
+    text-overflow:  ellipsis;
+    white-space:    nowrap;
     vertical-align: middle;
 }
 thead th {
@@ -499,24 +474,19 @@ thead th {
     background-color: rgba(248,250,252,0.8);
 }
 tbody td {
-    padding:    24px 32px;
-    font-size:  13px;
-    color:      #334155;
+    padding:   24px 32px;
+    font-size: 13px;
+    color:     #334155;
 }
 thead th:last-child,
-tbody td:last-child {
-    text-align: right;
-}
+tbody td:last-child { text-align: right; }
 thead th:last-child > *,
-tbody td:last-child > * {
-    display:        inline-flex;
-    justify-content: flex-end;
-}
+tbody td:last-child > * { display: inline-flex; justify-content: flex-end; }
 tr { transition: background-color 0.2s ease; }
 tr:hover td { background-color: rgba(2,132,199,0.02); }
 
 /* ===================================================================
-   BADGE DE NOTIFICACIÓN (NUEVO — encuesta pendiente)
+   BADGE DE NOTIFICACIÓN
    =================================================================== */
 .badge-encuesta {
     display:         inline-flex;
@@ -542,7 +512,7 @@ tr:hover td { background-color: rgba(2,132,199,0.02); }
    MODAL REPORTE CLÍNICO
    =================================================================== */
 .reporte-clinico-body {
-    padding: 32px;
+    padding:    32px;
     background: #f8fafc;
 }
 .reporte-clinico-card {
@@ -554,7 +524,6 @@ tr:hover td { background-color: rgba(2,132,199,0.02); }
     margin-bottom: 20px;
 }
 .reporte-clinico-card:last-child { margin-bottom: 0; }
-
 .reporte-section-label {
     display:        flex;
     align-items:    center;
@@ -565,11 +534,10 @@ tr:hover td { background-color: rgba(2,132,199,0.02); }
     letter-spacing: 0.35em;
     margin-bottom:  16px;
 }
-.reporte-section-label.sky    { color: #0284c7; }
-.reporte-section-label.amber  { color: #d97706; }
-.reporte-section-label.emerald{ color: #059669; }
-.reporte-section-label.slate  { color: #475569; }
-
+.reporte-section-label.sky     { color: #0284c7; }
+.reporte-section-label.amber   { color: #d97706; }
+.reporte-section-label.emerald { color: #059669; }
+.reporte-section-label.slate   { color: #475569; }
 .reporte-dato-mini {
     font-size:      9px;
     font-weight:    900;
@@ -585,7 +553,6 @@ tr:hover td { background-color: rgba(2,132,199,0.02); }
     line-height: 1.3;
 }
 .reporte-dato-valor.muted { color: #64748b; font-weight: 600; }
-
 .report-value-readonly {
     color:          #0f172a;
     font-weight:    600;
@@ -607,10 +574,9 @@ tr:hover td { background-color: rgba(2,132,199,0.02); }
     font-style:  italic;
     font-weight: 500;
 }
-#rep-prescripcion.report-value-readonly { border-left-color: #10b981; }
-#rep-evolucion.report-value-readonly    { border-left-color: #f59e0b; }
-
+#rep-prescripcion.report-value-readonly,
 #rep-pac-prescripcion.report-value-readonly { border-left-color: #10b981; }
+#rep-evolucion.report-value-readonly,
 #rep-pac-evolucion.report-value-readonly    { border-left-color: #f59e0b; }
 
 /* ===================================================================
@@ -629,7 +595,6 @@ tr:hover td { background-color: rgba(2,132,199,0.02); }
     box-shadow: 0 10px 20px rgba(0,0,0,0.1);
 }
 .btn-action:active { transform: scale(0.95); }
-
 .btn-empezar-cita {
     background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
     color:      #ffffff;
@@ -660,7 +625,7 @@ tr:hover td { background-color: rgba(2,132,199,0.02); }
 main { scroll-behavior: smooth; }
 
 /* ===================================================================
-   AGENDA — no-datos hidden por defecto
+   AGENDA — placeholders ocultos por defecto
    =================================================================== */
 #no-datos-inicio,
 #no-datos-agenda,

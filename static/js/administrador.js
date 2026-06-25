@@ -1,4 +1,4 @@
-// Archivo: static/js/administrador.js
+// === administrador.js ===
 'use strict';
 
 // ─── Variables de módulo ─────────────────────────────────────────────────────
@@ -16,8 +16,13 @@ function setText(id, val) {
 
 function mostrarToast(msg) {
     const t = document.getElementById('toast');
-    if (t) { t.textContent = msg; t.classList.add('visible'); setTimeout(() => t.classList.remove('visible'), 3000); }
-    else alert(msg);
+    if (t) {
+        t.textContent = msg;
+        t.classList.add('visible');
+        setTimeout(() => t.classList.remove('visible'), 3000);
+    } else {
+        alert(msg);
+    }
 }
 
 // ─── Sesión ───────────────────────────────────────────────────────────────────
@@ -47,23 +52,16 @@ async function cargarSesion() {
     const numDoc   = u.NumeroDocumento || '';
     const docLabel = tipoDoc ? `${tipoDoc}: ${numDoc}` : (numDoc || '—');
 
-    adminData = {
-        id:       u.Usuario_ID,
-        nombre,
-        email:    u.Correo    || '',
-        tel:      u.Telefono  || '',
-        inicial,
-        tipoDoc,
-        numDoc,
-        docLabel,
-    };
+    adminData = { id: u.Usuario_ID, nombre, email: u.Correo || '', tel: u.Telefono || '', inicial, tipoDoc, numDoc, docLabel };
 
     setText('header-name', nombre);
+
     const trigIni = document.getElementById('trigger-inicial');
     if (trigIni) trigIni.textContent = inicial;
 
     const dropIni = document.getElementById('drop-inicial');
     if (dropIni) dropIni.textContent = inicial;
+
     setText('drop-name',      nombre.toUpperCase());
     setText('drop-email',     u.Correo    || '—');
     setText('drop-tel',       u.Telefono  || '—');
@@ -121,7 +119,7 @@ function _extraerId(u, ...claves) {
     return null;
 }
 
-// ─── ESPECIALISTAS ────────────────────────────────────────────────────────────
+// ─── Especialistas y Pacientes ────────────────────────────────────────────────
 async function renderUsuarios(rolNombre) {
     _vistaActualLista = rolNombre;
 
@@ -138,8 +136,7 @@ async function renderUsuarios(rolNombre) {
 
             const especialistas = Array.isArray(dataEsp) ? dataEsp : [];
             const usuarios      = Array.isArray(dataUsr) ? dataUsr : [];
-
-            const usrEsp = usuarios.filter(u => u.Rol_ID === 2);
+            const usrEsp        = usuarios.filter(u => u.Rol_ID === 2);
 
             const mapaEspecialidad = {};
             especialistas.forEach(e => {
@@ -159,8 +156,7 @@ async function renderUsuarios(rolNombre) {
         } else if (rolNombre === 'Paciente') {
             const res      = await fetch('/api/usuarios');
             const data     = await res.json();
-            const usuarios = Array.isArray(data) ? data : [];
-            const usrPac   = usuarios.filter(u => u.Rol_ID === 3);
+            const usrPac   = (Array.isArray(data) ? data : []).filter(u => u.Rol_ID === 3);
 
             filas = usrPac.map(u => ({
                 Usuario_ID:     u.Usuario_ID,
@@ -180,14 +176,13 @@ async function renderUsuarios(rolNombre) {
     }
 }
 
-// ─── TODOS LOS USUARIOS ───────────────────────────────────────────────────────
+// ─── Todos los usuarios ───────────────────────────────────────────────────────
 async function renderTodosUsuarios() {
     _vistaActualLista = 'Todos';
 
     try {
-        const res      = await fetch('/api/usuarios');
-        const data     = await res.json();
-        const usuarios = Array.isArray(data) ? data : [];
+        const res  = await fetch('/api/usuarios');
+        const data = await res.json();
 
         let tiposDoc = [];
         try {
@@ -198,14 +193,14 @@ async function renderTodosUsuarios() {
         const mapaDoc = {};
         tiposDoc.forEach(t => { mapaDoc[t.TipoDoc_ID] = t.Nombre_Tipo_Documento || ''; });
 
-        const filas = usuarios.map(u => ({
-            Usuario_ID:       u.Usuario_ID,
-            NombreCompleto:   `${u.Nombres || ''} ${u.Apellidos || ''}`.trim(),
-            NumeroDocumento:  u.NumeroDocumento || '—',
-            TipoDoc:          mapaDoc[u.TipoDoc_ID] || '—',
-            Telefono:         u.Telefono || '—',
-            Correo:           u.Correo   || '—',
-            Estado_ID:        u.Estado_ID,
+        const filas = (Array.isArray(data) ? data : []).map(u => ({
+            Usuario_ID:      u.Usuario_ID,
+            NombreCompleto:  `${u.Nombres || ''} ${u.Apellidos || ''}`.trim(),
+            NumeroDocumento: u.NumeroDocumento || '—',
+            TipoDoc:         mapaDoc[u.TipoDoc_ID] || '—',
+            Telefono:        u.Telefono || '—',
+            Correo:          u.Correo   || '—',
+            Estado_ID:       u.Estado_ID,
         }));
 
         _datosListaCache = filas;
@@ -228,12 +223,12 @@ function _mostrarListaDinamica(tipo, filas, conToggle) {
     if (!body || !cont || !tit) return;
 
     if (buscCont)  { buscCont.classList.remove('seccion-oculta'); buscCont.classList.add('seccion-visible'); }
-    if (buscInput)   buscInput.value = '';
+    if (buscInput) buscInput.value = '';
 
     cont.classList.remove('seccion-oculta');
     cont.classList.add('seccion-visible');
 
-    const titulos = { 'Especialista': 'ESPECIALISTAS', 'Paciente': 'PACIENTES', 'Todos': 'TOTAL REGISTROS' };
+    const titulos = { Especialista: 'ESPECIALISTAS', Paciente: 'PACIENTES', Todos: 'TOTAL REGISTROS' };
     tit.textContent = titulos[tipo] || tipo.toUpperCase();
 
     if (head) {
@@ -268,21 +263,18 @@ function _mostrarListaDinamica(tipo, filas, conToggle) {
 }
 
 // ─── Pintar filas ─────────────────────────────────────────────────────────────
-function _renderFilas(filas, tipo, conToggle) {
+function _renderFilas(filas, tipo) {
     const body = document.getElementById('body-lista-dinamica');
     const noD  = document.getElementById('no-datos-lista');
     if (!body) return;
 
     body.innerHTML = '';
 
-    if (filas.length === 0) {
-        noD?.classList.remove('hidden');
-        return;
-    }
+    if (filas.length === 0) { noD?.classList.remove('hidden'); return; }
     noD?.classList.add('hidden');
 
     filas.forEach(u => {
-        const tr = document.createElement('tr');
+        const tr          = document.createElement('tr');
         tr.className      = 'hover:bg-sky-50/50 transition-all';
         tr.dataset.nombre = (u.NombreCompleto || '').toUpperCase();
 
@@ -292,9 +284,7 @@ function _renderFilas(filas, tipo, conToggle) {
             : '<span class="text-[9px] font-bold uppercase px-2 py-1 rounded-full bg-red-100 text-red-700">Inactivo</span>';
 
         if (tipo === 'Especialista') {
-            const idEsp = (u.Especialista_ID === null || u.Especialista_ID === undefined)
-                ? '—'
-                : `#${u.Especialista_ID}`;
+            const idEsp = u.Especialista_ID == null ? '—' : `#${u.Especialista_ID}`;
             tr.innerHTML = `
                 <td class="p-5 font-black text-slate-500 text-[11px]">${idEsp}</td>
                 <td class="p-5 font-black text-slate-800 text-[11px] uppercase">${u.NombreCompleto}</td>
@@ -304,9 +294,7 @@ function _renderFilas(filas, tipo, conToggle) {
                 <td class="p-5">${badgeEstado}</td>`;
 
         } else if (tipo === 'Paciente') {
-            const idPac = (u.Paciente_ID === null || u.Paciente_ID === undefined)
-                ? '—'
-                : `#${u.Paciente_ID}`;
+            const idPac = u.Paciente_ID == null ? '—' : `#${u.Paciente_ID}`;
             tr.innerHTML = `
                 <td class="p-5 font-black text-slate-500 text-[11px]">${idPac}</td>
                 <td class="p-5 font-black text-slate-800 text-[11px] uppercase">${u.NombreCompleto}</td>
@@ -354,7 +342,7 @@ async function toggleEstadoUsuario(usuarioId, estadoActual, btnEl) {
         if (data.ok) {
             btnEl.setAttribute('onclick', `toggleEstadoUsuario(${usuarioId}, ${nuevoEstado}, this)`);
             btnEl.textContent = nuevoLabel;
-            btnEl.className = `text-[9px] font-black uppercase px-3 py-1.5 rounded-full border transition-all
+            btnEl.className   = `text-[9px] font-black uppercase px-3 py-1.5 rounded-full border transition-all
                 ${nuevoEstado === 1
                     ? 'bg-green-100 text-green-700 border-green-200 hover:bg-green-200'
                     : 'bg-red-100 text-red-700 border-red-200 hover:bg-red-200'}`;
@@ -374,16 +362,15 @@ async function toggleEstadoUsuario(usuarioId, estadoActual, btnEl) {
 function filtrarListaDinamica() {
     const filtro = (document.getElementById('busqueda-lista-dinamica')?.value || '').toUpperCase();
     document.querySelectorAll('#body-lista-dinamica tr').forEach(fila => {
-        const nombre = (fila.dataset.nombre || '').toUpperCase();
-        fila.style.display = nombre.includes(filtro) ? '' : 'none';
+        fila.style.display = (fila.dataset.nombre || '').toUpperCase().includes(filtro) ? '' : 'none';
     });
 }
 
 function ocultarListaRapida() {
     const cont     = document.getElementById('container-lista-rapida');
     const buscCont = document.getElementById('container-buscador-lista');
-    if (cont)     { cont.classList.remove('seccion-visible');     cont.classList.add('seccion-oculta'); }
-    if (buscCont) { buscCont.classList.remove('seccion-visible'); buscCont.classList.add('seccion-oculta'); }
+    cont?.classList.remove('seccion-visible');    cont?.classList.add('seccion-oculta');
+    buscCont?.classList.remove('seccion-visible'); buscCont?.classList.add('seccion-oculta');
     _vistaActualLista = '';
     _datosListaCache  = [];
 }
@@ -417,18 +404,17 @@ async function renderCitas() {
             </tr>`;
 
         const citas = Array.isArray(data) ? data : [];
-
         if (citas.length === 0) { noD?.classList.remove('hidden'); body.innerHTML = ''; return; }
         noD?.classList.add('hidden');
 
         body.innerHTML = citas.map(c => {
             const estado = c.EstadoAgenda || '—';
+            const el     = estado.toLowerCase();
             let cls = 'bg-slate-100 text-slate-600';
-            const el = estado.toLowerCase();
-            if (el.includes('disponible') || el.includes('pendiente'))                           cls = 'bg-green-100 text-green-700';
-            else if (el.includes('ocup') || el.includes('proceso') || el.includes('atend'))     cls = 'bg-sky-100 text-sky-700';
-            else if (el.includes('cancel') || el.includes('multa'))                              cls = 'bg-red-100 text-red-700';
-            else if (el.includes('cumplid') || el.includes('finaliz'))                           cls = 'bg-emerald-100 text-emerald-700';
+            if      (el.includes('disponible') || el.includes('pendiente'))                       cls = 'bg-green-100 text-green-700';
+            else if (el.includes('ocup') || el.includes('proceso') || el.includes('atend'))       cls = 'bg-sky-100 text-sky-700';
+            else if (el.includes('cancel') || el.includes('multa'))                               cls = 'bg-red-100 text-red-700';
+            else if (el.includes('cumplid') || el.includes('finaliz'))                            cls = 'bg-emerald-100 text-emerald-700';
 
             return `
             <tr class="hover:bg-slate-50 transition-colors">
@@ -449,21 +435,20 @@ async function renderCitas() {
     }
 }
 
-// ─── MULTAS — render completo ─────────────────────────────────────────────────
+// ─── Multas ───────────────────────────────────────────────────────────────────
 async function renderMultas() {
     try {
         const res    = await fetch('/api/multas');
         const json   = await res.json();
         const multas = json.ok ? json.data : (Array.isArray(json) ? json : []);
 
-        const head = document.getElementById('tabla-head');
-        const body = document.getElementById('tabla-body');
-        const noD  = document.getElementById('no-datos');
+        const head     = document.getElementById('tabla-head');
+        const body     = document.getElementById('tabla-body');
+        const noD      = document.getElementById('no-datos');
         const filtroEl = document.getElementById('busqueda-multas');
         if (!head || !body) return;
 
-        // Mostrar buscador de multas
-        if (filtroEl) filtroEl.closest('.filtro-multas-wrapper')?.classList.remove('hidden');
+        filtroEl?.closest('.filtro-multas-wrapper')?.classList.remove('hidden');
 
         head.innerHTML = `
             <tr>
@@ -476,11 +461,7 @@ async function renderMultas() {
                 <th class="p-5 text-center">Acción</th>
             </tr>`;
 
-        if (multas.length === 0) {
-            noD?.classList.remove('hidden');
-            body.innerHTML = '';
-            return;
-        }
+        if (multas.length === 0) { noD?.classList.remove('hidden'); body.innerHTML = ''; return; }
         noD?.classList.add('hidden');
 
         body.innerHTML = multas.map(m => {
@@ -514,8 +495,7 @@ async function renderMultas() {
                                class="inline-flex items-center gap-2 text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-xl font-black hover:bg-emerald-100 transition-all uppercase active:scale-95">
                                <i class="fas fa-check"></i> Marcar Pagada
                            </button>`
-                        : '<span class="text-slate-300 text-[10px] font-bold italic">— Pagada —</span>'
-                    }
+                        : '<span class="text-slate-300 text-[10px] font-bold italic">— Pagada —</span>'}
                 </td>
             </tr>`;
         }).join('');
@@ -529,8 +509,7 @@ async function renderMultas() {
 function filtrarTablaMultas() {
     const filtro = (document.getElementById('busqueda-multas')?.value || '').toUpperCase();
     document.querySelectorAll('#tabla-body tr').forEach(fila => {
-        const nombre = (fila.dataset.nombre || '').toUpperCase();
-        fila.style.display = nombre.includes(filtro) ? '' : 'none';
+        fila.style.display = (fila.dataset.nombre || '').toUpperCase().includes(filtro) ? '' : 'none';
     });
 }
 
@@ -539,14 +518,14 @@ async function pagarMulta(multaId, btnEl) {
     try {
         const res  = await fetch(`/api/multas/${multaId}/pagar`, { method: 'PUT' });
         const data = await res.json();
+
         if (data.ok) {
             mostrarToast(`Multa #${multaId} marcada como Pagada.`);
-            // Actualizar fila en DOM sin recargar toda la tabla
             const tr = btnEl.closest('tr');
             if (tr) {
-                const badgeTd = tr.querySelector('td:nth-child(6)');
+                const badgeTd  = tr.querySelector('td:nth-child(6)');
                 const accionTd = tr.querySelector('td:nth-child(7)');
-                if (badgeTd) badgeTd.innerHTML = `
+                if (badgeTd)  badgeTd.innerHTML  = `
                     <span class="inline-flex items-center gap-1.5 text-[9px] font-black uppercase px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
                         <i class="fas fa-circle-check text-[10px]"></i> Pagada
                     </span>`;
@@ -569,7 +548,6 @@ function cambiarSeccion(sec) {
     });
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
 
-    // Ocultar buscador de multas al cambiar de sección
     const filtroWrapper = document.getElementById('filtro-multas-wrapper');
     if (filtroWrapper) filtroWrapper.classList.add('hidden');
 
@@ -578,12 +556,7 @@ function cambiarSeccion(sec) {
     if (secEl) { secEl.classList.remove('seccion-oculta'); secEl.classList.add('seccion-visible'); }
     if (btnEl) btnEl.classList.add('active');
 
-    const titles = {
-        dashboard: 'Administrador',
-        citas:     'Historial de Citas',
-        multas:    'Gestión de Multas',
-        config:    'Mi Perfil'
-    };
+    const titles = { dashboard: 'Administrador', citas: 'Historial de Citas', multas: 'Gestión de Multas', config: 'Mi Perfil' };
     const mainTitle = document.getElementById('main-title');
     if (mainTitle) mainTitle.textContent = titles[sec] || 'Administrador';
 
@@ -594,8 +567,7 @@ function cambiarSeccion(sec) {
 
 // ─── Dropdown de perfil ───────────────────────────────────────────────────────
 function toggleProfileDropdown() {
-    const dp = document.getElementById('profile-dropdown');
-    if (dp) dp.classList.toggle('show');
+    document.getElementById('profile-dropdown')?.classList.toggle('show');
 }
 
 window.addEventListener('click', e => {
@@ -645,10 +617,10 @@ window.togglePassVisibility = function (inputId, btn) {
     const icon = btn.querySelector('i');
     if (input.type === 'password') {
         input.type = 'text';
-        if (icon) { icon.classList.remove('fa-eye'); icon.classList.add('fa-eye-slash'); }
+        icon?.classList.replace('fa-eye', 'fa-eye-slash');
     } else {
         input.type = 'password';
-        if (icon) { icon.classList.remove('fa-eye-slash'); icon.classList.add('fa-eye'); }
+        icon?.classList.replace('fa-eye-slash', 'fa-eye');
     }
 };
 
@@ -736,12 +708,12 @@ window.validarPasswordActual = function () {
 
 // ─── Guardar perfil completo ──────────────────────────────────────────────────
 window.guardarPerfilCompleto = async function () {
-    const nombre    = (document.getElementById('edit-nombre')?.value || '').trim();
-    const email     = (document.getElementById('edit-email')?.value  || '').trim();
-    const tel       = (document.getElementById('edit-tel')?.value    || '').trim();
-    const passActual = document.getElementById('pass-actual')?.value    || '';
-    const passNueva  = document.getElementById('conf-pass-nueva')?.value || '';
-    const passConf   = document.getElementById('conf-pass-confirmar')?.value || '';
+    const nombre     = (document.getElementById('edit-nombre')?.value || '').trim();
+    const email      = (document.getElementById('edit-email')?.value  || '').trim();
+    const tel        = (document.getElementById('edit-tel')?.value    || '').trim();
+    const passActual = document.getElementById('pass-actual')?.value           || '';
+    const passNueva  = document.getElementById('conf-pass-nueva')?.value       || '';
+    const passConf   = document.getElementById('conf-pass-confirmar')?.value   || '';
     const errNueva   = document.getElementById('error-pass-nueva');
     const step2      = document.getElementById('pass-step2');
 
@@ -812,10 +784,7 @@ window.guardarPerfilCompleto = async function () {
         const u      = JSON.parse(raw);
         const partes = (nombre || '').split(/\s+/);
         const mitad  = Math.ceil(partes.length / 2);
-        if (nombre) {
-            u.Nombres   = partes.slice(0, mitad).join(' ');
-            u.Apellidos = partes.slice(mitad).join(' ');
-        }
+        if (nombre) { u.Nombres = partes.slice(0, mitad).join(' '); u.Apellidos = partes.slice(mitad).join(' '); }
         if (email)  u.Correo   = email;
         if (tel)    u.Telefono = tel;
         sessionStorage.setItem('odent_usuario', JSON.stringify(u));
@@ -850,6 +819,8 @@ window.ejecutarAccionSimple = function () {
     }
     window.cerrarModalSimple();
 };
+
+const cerrarSesion = () => window.mostrarConfirmacionSimple('¿Quiere salir de la sesión?', 'salir');
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
