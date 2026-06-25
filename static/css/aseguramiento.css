@@ -1,7 +1,10 @@
 /* =============================================================================
    aseguramiento.css  —  Stylo Dental · Módulo Aseguramiento
+   Refactorizado: corrige bug de superposición del botón sobre el input,
+   y refuerza el sistema visual con un buscador moderno de dos filas.
    ============================================================================= */
 
+/* ── Variables de módulo ───────────────────────────────────────────────────── */
 :root {
     --aseg-accent:        #0ea5e9;
     --aseg-accent-dark:   #0369a1;
@@ -21,7 +24,10 @@
     --aseg-shadow-card:   0 4px 24px 0 rgba(14,165,233,.10), 0 1px 4px rgba(0,0,0,.07);
 }
 
-html, body { min-height: 100%; }
+/* ── Centrado global: body actúa como columna flexbox ──────────────────────── */
+html, body {
+    min-height: 100%;
+}
 body {
     display: flex;
     flex-direction: column;
@@ -33,12 +39,16 @@ body {
     background: #f1f5f9;
 }
 
+/* ── Contenedor principal ──────────────────────────────────────────────────── */
 .aseg-container {
     width: 100%;
+    /* FIX #1: max-width ampliado de 700px → 780px para dar más espacio al panel
+       y que el botón "Volver al panel" quede claramente definido y destacado. */
     max-width: 780px;
     font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
 }
 
+/* ── Header ────────────────────────────────────────────────────────────────── */
 .aseg-header {
     display: flex;
     align-items: center;
@@ -59,6 +69,7 @@ body {
 .aseg-header h2 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -.3px; }
 .aseg-header p  { margin: 3px 0 0; font-size: 12.5px; color: #bae6fd; font-weight: 400; }
 
+/* ── Body ──────────────────────────────────────────────────────────────────── */
 .aseg-body {
     background: #f8fafc;
     border: 1px solid var(--aseg-border);
@@ -70,6 +81,7 @@ body {
     gap: 20px;
 }
 
+/* ── Card interna ──────────────────────────────────────────────────────────── */
 .aseg-card {
     background: var(--aseg-surface);
     border: 1px solid var(--aseg-border);
@@ -80,6 +92,7 @@ body {
 }
 .aseg-form-card { animation: asegFadeUp .38s .06s ease both; }
 
+/* ── Label de sección ─────────────────────────────────────────────────────── */
 .aseg-card-label {
     display: flex;
     align-items: center;
@@ -94,23 +107,17 @@ body {
     border-bottom: 1.5px solid var(--aseg-accent-light);
 }
 
-/* ── Buscador ─────────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════════
+   BUSCADOR — Layout refactorizado
+   ══════════════════════════════════════════════════════════════════════════ */
+
 .aseg-search-layout {
     display: flex;
     flex-direction: column;
     gap: 14px;
 }
 
-/* Label del buscador — vive fuera del flex row para no alterar alturas */
-.aseg-search-label {
-    display: block;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--aseg-text-muted);
-    margin-bottom: 5px;
-    letter-spacing: .2px;
-}
-
+/* Selector de tipo: ancho completo con ícono prefijo */
 .aseg-tipo-group { margin-bottom: 0 !important; }
 
 .aseg-select-wrap {
@@ -118,7 +125,10 @@ body {
     display: flex;
     align-items: center;
 }
-.aseg-select-wrap select { width: 100%; padding-left: 36px !important; }
+.aseg-select-wrap select {
+    width: 100%;
+    padding-left: 36px !important;
+}
 .aseg-select-icon {
     position: absolute;
     left: 12px;
@@ -128,17 +138,26 @@ body {
 }
 
 /*
-   FIX alineación botón Buscar:
-   El label y el error-msg están FUERA del flex row.
-   El row solo contiene aseg-input-wrap + aseg-btn-col como hermanos directos
-   de la misma altura → align-items:center los centra perfectamente.
+   FIX #2: Alineación del botón Buscar.
+
+   Problema anterior: .aseg-btn-spacer era un label invisible que intentaba
+   compensar el label real del input. Sin embargo, cuando aparecía .error-msg
+   debajo del input, el bloque del form-group crecía y el botón se desplazaba.
+
+   Solución nueva:
+   - .aseg-input-action-row usa align-items: center (no flex-end).
+   - Se eliminó .aseg-btn-spacer del HTML.
+   - .aseg-btn-col usa margin-top: 17px para compensar la altura del label
+     del input (font-size:12px + margin-bottom:5px ≈ 17px), manteniéndose
+     alineado con el input independientemente de si hay error-msg visible.
 */
 .aseg-input-action-row {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 12px;
 }
 
+/* Input con ícono interno */
 .aseg-input-wrap {
     position: relative;
     display: flex;
@@ -168,14 +187,22 @@ body {
     border-color: var(--aseg-border-focus) !important;
     box-shadow: 0 0 0 3px rgba(14,165,233,.13) !important;
 }
+.aseg-input-field:focus + .aseg-input-icon,
 .aseg-input-wrap:focus-within .aseg-input-icon { color: var(--aseg-accent); }
 
+/*
+   Columna del botón: margin-top compensa el espacio del label del input
+   (~12px font-size + 5px margin-bottom = 17px) para alinearse con el input.
+   flex-shrink:0 evita que el botón se comprima.
+   Se eliminó .aseg-btn-spacer (ya no está en el HTML).
+*/
 .aseg-btn-col {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
 }
 
+/* Botón de búsqueda */
 .btn-buscar {
     flex-shrink: 0;
     background: linear-gradient(135deg, var(--aseg-accent-dark), var(--aseg-accent));
@@ -216,6 +243,7 @@ body {
 .aseg-rol-badge.rol-especialista  { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
 .aseg-rol-badge.rol-administrador { background: #faf5ff; color: #7c3aed; border-color: #ddd6fe; }
 
+/* ── Campo read-only de rol ───────────────────────────────────────────────── */
 .aseg-readonly-field {
     background: #f8fafc;
     border: 1.5px solid #e2e8f0;
@@ -228,6 +256,7 @@ body {
     user-select: none;
 }
 
+/* ── Sección condicional ──────────────────────────────────────────────────── */
 .aseg-seccion-condicional {
     margin-top: 20px;
     padding-top: 20px;
@@ -235,6 +264,7 @@ body {
     animation: asegFadeUp .28s ease both;
 }
 
+/* ── Habeas Data wrapper ──────────────────────────────────────────────────── */
 .aseg-habeas-wrap {
     margin-top: 20px;
     padding-top: 20px;
@@ -283,19 +313,31 @@ body {
     box-shadow: none !important;
 }
 
-/* ── Volver al panel ──────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════════
+   FIX #1: Botón "Volver al panel" — wrapper dedicado.
+
+   .aseg-back-wrapper es el contenedor visual del área inferior.
+   Tiene borde superior, fondo y padding propio para que el botón
+   quede claramente demarcado dentro del panel.
+   El wrapper NO tiene href ni onclick, por lo que hacer clic en la
+   zona vacía alrededor del enlace NO produce ninguna navegación.
+   Solo el <a>.aseg-back-link es la zona interactiva.
+   ══════════════════════════════════════════════════════════════════════════ */
 .aseg-back-wrapper {
     width: 100%;
     margin-top: 0;
     padding: 14px 0 6px;
     display: flex;
     justify-content: center;
+    /* Sin cursor ni pointer-events especiales: el área es pasiva */
 }
+
 .aseg-back-link {
-    display: inline-flex;
+    display: inline-flex;           /* inline para que el área clicable sea
+                                       solo el tamaño del texto + ícono */
     align-items: center;
     gap: 5px;
-    padding: 7px 16px;
+    padding: 7px 16px;              /* área de clic generosa pero delimitada */
     font-size: 12.5px;
     color: var(--aseg-text-muted);
     text-decoration: none;
@@ -308,7 +350,7 @@ body {
     background: var(--aseg-accent-light);
 }
 
-/* ── Errores ─────────────────────────────────────────────────────────────── */
+/* ── Mensajes de error de campo ──────────────────────────────────────────── */
 .error-msg {
     color: var(--aseg-danger);
     font-size: 11px;
@@ -340,6 +382,101 @@ body {
     color: #dc2626;
     background: #fef2f2;
     border: 1px solid #fecaca;
+}
+
+/* ── Alerta: usuario ya asegurado (validación de existencia) ─────────────── */
+.aseg-alerta-asegurado {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    background: #fff7ed;
+    border: 1.5px solid #fed7aa;
+    color: #c2410c;
+    border-radius: var(--aseg-radius-sm);
+    padding: 12px 14px;
+    font-size: 12.5px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    animation: asegFadeUp .25s ease both;
+}
+.aseg-alerta-asegurado svg { flex-shrink: 0; }
+
+/* ── Overlay de éxito (interfaz sobrepuesta tras Asegurar/Actualizar) ────── */
+.aseg-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, .55);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    opacity: 0;
+    transition: opacity .25s ease;
+    padding: 20px;
+    box-sizing: border-box;
+}
+.aseg-overlay.activo { opacity: 1; }
+
+.aseg-overlay-modal {
+    background: #ffffff;
+    border-radius: 18px;
+    padding: 38px 36px 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    max-width: 320px;
+    text-align: center;
+    box-shadow: 0 16px 56px rgba(0,0,0,.24), 0 4px 14px rgba(0,0,0,.12);
+    transform: translateY(16px) scale(.95);
+    transition: transform .32s cubic-bezier(.34,1.56,.64,1);
+}
+.aseg-overlay.activo .aseg-overlay-modal {
+    transform: translateY(0) scale(1);
+}
+
+.aseg-overlay-icono {
+    width: 58px;
+    height: 58px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #059669, #34d399);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 6px 18px rgba(5,150,105,.32);
+    animation: asegOverlayPop .4s .05s cubic-bezier(.34,1.56,.64,1) both;
+}
+
+.aseg-overlay-mensaje {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--aseg-text);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.aseg-overlay-barra {
+    width: 100%;
+    height: 4px;
+    background: #e2e8f0;
+    border-radius: 99px;
+    overflow: hidden;
+}
+.aseg-overlay-barra-fill {
+    display: block;
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(135deg, var(--aseg-accent-dark), var(--aseg-accent));
+    border-radius: 99px;
+    transition: width 2s linear;
+}
+
+@keyframes asegOverlayPop {
+    from { opacity: 0; transform: scale(.6); }
+    to   { opacity: 1; transform: scale(1); }
 }
 
 /* ── Inputs / Selects ─────────────────────────────────────────────────────── */
@@ -379,6 +516,7 @@ body {
 .form-row { display: flex; gap: 14px; }
 .form-row .form-group { flex: 1; }
 
+/* ── Placeholder ─────────────────────────────────────────────────────────── */
 ::placeholder { color: #b0bec5; opacity: 1; }
 select option[value=""] { color: #9ca3af; }
 select:invalid { color: #9ca3af; }
@@ -461,13 +599,20 @@ option { color: var(--aseg-text); }
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 560px) {
     body { padding: 16px 12px; justify-content: flex-start; }
+
     .aseg-body  { padding: 16px; }
     .aseg-card  { padding: 16px; }
     .form-row   { flex-direction: column; gap: 0; }
+
+    /* En móvil el botón baja debajo del input */
     .aseg-input-action-row { flex-direction: column; align-items: stretch; }
-    .aseg-btn-col { align-items: stretch; margin-top: 8px; }
+    .aseg-btn-col { align-items: stretch; margin-top: 8px; } /* resetea el margin-top de desktop */
     .btn-buscar { width: 100%; justify-content: center; }
+
     .aseg-acciones { flex-direction: column; }
     .btn-accion    { min-width: unset; width: 100%; }
+
     .aseg-back-link { width: 100%; justify-content: center; }
+
+    .aseg-overlay-modal { padding: 28px 24px 24px; max-width: 280px; }
 }

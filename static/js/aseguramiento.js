@@ -18,6 +18,7 @@ let _pacienteId     = null;
 let _especialistaId = null;
 let _afiliacionId   = null;
 let _rolActual      = null;   // 'Paciente' | 'Especialista' | 'Administrador'
+let _yaAsegurado    = false;  // true si el usuario ya existe en aseguramiento_datos
 
 // =============================================================================
 // HELPERS DE VALIDACIÓN DE CAMPO
@@ -186,6 +187,32 @@ function ocultarFormulario() {
     _especialistaId = null;
     _afiliacionId   = null;
     _rolActual      = null;
+    // Restablecer el estado del botón "Asegurar" y de su alerta asociada
+    actualizarEstadoBotonAsegurar(false);
+}
+
+// =============================================================================
+// LÍMITE DE CARACTERES CONDICIONAL — Número de documento
+// Solo se restringe el campo a 10 caracteres cuando el tipo de documento
+// seleccionado corresponde a un documento de identidad (ej. Tarjeta de
+// identidad). Para el resto de tipos de documento no se aplica el límite.
+// =============================================================================
+function onTipoDocChange() {
+    const tipoDocSelect = document.getElementById('tipo-doc');
+    const numDoc        = document.getElementById('num-doc');
+    if (!tipoDocSelect || !numDoc) return;
+
+    const opcionSeleccionada   = tipoDocSelect.options[tipoDocSelect.selectedIndex];
+    const esDocumentoIdentidad = !!opcionSeleccionada &&
+        opcionSeleccionada.textContent.trim().toLowerCase().includes('identidad');
+
+    if (esDocumentoIdentidad) {
+        numDoc.setAttribute('maxlength', '10');
+        // Si el valor actual excede el nuevo límite, se recorta
+        if (numDoc.value.length > 10) numDoc.value = numDoc.value.slice(0, 10);
+    } else {
+        numDoc.removeAttribute('maxlength');
+    }
 }
 
 // =============================================================================
@@ -263,6 +290,12 @@ async function poblarFormulario(usuario) {
     // FIX: la API devuelve "Usuario_ID" (mayúscula) — aceptar ambas variantes
     _usuarioId = usuario.Usuario_ID ?? usuario.usuario_id;
 
+    // Reiniciar identificadores dependientes de búsquedas anteriores para evitar
+    // falsos positivos/negativos al validar si el usuario ya está asegurado.
+    _pacienteId     = null;
+    _especialistaId = null;
+    _afiliacionId   = null;
+
     document.getElementById('nombres').value   = usuario.Nombres    || '';
     document.getElementById('apellidos').value = usuario.Apellidos  || '';
     document.getElementById('num-doc').value   = usuario.NumeroDocumento || '';
@@ -274,6 +307,8 @@ async function poblarFormulario(usuario) {
     if (usuario.TipoDoc_ID) {
         tipoDocSelect.value = String(usuario.TipoDoc_ID);
     }
+    // Aplica el límite de caracteres condicional según el tipo de documento cargado
+    onTipoDocChange();
 
     // Mapa Rol_ID → nombre
     const rolMap = { 1: 'Administrador', 2: 'Especialista', 3: 'Paciente' };
@@ -304,6 +339,10 @@ async function poblarFormulario(usuario) {
         await cargarDatosEspecialista(_usuarioId);
     }
     // Administrador: solo datos básicos — no hay sección adicional
+
+    // Validación de existencia en aseguramiento_datos: evita registrar dos veces
+    const yaAsegurado = await verificarAseguramientoExistente(_usuarioId);
+    actualizarEstadoBotonAsegurar(yaAsegurado);
 }
 
 // =============================================================================
@@ -386,6 +425,39 @@ async function cargarDatosEspecialista(usuarioId) {
     } catch (err) {
         console.warn('[cargarDatosEspecialista]', err);
     }
+}
+
+// =============================================================================
+// VALIDACIÓN DE EXISTENCIA EN ASEGURAMIENTO_DATOS
+// Un usuario no puede agregarse dos veces a la tabla de aseguramiento.
+// GET /api/aseguramiento/por-usuario/<uid> → { ok, data }  (si el backend
+// expone esta ruta). Si no está disponible, se usa una verificación local
+// de respaldo basada en los registros de rol ya cargados (afiliación para
+// pacientes, registro de especialista para especialistas).
+// =============================================================================
+async function verificarAseguramientoExistente(usuarioId) {
+    try {
+        const res  = await fetch(`${BASE_URL}/aseguramiento/por-usuario/${usuarioId}`);
+        const data = await res.json();
+        if (data && data.ok && data.data) return true;
+        if (data && data.ok === false)    return false;
+    } catch (err) {
+        console.warn('[verificarAseguramientoExistente] usando verificación local:', err);
+    }
+    // Verificación local de respaldo según el rol ya cargado
+    if (_rolActual === 'Paciente')     return !!_afiliacionId;
+    if (_rolActual === 'Especialista') return !!_especialistaId;
+    return false;
+}
+
+function actualizarEstadoBotonAsegurar(yaAsegurado) {
+    _yaAsegurado = !!yaAsegurado;
+
+    const btnAsegurar = document.getElementById('btn-asegurar');
+    const alerta       = document.getElementById('aseg-alerta-asegurado');
+
+    if (btnAsegurar) btnAsegurar.disabled  = _yaAsegurado;
+    if (alerta)       alerta.style.display = _yaAsegurado ? 'flex' : 'none';
 }
 
 // =============================================================================
@@ -593,6 +665,12 @@ function leerFormulario() {
 // =============================================================================
 function setBotonesEstado(cargando) {
     document.querySelectorAll('.btn-accion').forEach(btn => { btn.disabled = cargando; });
+    // Si el usuario ya está asegurado, el botón "Asegurar" debe permanecer
+    // inhabilitado incluso después de finalizar el procesamiento.
+    if (!cargando && _yaAsegurado) {
+        const btnAsegurar = document.getElementById('btn-asegurar');
+        if (btnAsegurar) btnAsegurar.disabled = true;
+    }
 }
 
 // =============================================================================
@@ -606,6 +684,56 @@ function mostrarMensajeGlobal(tipo, texto) {
     el.style.display = 'block';
     el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     setTimeout(() => { el.style.display = 'none'; }, 7000);
+}
+
+// =============================================================================
+// OVERLAY DE ÉXITO — interfaz sobrepuesta tras Asegurar/Actualizar
+// Bloquea el fondo, muestra el mensaje correspondiente a la acción realizada
+// y, una vez transcurrido el tiempo de lectura, regresa automáticamente al
+// panel inicial de búsqueda.
+// =============================================================================
+function mostrarOverlayExito(accion) {
+    const overlay = document.getElementById('aseg-overlay');
+    const mensaje = document.getElementById('aseg-overlay-mensaje');
+    const barra   = document.getElementById('aseg-overlay-barra-fill');
+    if (!overlay || !mensaje) return;
+
+    mensaje.textContent = accion === 'asegurar'
+        ? 'Usuario asegurado. Volviendo al panel inicial...'
+        : 'Usuario actualizado. Volviendo al panel inicial...';
+
+    overlay.style.display = 'flex';
+    if (barra) barra.style.width = '0%';
+
+    requestAnimationFrame(() => {
+        overlay.classList.add('activo');
+        if (barra) requestAnimationFrame(() => { barra.style.width = '100%'; });
+    });
+
+    setTimeout(() => {
+        overlay.classList.remove('activo');
+        setTimeout(() => {
+            overlay.style.display = 'none';
+            resetearPanelABusqueda();
+        }, 250);
+    }, 2200);
+}
+
+function resetearPanelABusqueda() {
+    ocultarFormulario();
+
+    const filtroTipo  = document.getElementById('filtro-tipo');
+    const filtroValor = document.getElementById('filtro-valor');
+    const grupo       = document.getElementById('filtro-input-group');
+
+    if (filtroTipo)  filtroTipo.value = '';
+    if (filtroValor) filtroValor.value = '';
+    if (grupo)       grupo.style.display = 'none';
+
+    ocultarErrorCampo(filtroValor, document.getElementById('err-busqueda'));
+
+    const cardBusqueda = document.getElementById('card-busqueda');
+    if (cardBusqueda) cardBusqueda.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // =============================================================================
@@ -656,7 +784,7 @@ async function actualizarDatosBasicos(form) {
 // =============================================================================
 // FLUJO PRINCIPAL: ASEGURAR / ACTUALIZAR
 // =============================================================================
-async function asegurarDatos(form) {
+async function asegurarDatos(form, accion) {
     // 1. Actualizar datos básicos del usuario
     try {
         await actualizarDatosBasicos(form);
@@ -667,17 +795,18 @@ async function asegurarDatos(form) {
 
     // 2. Persistir datos específicos por rol
     if (_rolActual === 'Paciente') {
-        await asegurarDatosPaciente(form);
+        await asegurarDatosPaciente(form, accion);
     } else if (_rolActual === 'Especialista') {
-        await asegurarDatosEspecialista(form);
+        await asegurarDatosEspecialista(form, accion);
     } else {
         // Administrador: solo datos básicos
         mostrarMensajeGlobal('exito', '✅ Datos del administrador actualizados correctamente.');
         await registrarAuditoria(_usuarioId, _afiliacionId ? 2 : 1, 'Datos básicos actualizados desde módulo de aseguramiento');
+        mostrarOverlayExito(accion);
     }
 }
 
-async function asegurarDatosPaciente(form) {
+async function asegurarDatosPaciente(form, accion) {
     // Si es EPS nueva, crearla primero
     let epsIdFinal = form.epsId;
     if (form.esEpsOtro) {
@@ -760,9 +889,12 @@ async function asegurarDatosPaciente(form) {
     );
 
     mostrarMensajeGlobal('exito', `✅ Datos del paciente asegurados correctamente (Paciente #${_pacienteId}).`);
+    // El paciente ya cuenta con afiliación: refleja el estado "ya asegurado"
+    actualizarEstadoBotonAsegurar(true);
+    mostrarOverlayExito(accion);
 }
 
-async function asegurarDatosEspecialista(form) {
+async function asegurarDatosEspecialista(form, accion) {
     if (!_especialistaId) {
         // Crear especialista
         // POST /api/especialista  (app.py)
@@ -811,6 +943,9 @@ async function asegurarDatosEspecialista(form) {
 
     await registrarAuditoria(_usuarioId, 2, 'Datos de especialista actualizados desde módulo de aseguramiento');
     mostrarMensajeGlobal('exito', '✅ Datos del especialista actualizados correctamente.');
+    // El especialista ya cuenta con registro: refleja el estado "ya asegurado"
+    actualizarEstadoBotonAsegurar(true);
+    mostrarOverlayExito(accion);
 }
 
 // =============================================================================
@@ -841,6 +976,17 @@ async function validarYProcesar(accion) {
         return;
     }
 
+    // Validación de existencia en aseguramiento_datos: si el botón de
+    // "Asegurar" está inhabilitado porque el usuario ya está asegurado,
+    // no se permite continuar con esa acción.
+    if (accion === 'asegurar') {
+        const btnAsegurar = document.getElementById('btn-asegurar');
+        if (btnAsegurar && btnAsegurar.disabled) {
+            mostrarMensajeGlobal('error', 'Este usuario ya está asegurado');
+            return;
+        }
+    }
+
     // Verificar Habeas Data antes de validar los campos
     if (!document.getElementById('terminos').checked) {
         mostrarMensajeGlobal('error',
@@ -855,7 +1001,7 @@ async function validarYProcesar(accion) {
     setBotonesEstado(true);
 
     try {
-        await asegurarDatos(form);
+        await asegurarDatos(form, accion);
     } finally {
         setBotonesEstado(false);
     }
