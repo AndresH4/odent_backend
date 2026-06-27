@@ -21,7 +21,25 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formatdate, make_msgid
 
-from modulo_historial.historial_clinico             import historial_bp
+# ── CORRECCIÓN CRÍTICA ────────────────────────────────────────────────────────
+# ANTES (incorrecto):
+#   from modulo_historial.historial_clinico import historial_bp
+#   → Importaba el blueprint LEGACY que NO tiene vista_historia_clinica().
+#   → La ruta GET /historial/paciente/<id> nunca se registraba en Flask.
+#   → Al navegar a esa URL, Flask resolvía otro endpoint que devolvía JSON crudo.
+#
+# AHORA (correcto):
+#   from modulo_historial.routes import historial_bp
+#   → Importa el blueprint DEFINITIVO con:
+#       • GET  /historial/paciente/<id>              → render_template (VISTA HTML)
+#       • GET  /api/historial/paciente/<id>/info     → jsonify (API)
+#       • GET  /api/historial/paciente/<id>/evoluciones → jsonify (API)
+#       • POST /api/historial/guardar                → jsonify (API)
+#       • POST /api/historial/finalizar              → jsonify (API)
+# ─────────────────────────────────────────────────────────────────────────────
+from modulo_historial.routes                        import historial_bp
+
+# Los demás submódulos de historial siguen importándose igual
 from modulo_historial.tratamiento                   import tratamiento_bp
 from modulo_historial.tabla_diagnostico             import tabla_diag_bp
 from modulo_historial.historial_diagnostico         import historial_diag_bp
@@ -62,11 +80,14 @@ CORS(app, supports_credentials=True)
 # REGISTRO DE BLUEPRINTS
 # =============================================================================
 app.register_blueprint(usuarios_bp,       url_prefix='/api')
-# ── historial_bp se registra SIN prefijo:
-#    - Sus rutas de VISTA (/historial/paciente/<id>) son accesibles directamente.
-#    - Sus rutas de API llevan /api embebido en el decorador (@historial_bp.route).
-#    - NO define GET /api/citas/<id> para evitar colisión con citas_bp.
+
+# ── historial_bp se registra SIN url_prefix ──────────────────────────────────
+# Sus rutas de VISTA  (/historial/paciente/<id>)       no llevan prefijo.
+# Sus rutas de API    (/api/historial/paciente/<id>/…) llevan /api embebido
+# en cada decorador @historial_bp.route, por lo que no necesitan url_prefix.
+# Esto evita la colisión con citas_bp que sí usa url_prefix='/api'.
 app.register_blueprint(historial_bp)
+
 app.register_blueprint(tratamiento_bp,    url_prefix='/api')
 app.register_blueprint(tabla_diag_bp,     url_prefix='/api')
 app.register_blueprint(historial_diag_bp, url_prefix='/api')
@@ -502,10 +523,10 @@ def cambiar_password():
         return jsonify({"ok": False, "error": "Correo y nueva contraseña son requeridos."}), 400
 
     errores = []
-    if len(nueva_contrasena) < 8:           errores.append("Mínimo 8 caracteres.")
-    if not re.search(r'[A-Z]', nueva_contrasena): errores.append("Al menos una mayúscula.")
-    if not re.search(r'[a-z]', nueva_contrasena): errores.append("Al menos una minúscula.")
-    if not re.search(r'[0-9]', nueva_contrasena): errores.append("Al menos un número.")
+    if len(nueva_contrasena) < 8:                         errores.append("Mínimo 8 caracteres.")
+    if not re.search(r'[A-Z]', nueva_contrasena):         errores.append("Al menos una mayúscula.")
+    if not re.search(r'[a-z]', nueva_contrasena):         errores.append("Al menos una minúscula.")
+    if not re.search(r'[0-9]', nueva_contrasena):         errores.append("Al menos un número.")
     if not re.search(r'[^A-Za-z0-9]', nueva_contrasena): errores.append("Al menos un carácter especial.")
     if errores:
         return jsonify({"ok": False, "error": " ".join(errores)}), 400
