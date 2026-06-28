@@ -1,3 +1,4 @@
+# modulo_citas/routes.py
 """
 modulo_citas/routes.py — Stylo Dental
 """
@@ -9,6 +10,7 @@ import threading
 import logging
 import os
 import sqlite3
+import random
 
 logger = logging.getLogger("stylo_dental_smtp")
 
@@ -18,9 +20,41 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH  = os.path.join(BASE_DIR, 'odent.db')
 
 
+def _asegurar_columna_codigo_cita(conn):
+    """
+    Garantiza que la tabla 'cita' tenga la columna Codigo_Verificacion
+    (código de 6 dígitos usado para verificar la cita en clínica).
+    No destructivo: solo añade la columna si falta y genera códigos
+    para citas que aún no lo tengan asignado.
+    """
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(cita)")
+    columnas = [col[1] for col in cur.fetchall()]
+    if 'Codigo_Verificacion' not in columnas:
+        try:
+            cur.execute("ALTER TABLE cita ADD COLUMN Codigo_Verificacion VARCHAR(6)")
+            conn.commit()
+        except Exception:
+            pass
+
+    cur.execute(
+        "SELECT Cita_ID FROM cita WHERE Codigo_Verificacion IS NULL OR Codigo_Verificacion = ''"
+    )
+    pendientes = cur.fetchall()
+    if pendientes:
+        for fila in pendientes:
+            nuevo_codigo = str(random.randint(100000, 999999))
+            cur.execute(
+                "UPDATE cita SET Codigo_Verificacion = ? WHERE Cita_ID = ?",
+                (nuevo_codigo, fila['Cita_ID'])
+            )
+        conn.commit()
+
+
 def _get_conn():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    _asegurar_columna_codigo_cita(conn)
     return conn
 
 
@@ -781,9 +815,10 @@ def crear_cita():
             cur.execute("ROLLBACK")
             return _json_error('No puedes agendar. Ya tienes una cita activa en el sistema.', 409)
 
+        codigo_verificacion = str(random.randint(100000, 999999))
         cur.execute(
-            "INSERT INTO cita (Paciente_ID, Agenda_ID, Motivo_Consulta, Encuesta_Enviada) VALUES (?, ?, ?, 0)",
-            (paciente_id, agenda_id, motivo)
+            "INSERT INTO cita (Paciente_ID, Agenda_ID, Motivo_Consulta, Encuesta_Enviada, Codigo_Verificacion) VALUES (?, ?, ?, 0, ?)",
+            (paciente_id, agenda_id, motivo, codigo_verificacion)
         )
         cita_id = cur.lastrowid
         if not cita_id:
@@ -1336,6 +1371,7 @@ def get_citas_paciente(paciente_id):
             SELECT c.Cita_ID,
                    c.Motivo_Consulta,
                    c.Encuesta_Enviada,
+                   c.Codigo_Verificacion,
                    a.Fecha,
                    a.Hora_Inicio,
                    a.Hora_Final                          AS Hora_Fin,
@@ -1489,6 +1525,44 @@ def multa_activa(paciente_id):
         """, (paciente_id,))
         row = cur.fetchone()
         return _json_ok({"tiene_multa": row is not None})
+    except Exception as exc:
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MULTAS DEL PACIENTE (SOLO LECTURA) — GET /api/multas/paciente/<paciente_id>
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/multas/paciente/<int:paciente_id>', methods=['GET'])
+def get_multas_paciente(paciente_id):
+    con = None
+    try:
+        con = _get_conn()
+        cur = con.cursor()
+        cur.execute("""
+            SELECT m.Multa_ID,
+                   m.EstadoMulta_ID,
+                   em.Nombre_Estado                      AS EstadoMulta,
+                   c.Motivo_Consulta                     AS Concepto,
+                   a.Fecha,
+                   a.Hora_Inicio,
+                   esp.Nombre_Especialidad,
+                   ue.Nombres || ' ' || ue.Apellidos      AS NombreEspecialista
+            FROM multa m
+            JOIN estado_multa em  ON em.EstadoMulta_ID = m.EstadoMulta_ID
+            JOIN cita c           ON c.Cita_ID          = m.Cita_ID
+            JOIN agenda a         ON a.Agenda_ID        = c.Agenda_ID
+            JOIN especialista e   ON e.Especialista_ID  = a.Especialista_ID
+            JOIN usuarios ue      ON ue.Usuario_ID       = e.Usuario_ID
+            LEFT JOIN especialista_especialidad ee ON ee.Especialista_ID = e.Especialista_ID
+            LEFT JOIN especialidad esp             ON esp.Especialidad_ID = ee.Especialidad_ID
+            WHERE c.Paciente_ID = ?
+            GROUP BY m.Multa_ID
+            ORDER BY a.Fecha DESC, a.Hora_Inicio DESC
+        """, (paciente_id,))
+        return _json_ok({"ok": True, "data": _rows_to_list(cur)})
     except Exception as exc:
         return _json_error(str(exc), 500)
     finally:

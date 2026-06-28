@@ -214,8 +214,9 @@
             <div class="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden mb-10">
                 <div class="p-10 border-b border-slate-50 bg-slate-50/40">
                     <div class="flex items-center gap-5">
+                        <!-- PUNTO 4: icono cambiado de fa-plus-circle a fa-book-medical -->
                         <div class="w-12 h-12 bg-sky-600 text-white rounded-2xl flex items-center justify-center shadow-lg">
-                            <i class="fas fa-plus-circle text-xl"></i>
+                            <i class="fas fa-book-medical text-xl"></i>
                         </div>
                         <h3 class="font-black text-slate-800 uppercase text-sm tracking-widest">Agregar Disponibilidad</h3>
                     </div>
@@ -364,13 +365,10 @@
                     Gestión de Perfil Médico
                 </h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-12 relative z-10">
-                    <div class="space-y-3">
-                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Nombres</label>
-                        <input type="text" id="conf-nombres" class="input-consulta w-full" placeholder="Nombres">
-                    </div>
-                    <div class="space-y-3">
-                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Apellidos</label>
-                        <input type="text" id="conf-apellidos" class="input-consulta w-full" placeholder="Apellidos">
+                    <!-- PUNTO 6 (actualizado): "Nombres" y "Apellidos" fusionados en un único campo "Nombre completo" -->
+                    <div class="space-y-3 md:col-span-2">
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Nombre Completo</label>
+                        <input type="text" id="conf-nombre-completo" class="input-consulta w-full" placeholder="Nombre completo">
                     </div>
                     <div class="space-y-3">
                         <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Teléfono Móvil</label>
@@ -457,7 +455,8 @@
             </div>
             <div class="p-10">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                    <div class="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                    <!-- PUNTO 6: "Nombre completo" en lugar de campos separados -->
+                    <div class="bg-slate-50 rounded-2xl p-6 border border-slate-100 md:col-span-2">
                         <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Nombre Completo</p>
                         <p id="empezar-nombre-dato" class="font-black text-slate-700 text-sm uppercase"></p>
                     </div>
@@ -469,17 +468,16 @@
                         <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Estado de la Cita</p>
                         <p id="empezar-estado-dato" class="font-black text-sky-600 text-sm uppercase"></p>
                     </div>
-                    <div class="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                    <!-- PUNTO 3 (actualizado): el campo "Motivo de Consulta" ahora muestra la Especialidad de la cita -->
+                    <div class="bg-slate-50 rounded-2xl p-6 border border-slate-100 md:col-span-2">
                         <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Motivo de Consulta</p>
                         <p id="empezar-motivo-dato" class="font-black text-slate-700 text-sm"></p>
                     </div>
                 </div>
+                <!-- PUNTO 3: Solo botón Historia Clínica, eliminado "Finalizar Consulta" -->
                 <div class="flex gap-4 flex-wrap justify-end border-t border-slate-100 pt-8">
                     <button onclick="irAHistoriaClinica()" class="bg-sky-50 text-sky-600 border-2 border-sky-200 px-10 py-4 rounded-2xl font-black text-[11px] hover:bg-sky-600 hover:text-white transition-all uppercase shadow-md active:scale-95">
                         <i class="fas fa-folder-open mr-2"></i>Historia Clínica
-                    </button>
-                    <button onclick="finalizarConsultaDirecto()" class="bg-emerald-600 text-white px-10 py-4 rounded-2xl font-black text-[11px] hover:bg-emerald-700 transition-all uppercase shadow-xl active:scale-95">
-                        <i class="fas fa-check-circle mr-2"></i>Finalizar Consulta
                     </button>
                 </div>
             </div>
@@ -514,6 +512,7 @@
                         <i class="fas fa-user-circle"></i> Información del Paciente
                     </p>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <!-- PUNTO 6: "Nombre completo" en reporte -->
                         <div class="md:col-span-1">
                             <p class="reporte-dato-mini">Nombre Completo</p>
                             <p id="rep-paciente" class="reporte-dato-valor uppercase"></p>
@@ -606,6 +605,27 @@
                 class="w-full bg-red-500 text-white py-4 rounded-2xl font-black hover:bg-red-600 transition-all text-xs uppercase tracking-widest">
                 Intentar de nuevo
             </button>
+        </div>
+    </div>
+
+    <!-- PUNTO 2: MODAL CÓDIGO DE VERIFICACIÓN -->
+    <div id="modalCodigoVerificacion" class="modal-overlay" style="display:none;">
+        <div class="modal-content p-10 text-center border-t-8 border-sky-600" style="max-width:440px">
+            <div class="text-sky-500 text-6xl mb-6"><i class="fas fa-shield-alt"></i></div>
+            <h3 class="text-slate-800 font-black text-xl mb-3 uppercase tracking-tighter italic">Verificación Requerida</h3>
+            <p class="text-slate-400 text-xs mb-6 font-bold uppercase tracking-widest">Ingresa el código de 6 dígitos para iniciar la cita</p>
+            <div class="mb-6">
+                <input type="text" id="input-codigo-verificacion"
+                    maxlength="6"
+                    oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6)"
+                    placeholder="------"
+                    class="text-center text-3xl font-black tracking-[0.5em] w-full py-5 px-4 rounded-2xl border-2 border-slate-200 focus:border-sky-500 outline-none transition-all">
+                <p id="error-codigo-verificacion" class="text-red-500 text-xs font-bold mt-2" style="display:none;">El código debe tener exactamente 6 dígitos.</p>
+            </div>
+            <div class="flex gap-4">
+                <button onclick="confirmarCodigoVerificacion()" class="flex-1 bg-sky-600 text-white py-4 rounded-2xl font-black hover:bg-sky-700 transition-all text-xs uppercase tracking-widest">Confirmar</button>
+                <button onclick="cerrarModalCodigoVerificacion()" class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all text-xs uppercase tracking-widest">Cancelar</button>
+            </div>
         </div>
     </div>
 

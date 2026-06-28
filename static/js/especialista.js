@@ -1,4 +1,4 @@
-// especialista.js v14.3
+// especialista.js v14.4
 // REQ 1: Fix maquetación inputs agenda — clase .has-value se sincroniza con CSS para ocultar texto nativo duplicado
 // REQ 2: Automatización de multas por incumplimiento de horario (ping al backend)
 // REQ 3: Conexión en tiempo real de agenda médica con vista de agendar (ya servida vía /api/agenda)
@@ -14,6 +14,20 @@
 //        ▸ window.location.href → /historial/paciente/<id>?cita_id=<id>  (VISTA HTML)
 //        ▸ fetch()              → /api/historial/...  o  /api/citas/...  (JSON solamente)
 //        El navegador NUNCA visita un endpoint de API directamente.
+// CAMBIO P1 (v14.4): Filtrado estricto "Atendidos Hoy" — solo citas con FechaAtencion == fecha actual real
+// CAMBIO P2 (v14.4): Modal de código de verificación de 6 dígitos antes de "Empezar Cita"
+// CAMBIO P3 (v14.4): Eliminado botón "Finalizar Consulta" del modal (solo queda "Historia Clínica")
+// CAMBIO P4 (v14.4): Icono agenda cambiado a fa-book-medical (en HTML)
+// CAMBIO P5 (v14.4): verReporteProfesional lee directamente /api/historial/paciente/<id>/evoluciones
+// CAMBIO P6 (v14.4): Campo "Nombre completo" concatenado — eliminado campo independiente "Apellidos" en vistas
+// CAMBIO P7 (v14.4): Orden descendente (más reciente primero) en todas las tablas de citas
+// CAMBIO P8 (v14.5): Sección "Mi Perfil" — Nombres/Apellidos fusionados en un único input "Nombre completo"
+//        (conf-nombre-completo). Al guardar, el texto se separa en Nombres/Apellidos para mantener
+//        compatibilidad con el esquema de 'usuarios' (columnas independientes NOT NULL).
+// CAMBIO P9 (v14.5): El campo "Motivo" visible para el especialista (tabla inicio, tabla pacientes,
+//        modal Empezar Cita) ahora muestra la Especialidad de la cita en lugar del motivo de consulta
+//        ingresado por el paciente. El dato Motivo_Consulta original se sigue recibiendo del backend
+//        y queda disponible en memoria (cita.motivo) sin alterarse ni perderse.
 'use strict';
 
 let indexActualGlobal     = null;
@@ -24,6 +38,9 @@ let seccionActiva         = 'inicio';
 let filtroActivoInicio    = 'todos';
 let usuarioSesionActual   = null;
 let slotPendienteEliminar = null;
+
+// ─── PUNTO 2: Variable para índice pendiente de verificación ──────────────────
+let _indicePendienteVerificacion = null;
 
 // ─── TOAST ────────────────────────────────────────────────────────────────────
 function mostrarToast(mensaje, tipo = 'info') {
@@ -159,6 +176,36 @@ function formatearHoraAmPm(horaStr) {
     return `${String(h).padStart(2,'0')}:${m} ${ampm}`;
 }
 
+// ─── PUNTO 8: UTILIDAD NOMBRE COMPLETO ⇄ NOMBRES/APELLIDOS ────────────────────
+// El esquema de 'usuarios' (init_db.py) mantiene Nombres y Apellidos como
+// columnas independientes NOT NULL, y el backend (/api/usuarios/<id> y
+// /api/especialista/perfil/<id>) las espera/devuelve por separado. La UI de
+// "Mi Perfil" ahora solo expone un input "Nombre completo"; estas utilidades
+// concatenan para mostrar y separan para guardar, sin tocar el esquema ni
+// los endpoints existentes.
+function _concatenarNombreCompleto(nombres, apellidos) {
+    return `${nombres || ''} ${apellidos || ''}`.trim();
+}
+
+function _dividirNombreCompleto(nombreCompleto) {
+    const limpio = (nombreCompleto || '').trim().replace(/\s+/g, ' ');
+    if (!limpio) return { nombres: '', apellidos: '' };
+    const partes = limpio.split(' ');
+    if (partes.length === 1) {
+        return { nombres: partes[0], apellidos: '' };
+    }
+    if (partes.length === 2) {
+        return { nombres: partes[0], apellidos: partes[1] };
+    }
+    // Convención hispana habitual: primera mitad = nombres, segunda mitad = apellidos.
+    // Con número impar de palabras, el nombre se queda con la palabra extra
+    // (ej. "Juan Carlos Perez" -> nombres="Juan Carlos", apellidos="Perez").
+    const mitad     = Math.ceil(partes.length / 2);
+    const nombres   = partes.slice(0, mitad).join(' ');
+    const apellidos = partes.slice(mitad).join(' ');
+    return { nombres, apellidos };
+}
+
 // ─── SESIÓN ───────────────────────────────────────────────────────────────────
 const cargarInfoSesion = () => {
     try {
@@ -230,8 +277,8 @@ async function _cargarPerfilRealDesdeBD(usuarioId) {
             : (p.NumeroDocumento || '—');
         _inyectarCampo('doc-menu-concat', docConcatenado);
 
-        _inyectarCampo('conf-nombres',   p.Nombres,   true);
-        _inyectarCampo('conf-apellidos', p.Apellidos, true);
+        // PUNTO 8: un solo input "Nombre completo" en el formulario de Mi Perfil
+        _inyectarCampo('conf-nombre-completo', _concatenarNombreCompleto(p.Nombres, p.Apellidos), true);
         _inyectarCampo('conf-email',     p.Correo,    true);
         _inyectarCampo('conf-tel',       p.Telefono,  true);
 
@@ -251,14 +298,16 @@ function _resolverEstadoCita(c) {
     return 'Pendiente';
 }
 
+// ─── PUNTO 1: _esAtendidoHoy — filtrado estricto por fecha real del servidor ──
 function _esAtendidoHoy(cita) {
     if (cita.estado !== 'Atendido') return false;
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = new Date();
+    const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
     if (cita.FechaAtencion) {
         const fechaAtencion = cita.FechaAtencion.split(' ')[0];
-        return fechaAtencion === hoy;
+        return fechaAtencion === hoyStr;
     }
-    return cita.fecha === hoy;
+    return cita.fecha === hoyStr;
 }
 
 // ─── CARGA DE CITAS ───────────────────────────────────────────────────────────
@@ -326,14 +375,16 @@ function _renderTodas() {
 
 // ─── STATS ────────────────────────────────────────────────────────────────────
 function _actualizarStats() {
-    const hoy          = new Date().toISOString().split('T')[0];
+    const hoy          = new Date();
+    const hoyStr       = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
     const noCanceladas = historialTotal.filter(c => c.estado !== 'Cancelada');
     const total        = noCanceladas.length;
     const pendientes   = noCanceladas.filter(c => c.estado === 'Pendiente').length;
+    // PUNTO 1: filtrado estricto por fecha actual
     const atendidosHoy = noCanceladas.filter(c => _esAtendidoHoy(c)).length;
 
     const futuras = noCanceladas
-        .filter(c => (c.estado === 'Pendiente' || c.estado === 'En proceso') && c.fecha >= hoy)
+        .filter(c => (c.estado === 'Pendiente' || c.estado === 'En proceso') && c.fecha >= hoyStr)
         .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
     const proxima = futuras[0] || null;
 
@@ -345,10 +396,20 @@ function _actualizarStats() {
     setEl('stat-proxima-fecha', proxima ? proxima.fecha : 'Sin citas');
 }
 
+// ─── PUNTO 7: Función de ordenamiento descendente ─────────────────────────────
+function _ordenarDescendente(lista) {
+    return [...lista].sort((a, b) => {
+        const da = (a.fecha || '') + (a.hora || '');
+        const db = (b.fecha || '') + (b.hora || '');
+        return db.localeCompare(da);
+    });
+}
+
 // ─── RENDER TABLA INICIO ──────────────────────────────────────────────────────
 function _renderTablaInicio(filtro) {
     filtroActivoInicio = filtro;
-    const hoy    = new Date().toISOString().split('T')[0];
+    const hoy    = new Date();
+    const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
     const tbody  = document.getElementById('tabla-inicio');
     const titulo = document.getElementById('tabla-titulo-inicio');
     if (!tbody) return;
@@ -356,10 +417,11 @@ function _renderTablaInicio(filtro) {
     const mapa = {
         todos:     { lista: historialTotal.filter(c => c.estado !== 'Cancelada'), titulo: 'Total Pacientes' },
         Pendiente: { lista: historialTotal.filter(c => c.estado === 'Pendiente'), titulo: 'Por Atender' },
+        // PUNTO 1: Filtrado estricto "Atendidos Hoy" por fecha real
         Atendido:  { lista: historialTotal.filter(c => _esAtendidoHoy(c)), titulo: 'Atendidos Hoy' },
         proxima:   {
             lista: (() => {
-                const f = historialTotal.filter(c => (c.estado === 'Pendiente' || c.estado === 'En proceso') && c.fecha >= hoy)
+                const f = historialTotal.filter(c => (c.estado === 'Pendiente' || c.estado === 'En proceso') && c.fecha >= hoyStr)
                     .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
                 return f.length > 0 ? [f[0]] : [];
             })(),
@@ -372,28 +434,34 @@ function _renderTablaInicio(filtro) {
     if (titulo) titulo.innerText = cfg.titulo;
 
     tbody.innerHTML = '';
-    cfg.lista.forEach(cita => {
+    // PUNTO 7: orden descendente — más reciente primero
+    const listaOrdenada = _ordenarDescendente(cfg.lista);
+
+    listaOrdenada.forEach(cita => {
         const idxReal = historialTotal.indexOf(cita);
         const row = document.createElement('tr');
         row.className = 'transition-all duration-300 hover:bg-sky-50/30';
+        // PUNTO 6: etiqueta "Nombre completo" — nombre ya viene concatenado desde BD
+        // PUNTO 9: columna "Motivo" ahora muestra la Especialidad de la cita
         row.innerHTML = `
             <td class="px-8 py-6">
                 <p class="font-black text-slate-800 text-sm">${formatearHoraAmPm(cita.hora)}</p>
                 <p class="text-[10px] text-slate-400 font-bold uppercase mt-1">${cita.fecha || 'Hoy'}</p>
             </td>
             <td class="px-8 py-6">
+                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Nombre completo</p>
                 <p class="font-black text-slate-700 uppercase text-xs tracking-tight">${cita.nombre}</p>
                 <p class="text-[11px] text-slate-400 font-bold mt-1">${cita.tipoDoc}: ${cita.numDoc}</p>
             </td>
             <td class="px-8 py-6 font-black text-sky-600 uppercase text-[11px] tracking-widest">${cita.especialidad}</td>
             <td class="px-8 py-6">${_badgeEstado(cita.estado)}</td>
-            <td class="px-8 py-6 text-[11px] text-slate-500 font-bold" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;">${cita.motivo}</td>
+            <td class="px-8 py-6 text-[11px] text-slate-500 font-bold" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;">${cita.especialidad}</td>
             <td class="px-8 py-6" style="text-align:right;">${_botonesAccion(cita, idxReal)}</td>`;
         tbody.appendChild(row);
     });
 
     const noData = document.getElementById('no-datos-inicio');
-    if (noData) noData.style.display = cfg.lista.length > 0 ? 'none' : 'block';
+    if (noData) noData.style.display = listaOrdenada.length > 0 ? 'none' : 'block';
 }
 
 // ─── RENDER TABLA AGENDA ──────────────────────────────────────────────────────
@@ -435,16 +503,21 @@ function _renderTablaPacientes() {
     tbody.innerHTML = '';
 
     const pacientesHistorial = historialTotal.filter(c => c.estado === 'Atendido' || c.estado === 'Cancelada');
-    pacientesHistorial.forEach(cita => {
+    // PUNTO 7: orden descendente — más reciente primero
+    const listaOrdenada = _ordenarDescendente(pacientesHistorial);
+
+    listaOrdenada.forEach(cita => {
         const idxReal = historialTotal.indexOf(cita);
         const row = document.createElement('tr');
         row.className = 'transition-all duration-300 hover:bg-sky-50/30';
+        // PUNTO 6: etiqueta "Nombre completo"
         row.innerHTML = `
             <td class="px-8 py-6">
                 <p class="font-black text-slate-800 text-sm">${formatearHoraAmPm(cita.hora)}</p>
                 <p class="text-[10px] text-slate-400 font-bold uppercase mt-1">${cita.fecha || '—'}</p>
             </td>
             <td class="px-8 py-6">
+                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Nombre completo</p>
                 <p class="font-black text-slate-700 uppercase text-xs tracking-tight">${cita.nombre}</p>
                 <p class="text-[11px] text-slate-400 font-bold mt-1">${cita.tipoDoc}: ${cita.numDoc}</p>
             </td>
@@ -455,7 +528,7 @@ function _renderTablaPacientes() {
     });
 
     const noData = document.getElementById('no-datos-pacientes');
-    if (noData) noData.style.display = pacientesHistorial.length > 0 ? 'none' : 'block';
+    if (noData) noData.style.display = listaOrdenada.length > 0 ? 'none' : 'block';
 }
 
 // ─── BADGE DE ESTADO ──────────────────────────────────────────────────────────
@@ -470,11 +543,47 @@ function _badgeEstado(estado) {
     return `<span class="${cfg.cls} uppercase"><i class="fas ${cfg.icon} mr-2"></i>${estado}</span>`;
 }
 
-// ─── BOTONES DE ACCIÓN ────────────────────────────────────────────────────────
+// ─── PUNTO 2: Modal de código de verificación ─────────────────────────────────
+function solicitarCodigoVerificacion(indice) {
+    _indicePendienteVerificacion = indice;
+    const input = document.getElementById('input-codigo-verificacion');
+    const error = document.getElementById('error-codigo-verificacion');
+    if (input) input.value = '';
+    if (error) error.style.display = 'none';
+    const modal = document.getElementById('modalCodigoVerificacion');
+    if (modal) modal.style.display = 'flex';
+    if (input) setTimeout(() => input.focus(), 100);
+}
+
+function cerrarModalCodigoVerificacion() {
+    const modal = document.getElementById('modalCodigoVerificacion');
+    if (modal) modal.style.display = 'none';
+    _indicePendienteVerificacion = null;
+}
+
+function confirmarCodigoVerificacion() {
+    const input = document.getElementById('input-codigo-verificacion');
+    const error = document.getElementById('error-codigo-verificacion');
+    const codigo = (input?.value || '').trim();
+    if (codigo.length !== 6 || !/^\d{6}$/.test(codigo)) {
+        if (error) error.style.display = 'block';
+        return;
+    }
+    if (error) error.style.display = 'none';
+    const modal = document.getElementById('modalCodigoVerificacion');
+    if (modal) modal.style.display = 'none';
+    if (_indicePendienteVerificacion !== null) {
+        abrirEmpezarCita(_indicePendienteVerificacion);
+        _indicePendienteVerificacion = null;
+    }
+}
+
+// ─── PUNTO 2: BOTONES DE ACCIÓN — "Empezar Cita" pasa por verificación ────────
 function _botonesAccion(cita, idx) {
     const estado = cita.estado;
     if (estado === 'Pendiente') {
-        return `<button onclick="abrirEmpezarCita(${idx})"
+        // PUNTO 2: llama a solicitarCodigoVerificacion en lugar de abrirEmpezarCita directamente
+        return `<button onclick="solicitarCodigoVerificacion(${idx})"
             class="btn-empezar-cita px-8 py-4 rounded-2xl font-black text-[10px] transition-all uppercase shadow-lg btn-action">
             <i class="fas fa-play mr-1"></i>Empezar Cita</button>`;
     }
@@ -538,10 +647,12 @@ const abrirEmpezarCita = async (indice) => {
 
         const set = (id, val) => { const e = document.getElementById(id); if (e) e.innerText = val || '—'; };
         set('empezar-nombre-modal', cita.nombre);
+        // PUNTO 6: nombre completo ya concatenado en cita.nombre
         set('empezar-nombre-dato',  cita.nombre);
         set('empezar-doc-dato',     `${cita.tipoDoc}: ${cita.numDoc}`);
         set('empezar-estado-dato',  'En Proceso — Atendiendo');
-        set('empezar-motivo-dato',  cita.motivo);
+        // PUNTO 9: el modal "Empezar Cita" muestra la Especialidad en el campo Motivo de Consulta
+        set('empezar-motivo-dato',  cita.especialidad);
 
         const avatarPaciente = document.getElementById('empezar-avatar-paciente');
         if (avatarPaciente) avatarPaciente.textContent = _obtenerInicial(cita.nombre);
@@ -574,6 +685,8 @@ const cerrarEmpezarCita = () => {
 };
 
 // ─── FINALIZAR CONSULTA ───────────────────────────────────────────────────────
+// PUNTO 3: finalizarConsultaDirecto se conserva para uso interno desde historia clínica
+// pero ya NO tiene botón visible en el modal de empezar cita
 const finalizarConsultaDirecto = async () => {
     const indice = citaActualEmpezar;
     if (indice === null || indice === undefined) return;
@@ -657,11 +770,7 @@ async function _procesarVencimientosMultas() {
     }
 }
 
-// ─── REPORTE PROFESIONAL ──────────────────────────────────────────────────────
-// NOTA: Esta función abre el MODAL de reporte en el panel del especialista.
-// NO navega al HTML de Historia Clínica. No llama a irAHistoriaClinica().
-// Si el botón del modal dice "Historia Clínica", debe llamar a irAHistoriaClinica(),
-// NO a esta función.
+// ─── PUNTO 5: REPORTE PROFESIONAL — Lee directamente de historia clínica en BD ─
 const verReporteProfesional = async (indice) => {
     try {
         const cita = historialTotal[indice];
@@ -675,25 +784,48 @@ const verReporteProfesional = async (indice) => {
         let numDoc        = cita.numDoc  || '—';
 
         if (cita.Cita_ID) {
-            // Enriquecer con datos del historial clínico (fetch JSON, no navega)
-            try {
-                const res = await fetch(`/api/historial-clinico/${cita.Cita_ID}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data && data.ok && data.data) {
-                        diagnostico   = data.data.Diagnostico   || diagnostico;
-                        evolucion     = data.data.Evolucion     || evolucion;
-                        prescripcion  = data.data.Tratamiento   || prescripcion;
-                        fechaAtencion = data.data.FechaRegistro || fechaAtencion;
+            // PUNTO 5: Leer primero desde /api/historial/paciente/<id>/evoluciones (historia clínica completa)
+            // Esta es la MISMA fuente que alimenta historia_clinica.html, por lo tanto cualquier
+            // diagnóstico, evolución o tratamiento guardado allí aparece aquí de forma instantánea.
+            if (cita.Paciente_ID) {
+                try {
+                    const res = await fetch(`/api/historial/paciente/${cita.Paciente_ID}/evoluciones?cita_id=${cita.Cita_ID}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data && data.ok && Array.isArray(data.data) && data.data.length > 0) {
+                            const entrada = data.data[0];
+                            diagnostico   = entrada.Diagnostico   || diagnostico;
+                            evolucion     = entrada.Evolucion     || evolucion;
+                            prescripcion  = entrada.Tratamiento   || prescripcion;
+                            fechaAtencion = entrada.FechaRegistro || cita.FechaAtencion || fechaAtencion;
+                        }
                     }
+                } catch (err) {
+                    console.warn('[especialista] Fallback a historial-clinico:', err);
                 }
-            } catch (err) {
-                console.warn('[especialista] Usando caché local para reporte.', err);
+            }
+
+            // Fallback al endpoint /api/historial-clinico/<cita_id> si no se obtuvo datos
+            if (diagnostico === 'Sin diagnóstico' && evolucion === 'Sin registro') {
+                try {
+                    const res2 = await fetch(`/api/historial-clinico/${cita.Cita_ID}`);
+                    if (res2.ok) {
+                        const data2 = await res2.json();
+                        if (data2 && data2.ok && data2.data) {
+                            diagnostico   = data2.data.Diagnostico   || diagnostico;
+                            evolucion     = data2.data.Evolucion     || evolucion;
+                            prescripcion  = data2.data.Tratamiento   || prescripcion;
+                            fechaAtencion = data2.data.FechaRegistro || cita.FechaAtencion || fechaAtencion;
+                        }
+                    }
+                } catch (err2) {
+                    console.warn('[especialista] Usando caché local para reporte.', err2);
+                }
             }
 
             if (cita.FechaAtencion && fechaAtencion === 'N/A') fechaAtencion = cita.FechaAtencion;
 
-            // Enriquecer documento del paciente (fetch JSON, no navega)
+            // Enriquecer documento del paciente
             try {
                 const resCita = await fetch(`/api/citas/${cita.Cita_ID}`);
                 if (resCita.ok) {
@@ -707,6 +839,7 @@ const verReporteProfesional = async (indice) => {
         }
 
         const setEl = (id, val) => { const el = document.getElementById(id); if (!el) return; el.innerText = val || '—'; };
+        // PUNTO 6: nombre completo ya concatenado
         setEl('rep-paciente',       cita.nombre);
         setEl('rep-fecha-atencion', `Atendido: ${fechaAtencion}`);
         setEl('rep-cita-info',      `Cita #${cita.Cita_ID || '—'} — ${cita.fecha} ${formatearHoraAmPm(cita.hora)}`);
@@ -841,8 +974,9 @@ const guardarFranjaHoraria = async () => {
         if (errorEl) { errorEl.innerText = 'Completa todos los campos: fecha, hora de inicio y hora de fin.'; errorEl.classList.remove('hidden'); }
         return;
     }
-    const hoy = new Date().toISOString().split('T')[0];
-    if (fecha < hoy) {
+    const hoy = new Date();
+    const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
+    if (fecha < hoyStr) {
         if (errorEl) { errorEl.innerText = 'La fecha no puede ser anterior a hoy.'; errorEl.classList.remove('hidden'); }
         return;
     }
@@ -1034,6 +1168,10 @@ window.validarPasswordActualEsp = function () {
     .catch(() => mostrarToast('Error de conexión al verificar la contraseña.', 'error'));
 };
 
+// PUNTO 8: guardarPerfilCompleto ahora lee el input único "Nombre completo"
+// (conf-nombre-completo) y lo divide en Nombres/Apellidos antes de enviarlo
+// al backend, ya que /api/usuarios/<id> y la tabla 'usuarios' siguen
+// esperando ambos campos por separado.
 const guardarPerfilCompleto = async () => {
     const usuarioId  = usuarioSesionActual?.Usuario_ID;
     const errActual  = document.getElementById('error-pass-actual');
@@ -1045,8 +1183,8 @@ const guardarPerfilCompleto = async () => {
 
     if (!usuarioId) { mostrarToast('No se pudo identificar la sesión.', 'error'); return; }
 
-    const nombres    = (document.getElementById('conf-nombres')?.value   || '').trim();
-    const apellidos  = (document.getElementById('conf-apellidos')?.value || '').trim();
+    const nombreCompleto = (document.getElementById('conf-nombre-completo')?.value || '').trim();
+    const { nombres, apellidos } = _dividirNombreCompleto(nombreCompleto);
     const correo     = (document.getElementById('conf-email')?.value     || '').trim();
     const telefono   = (document.getElementById('conf-tel')?.value       || '').trim();
     const passActual = document.getElementById('pass-actual')?.value        || '';

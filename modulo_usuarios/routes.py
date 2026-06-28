@@ -1,5 +1,3 @@
-### modulo_usuarios/routes.py
-
 """
 modulo_usuarios/routes.py — Stylo Dental
 """
@@ -51,6 +49,8 @@ def _verificar_password_contra_hash(hash_bd, password_ingresada):
 
 # =============================================================================
 # AUTENTICACIÓN — LOGIN
+# PUNTO 8: Verificar Estado_ID del usuario. Si es Inactivo (Estado_ID != 1),
+#           denegar acceso y retornar mensaje de error.
 # =============================================================================
 
 @usuarios_bp.route('/auth/login', methods=['POST'])
@@ -75,6 +75,14 @@ def login():
 
         if not _verificar_password_contra_hash(fila['Contrasena'], contrasena):
             return jsonify({"ok": False, "error": "Correo o contraseña incorrectos"}), 401
+
+        # PUNTO 8: bloquear acceso si el usuario está Inactivo
+        if fila['Estado_ID'] != 1:
+            return jsonify({
+                "ok": False,
+                "error": "Tu cuenta está inactiva. Contacta al administrador para más información.",
+                "inactivo": True
+            }), 403
 
         usuario_data = dict(fila)
         usuario_data.pop('Contrasena', None)
@@ -134,6 +142,7 @@ def get_reporte_roles():
 
 # =============================================================================
 # USUARIOS — GET lista
+# PUNTO 2: ORDER BY u.Usuario_ID ASC para orden ascendente obligatorio
 # =============================================================================
 
 @usuarios_bp.route('/usuarios', methods=['GET'])
@@ -159,7 +168,7 @@ def get_usuarios():
             FROM usuarios u
             LEFT JOIN especialista esp ON esp.Usuario_ID = u.Usuario_ID
             LEFT JOIN paciente pac ON pac.Usuario_ID = u.Usuario_ID
-            ORDER BY u.Apellidos
+            ORDER BY u.Usuario_ID ASC
         """)
         filas = cursor.fetchall()
         return jsonify([dict(f) for f in filas]), 200
@@ -1263,7 +1272,8 @@ def pagar_multa(multa_id):
 
 
 # =============================================================================
-# ESPECIALISTAS — GET vista admin con ROW_NUMBER secuencial
+# ESPECIALISTAS — GET vista admin con ID real de BD
+# PUNTO 1: Exponer Especialista_ID real de la BD (se mantiene tal cual)
 # =============================================================================
 
 @usuarios_bp.route('/especialistas-admin', methods=['GET'])
@@ -1298,7 +1308,8 @@ def get_especialistas_admin():
 
 
 # =============================================================================
-# PACIENTES — GET vista admin con ROW_NUMBER secuencial y datos EPS
+# PACIENTES — GET vista admin con ID real de BD
+# PUNTO 1: Exponer Paciente_ID real de la BD (se mantiene tal cual)
 # =============================================================================
 
 @usuarios_bp.route('/pacientes-admin', methods=['GET'])

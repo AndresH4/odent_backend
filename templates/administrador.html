@@ -214,24 +214,28 @@
                         <div class="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg">
                             <i class="fas fa-history text-xl"></i>
                         </div>
-                        <h3 class="font-black text-slate-800 uppercase text-sm tracking-widest">Historial Global de Citas</h3>
+                        <!-- CAMBIO 3: título exacto -->
+                        <h3 class="font-black text-slate-800 uppercase text-sm tracking-widest">Historial de citas</h3>
                     </div>
-                    <div class="relative w-full md:w-96">
-                        <i class="fas fa-search absolute left-6 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                        <input
-                            type="text"
-                            id="busqueda-citas"
-                            onkeyup="filtrarTablaCitas()"
-                            placeholder="Filtrar por paciente o especialista..."
-                            class="text-xs pl-14 pr-8 py-5 w-full rounded-2xl border-2 border-slate-100 outline-none focus:border-sky-500 transition-all font-semibold">
+                    <div class="flex flex-wrap gap-4 items-center">
+                        <div class="relative w-full md:w-72">
+                            <i class="fas fa-search absolute left-6 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                            <input
+                                type="text"
+                                id="busqueda-citas"
+                                onkeyup="filtrarTablaCitas()"
+                                placeholder="Filtrar por paciente..."
+                                class="text-xs pl-14 pr-8 py-5 w-full rounded-2xl border-2 border-slate-100 outline-none focus:border-sky-500 transition-all font-semibold">
+                        </div>
                     </div>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left min-w-[900px]">
-                        <thead id="tabla-head" class="bg-slate-50/80 text-slate-400 text-[11px] font-black uppercase tracking-[0.25em] border-b border-slate-100"></thead>
-                        <tbody id="tabla-body" class="divide-y divide-slate-100"></tbody>
+                        <!-- CAMBIO 3: thead generado dinámicamente desde JS para incluir el dropdown en Estado -->
+                        <thead id="tabla-citas-head" class="bg-slate-50/80 text-slate-400 text-[11px] font-black uppercase tracking-[0.25em] border-b border-slate-100"></thead>
+                        <tbody id="tabla-citas-body" class="divide-y divide-slate-100"></tbody>
                     </table>
-                    <div id="no-datos" class="p-32 text-center hidden">
+                    <div id="no-datos-citas" class="p-32 text-center hidden">
                         <i class="fas fa-calendar-times text-4xl text-slate-300 mb-6 block"></i>
                         <p class="text-slate-400 font-black uppercase text-sm tracking-[0.3em]">Sin citas en el sistema</p>
                     </div>
@@ -254,18 +258,19 @@
                             <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Control de penalizaciones por cancelación</p>
                         </div>
                     </div>
-                    <div class="relative w-full md:w-80">
-                        <i class="fas fa-search absolute left-6 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                        <input
-                            type="text"
-                            id="busqueda-multas"
-                            oninput="filtrarTablaMultas()"
-                            placeholder="Filtrar por paciente..."
-                            class="text-xs pl-14 pr-8 py-5 w-full rounded-2xl border-2 border-slate-100 outline-none focus:border-rose-400 transition-all font-semibold">
+                    <div class="flex flex-wrap gap-4 items-center">
+                        <div class="relative w-full md:w-80">
+                            <i class="fas fa-search absolute left-6 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                            <input
+                                type="text"
+                                id="busqueda-multas"
+                                oninput="filtrarTablaMultas()"
+                                placeholder="Filtrar por paciente..."
+                                class="text-xs pl-14 pr-8 py-5 w-full rounded-2xl border-2 border-slate-100 outline-none focus:border-rose-400 transition-all font-semibold">
+                        </div>
                     </div>
                 </div>
 
-                <!-- Contador resumen -->
                 <div class="px-10 py-5 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex flex-wrap gap-6">
                     <div class="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3">
                         <i class="fas fa-clock text-amber-500 text-sm"></i>
@@ -292,10 +297,11 @@
 
                 <div class="overflow-x-auto">
                     <table class="w-full text-left min-w-[900px]">
-                        <thead id="tabla-head" class="bg-slate-50/80 text-slate-400 text-[11px] font-black uppercase tracking-[0.25em] border-b border-slate-100"></thead>
-                        <tbody id="tabla-body" class="divide-y divide-slate-100"></tbody>
+                        <!-- CAMBIO 4: thead generado dinámicamente desde JS para incluir el dropdown en Estado -->
+                        <thead id="tabla-multas-head" class="bg-slate-50/80 text-slate-400 text-[11px] font-black uppercase tracking-[0.25em] border-b border-slate-100"></thead>
+                        <tbody id="tabla-multas-body" class="divide-y divide-slate-100"></tbody>
                     </table>
-                    <div id="no-datos" class="p-32 text-center hidden">
+                    <div id="no-datos-multas" class="p-32 text-center hidden">
                         <i class="fas fa-file-circle-check text-4xl text-slate-300 mb-6 block"></i>
                         <p class="text-slate-400 font-black uppercase text-sm tracking-[0.3em]">Sin multas registradas</p>
                     </div>
@@ -423,6 +429,25 @@
         </div>
     </div>
 
+    <!-- CAMBIO 5: Modal de confirmación para acciones críticas (toggle estado / pagar multa) -->
+    <div id="modalConfirmarAccion" class="modal-overlay" style="display:none;">
+        <div class="modal-content p-10 text-center border-t-8 border-amber-500" style="max-width:480px">
+            <div class="text-amber-500 text-6xl mb-6"><i id="modal-accion-icon" class="fas fa-exclamation-triangle"></i></div>
+            <h3 id="modal-accion-titulo" class="text-slate-800 font-black text-xl mb-3 uppercase tracking-tighter italic"></h3>
+            <p id="modal-accion-texto" class="text-slate-500 text-xs font-bold uppercase tracking-widest mb-8"></p>
+            <div class="flex gap-4">
+                <button id="modal-accion-confirmar-btn"
+                    class="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-sky-600 transition-all text-xs uppercase tracking-widest">
+                    Confirmar
+                </button>
+                <button onclick="cerrarModalAccion()"
+                    class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all text-xs uppercase tracking-widest">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal error contraseña -->
     <div id="modalErrorPassword" class="modal-overlay" style="display:none;">
         <div class="modal-content p-10 text-center border-t-8 border-red-400" style="max-width:440px">
@@ -444,7 +469,6 @@
 
     <script src="{{ url_for('static', filename='js/administrador.js') }}"></script>
     <script>
-        // Toast helper accesible globalmente desde el HTML inline
         (function () {
             const style = document.createElement('style');
             style.textContent = '#toast.visible { opacity: 1 !important; pointer-events: auto; }';

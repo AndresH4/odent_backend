@@ -1,3 +1,4 @@
+// static/js/paciente.js
 // Archivo: paciente.js  — Stylo Dental Pro
 'use strict';
 
@@ -365,6 +366,11 @@ function _renderTablaCitas() {
             <td class="p-5 text-xs text-slate-500">${c.NumeroDocumento || '—'}</td>
             <td class="p-5 font-black text-sky-600 uppercase text-[10px]">${c.Nombre_Especialidad || '—'}</td>
             <td class="p-5 text-xs font-bold">${c.Fecha}<br><span class="text-slate-400">${c.Hora_Inicio || ''}</span></td>
+            <td class="p-5 text-center">
+                <span class="font-mono font-black text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg text-xs tracking-[0.2em] border border-slate-200 inline-block">
+                    ${c.Codigo_Verificacion || '------'}
+                </span>
+            </td>
             <td class="p-5">
                 <span class="text-[9px] font-black uppercase px-2 py-1 rounded-full ${estadoInfo.clase}">
                     ${estadoInfo.label}
@@ -437,9 +443,9 @@ function _renderHistorial() {
     });
 }
 
-// ─── RENDER MULTAS DEL PACIENTE ───────────────────────────────────────────────
+// ─── RENDER MULTAS DEL PACIENTE (SOLO LECTURA) ───────────────────────────────
 async function _renderMultasPaciente() {
-    const tbody = document.getElementById('tabla-multas-body');
+    const tbody = document.getElementById('tabla-multas-paciente-body');
     const noMsg = document.getElementById('no-multas-msg');
     if (!tbody || !_pacienteId) return;
 
@@ -462,23 +468,15 @@ async function _renderMultasPaciente() {
             const pagada = m.EstadoMulta_ID === 2;
             const tr = document.createElement('tr');
             tr.innerHTML = `
+                <td class="p-5 text-xs font-black text-slate-500">#${m.Multa_ID}</td>
+                <td class="p-5 text-xs text-slate-600">${m.Concepto || '—'}</td>
+                <td class="p-5 font-black text-sky-600 uppercase text-[10px]">${m.Nombre_Especialidad || '—'}</td>
                 <td class="p-5 text-xs font-bold">${m.Fecha || '—'}<br><span class="text-slate-400">${m.Hora_Inicio || ''}</span></td>
                 <td class="p-5 text-xs text-slate-600">Dr(a). ${m.NombreEspecialista || '—'}</td>
-                <td class="p-5 font-black text-sky-600 uppercase text-[10px]">${m.Nombre_Especialidad || '—'}</td>
-                <td class="p-5 text-xs text-slate-500">${m.Concepto || '—'}</td>
-                <td class="p-5">
-                    <span class="text-[9px] font-black uppercase px-2 py-1 rounded-full ${pagada ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}">
+                <td class="p-5 text-center">
+                    <span class="text-[9px] font-black uppercase px-2 py-1 rounded-full ${pagada ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-amber-100 text-amber-700 border border-amber-200'}">
                         ${m.EstadoMulta || '—'}
                     </span>
-                </td>
-                <td class="p-5 text-center">
-                    ${!pagada
-                        ? `<button onclick="abrirModalPagarMulta(${m.Multa_ID})"
-                               class="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-4 py-2 rounded-xl font-black hover:bg-amber-100 transition-all uppercase">
-                               <i class="fas fa-money-bill-wave mr-1"></i> Pagar
-                           </button>`
-                        : '<span class="text-slate-300 text-[10px] font-bold">—</span>'
-                    }
                 </td>`;
             tbody.appendChild(tr);
         });

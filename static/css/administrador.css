@@ -260,7 +260,7 @@ body {
 }
 
 /* ===================================================================
-   PASSWORD WRAPPER — clonado de paciente.css
+   PASSWORD WRAPPER
    =================================================================== */
 .pass-input-wrapper {
     position: relative;
@@ -288,7 +288,7 @@ body {
 .pass-toggle-btn:hover { color: var(--primary); }
 
 /* ===================================================================
-   REQUISITOS DE CONTRASEÑA — clonado de paciente.css
+   REQUISITOS DE CONTRASEÑA
    =================================================================== */
 .req-item {
     display:     flex;
@@ -374,3 +374,220 @@ th { border-bottom: 2px solid #f1f5f9; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
 main { scroll-behavior: smooth; }
+
+/* ===================================================================
+   CAMBIO 2/3/4 — DROPDOWN DE COLUMNA (col-filter)
+   Botón con flecha en el encabezado de la tabla + menú flotante
+   =================================================================== */
+.col-filter-wrapper {
+    position:    relative;
+    display:     inline-flex;
+    align-items: center;
+}
+
+.col-filter-wrapper--center {
+    justify-content: center;
+}
+
+/* Botón disparador dentro del <th> */
+.col-filter-btn {
+    display:         inline-flex;
+    align-items:     center;
+    gap:             6px;
+    background:      none;
+    border:          1.5px solid transparent;
+    border-radius:   10px;
+    padding:         4px 10px;
+    font-size:       11px;
+    font-weight:     900;
+    color:           #94a3b8;
+    cursor:          pointer;
+    letter-spacing:  0.15em;
+    text-transform:  uppercase;
+    transition:      all 0.22s ease;
+    white-space:     nowrap;
+}
+
+.col-filter-btn:hover {
+    border-color:     #e2e8f0;
+    background-color: #f8fafc;
+    color:            var(--primary);
+}
+
+.col-filter-chevron {
+    font-size:  9px;
+    transition: transform 0.22s ease;
+}
+
+/* Cuando el menú está abierto, gira la flecha */
+.col-dropdown-open + .col-filter-chevron,
+.col-filter-wrapper:has(.col-dropdown-open) .col-filter-chevron {
+    transform: rotate(180deg);
+}
+
+/* ─── Menú flotante ─── */
+.col-dropdown-menu {
+    position:         absolute;
+    top:              calc(100% + 8px);
+    left:             0;
+    min-width:        170px;
+    background:       #ffffff;
+    border:           1.5px solid #e2e8f0;
+    border-radius:    18px;
+    box-shadow:       0 20px 40px -8px rgba(0,0,0,0.14), 0 4px 12px rgba(0,0,0,0.06);
+    padding:          8px;
+    z-index:          500;
+    opacity:          0;
+    pointer-events:   none;
+    transform:        translateY(-8px) scale(0.96);
+    transform-origin: top left;
+    transition:       opacity 0.22s cubic-bezier(0.23,1,0.32,1),
+                      transform 0.22s cubic-bezier(0.23,1,0.32,1);
+}
+
+.col-dropdown-menu--right {
+    left:  auto;
+    right: 0;
+    transform-origin: top right;
+}
+
+.col-dropdown-menu.col-dropdown-open {
+    opacity:        1;
+    pointer-events: auto;
+    transform:      translateY(0) scale(1);
+}
+
+/* Ítems del menú */
+.col-dropdown-item {
+    display:         flex;
+    align-items:     center;
+    gap:             8px;
+    width:           100%;
+    padding:         8px 12px;
+    border:          none;
+    border-radius:   12px;
+    background:      none;
+    font-size:       11px;
+    font-weight:     700;
+    color:           #475569;
+    cursor:          pointer;
+    text-align:      left;
+    letter-spacing:  0.05em;
+    transition:      background 0.15s ease, color 0.15s ease;
+    white-space:     nowrap;
+}
+
+.col-dropdown-item:hover {
+    background: #f1f5f9;
+    color:      var(--primary);
+}
+
+.col-dropdown-item--active {
+    background: #eff6ff;
+    color:      var(--primary);
+    font-weight: 900;
+}
+
+/* Puntos de color para opciones */
+.col-dd-dot {
+    display:       inline-block;
+    width:         9px;
+    height:        9px;
+    border-radius: 50%;
+    flex-shrink:   0;
+}
+
+/* ─── Puntos para estados de Usuario (Cambio 2) ─── */
+.col-dd-dot--activo   { background: #10b981; box-shadow: 0 0 0 2px #d1fae5; }
+.col-dd-dot--inactivo { background: #ef4444; box-shadow: 0 0 0 2px #fee2e2; }
+
+/* ─── Puntos para estados de Citas (Cambio 3) ─── */
+.col-dd-dot--atendido  { background: #059669; box-shadow: 0 0 0 2px #d1fae5; }
+.col-dd-dot--proceso   { background: #0284c7; box-shadow: 0 0 0 2px #dbeafe; }
+.col-dd-dot--cancelado { background: #dc2626; box-shadow: 0 0 0 2px #fee2e2; }
+.col-dd-dot--multa     { background: #be123c; box-shadow: 0 0 0 2px #ffe4e6; }
+
+/* ─── Puntos para estados de Multas (Cambio 4) ─── */
+.col-dd-dot--pendiente { background: #d97706; box-shadow: 0 0 0 2px #fef3c7; }
+.col-dd-dot--pagada    { background: #059669; box-shadow: 0 0 0 2px #d1fae5; }
+
+/* ===================================================================
+   CAMBIO 3 — BADGES DE ESTADO DE CITAS (diseño visual independiente)
+   =================================================================== */
+.badge-cita {
+    display:       inline-flex;
+    align-items:   center;
+    gap:           5px;
+    font-size:     9px;
+    font-weight:   900;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding:       5px 10px;
+    border-radius: 99px;
+    white-space:   nowrap;
+}
+
+/* Atendido — verde esmeralda */
+.badge-cita-atendido {
+    background: #d1fae5;
+    color:      #065f46;
+    border:     1.5px solid #a7f3d0;
+}
+
+/* En proceso — azul cielo (vinculado a EstadoAgenda_ID=2 Ocupado en BD) */
+.badge-cita-proceso {
+    background: #dbeafe;
+    color:      #1e40af;
+    border:     1.5px solid #bfdbfe;
+}
+
+/* Cancelada sin multa — rojo suave */
+.badge-cita-cancelado {
+    background: #fee2e2;
+    color:      #991b1b;
+    border:     1.5px solid #fecaca;
+}
+
+/* Cancelada con multa — rosa intenso, diferenciado */
+.badge-cita-multa {
+    background: #ffe4e6;
+    color:      #9f1239;
+    border:     1.5px solid #fda4af;
+}
+
+/* Default (sin clasificar) */
+.badge-cita-default {
+    background: #f1f5f9;
+    color:      #64748b;
+    border:     1.5px solid #e2e8f0;
+}
+
+/* ===================================================================
+   CAMBIO 4 — BADGES DE ESTADO DE MULTAS
+   =================================================================== */
+.badge-multa {
+    display:        inline-flex;
+    align-items:    center;
+    gap:            5px;
+    font-size:      9px;
+    font-weight:    900;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding:        5px 10px;
+    border-radius:  99px;
+    white-space:    nowrap;
+}
+
+/* Pendiente — ámbar */
+.badge-multa-pendiente {
+    background: #fef3c7;
+    color:      #92400e;
+    border:     1.5px solid #fde68a;
+}
+
+/* Pagada — verde */
+.badge-multa-pagada {
+    background: #d1fae5;
+    color:      #065f46;
+    border:     1.5px solid #a7f3d0;
+}

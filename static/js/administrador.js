@@ -7,6 +7,12 @@ let _accionPendienteSimple = '';
 let _vistaActualLista      = '';
 let _datosListaCache       = [];
 let _passwordValidado      = false;
+let _citasCache            = [];
+let _multasCache           = [];
+let _filtroCitaActivo      = '';
+let _filtroMultaActivo     = '';
+let _filtroEstadoUsuarios  = '';
+let _accionPendienteCallback = null;
 
 // ─── Utilidades DOM ───────────────────────────────────────────────────────────
 function setText(id, val) {
@@ -20,10 +26,67 @@ function mostrarToast(msg) {
         t.textContent = msg;
         t.classList.add('visible');
         setTimeout(() => t.classList.remove('visible'), 3000);
-    } else {
-        alert(msg);
     }
 }
+
+// ─── Cerrar todos los dropdowns de columna al hacer clic fuera ───────────────
+document.addEventListener('click', function (e) {
+    document.querySelectorAll('.col-dropdown-menu').forEach(menu => {
+        const btn = menu.previousElementSibling;
+        if (!menu.contains(e.target) && btn && !btn.contains(e.target)) {
+            menu.classList.remove('col-dropdown-open');
+        }
+    });
+});
+
+// ─── Toggle de dropdown de columna ───────────────────────────────────────────
+function toggleColDropdown(menuId, event) {
+    event.stopPropagation();
+    const menu = document.getElementById(menuId);
+    if (!menu) return;
+    document.querySelectorAll('.col-dropdown-menu').forEach(m => {
+        if (m.id !== menuId) m.classList.remove('col-dropdown-open');
+    });
+    menu.classList.toggle('col-dropdown-open');
+}
+
+// ─── Modal de confirmación de acciones críticas ───────────────────────────────
+function mostrarModalAccion(titulo, texto, iconCls, btnCls, callback) {
+    const modal    = document.getElementById('modalConfirmarAccion');
+    const tituloEl = document.getElementById('modal-accion-titulo');
+    const textoEl  = document.getElementById('modal-accion-texto');
+    const iconEl   = document.getElementById('modal-accion-icon');
+    const btnEl    = document.getElementById('modal-accion-confirmar-btn');
+
+    if (!modal) return;
+
+    tituloEl.textContent = titulo;
+    textoEl.textContent  = texto;
+    iconEl.className     = iconCls || 'fas fa-exclamation-triangle';
+
+    btnEl.className = `flex-1 text-white py-4 rounded-2xl font-black transition-all text-xs uppercase tracking-widest ${btnCls || 'bg-slate-900 hover:bg-sky-600'}`;
+
+    _accionPendienteCallback = callback;
+    modal.style.display = 'flex';
+}
+
+function cerrarModalAccion() {
+    const modal = document.getElementById('modalConfirmarAccion');
+    if (modal) modal.style.display = 'none';
+    _accionPendienteCallback = null;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const btnConfirmar = document.getElementById('modal-accion-confirmar-btn');
+    if (btnConfirmar) {
+        btnConfirmar.addEventListener('click', () => {
+            if (typeof _accionPendienteCallback === 'function') {
+                _accionPendienteCallback();
+            }
+            cerrarModalAccion();
+        });
+    }
+});
 
 // ─── Sesión ───────────────────────────────────────────────────────────────────
 async function cargarSesion() {
@@ -111,18 +174,7 @@ async function actualizarStats() {
     }
 }
 
-// ─── Helper de extracción segura de ID por rol ───────────────────────────────
-function _extraerId(u, ...claves) {
-    for (const k of claves) {
-        if (u && u[k] !== undefined && u[k] !== null) return u[k];
-    }
-    return null;
-}
-
 // ─── Especialistas y Pacientes ────────────────────────────────────────────────
-// Usa los endpoints administrativos reales (/api/especialistas-admin y
-// /api/pacientes-admin) que traen el 100% de los registros desde 'odent.db'
-// sin filtros de estado, con las columnas exactas requeridas para cada vista.
 async function renderUsuarios(rolNombre) {
     _vistaActualLista = rolNombre;
 
@@ -138,7 +190,7 @@ async function renderUsuarios(rolNombre) {
                 Especialista_ID: e.Especialista_ID,
                 NombreCompleto:  e.NombreCompleto || '—',
                 Especialidad:    e.Especialidad   || '—',
-                EstadoUsuario:   e.EstadoUsuario   || '—',
+                EstadoUsuario:   e.EstadoUsuario  || '—',
                 Estado_ID:       e.Estado_ID,
             }));
 
@@ -168,7 +220,8 @@ async function renderUsuarios(rolNombre) {
 
 // ─── Todos los usuarios ───────────────────────────────────────────────────────
 async function renderTodosUsuarios() {
-    _vistaActualLista = 'Todos';
+    _vistaActualLista    = 'Todos';
+    _filtroEstadoUsuarios = '';
 
     try {
         const res  = await fetch('/api/usuarios');
@@ -244,16 +297,64 @@ function _mostrarListaDinamica(tipo, filas, conToggle) {
                 <th class="p-5">Número Documento</th>
                 <th class="p-5">Teléfono</th>
                 <th class="p-5">Correo</th>
-                <th class="p-5">Estado</th>`;
+                <th class="p-5">
+                    <div class="col-filter-wrapper">
+                        <button class="col-filter-btn" onclick="toggleColDropdown('dd-estado-usuarios', event)">
+                            Estado <i class="fas fa-chevron-down col-filter-chevron"></i>
+                        </button>
+                        <div id="dd-estado-usuarios" class="col-dropdown-menu">
+                            <button class="col-dropdown-item col-dropdown-item--active" onclick="seleccionarFiltroUsuario('', event)">
+                                <i class="fas fa-circle-half-stroke"></i> Todos
+                            </button>
+                            <button class="col-dropdown-item" onclick="seleccionarFiltroUsuario('activo', event)">
+                                <span class="col-dd-dot col-dd-dot--activo"></span> Activo
+                            </button>
+                            <button class="col-dropdown-item" onclick="seleccionarFiltroUsuario('inactivo', event)">
+                                <span class="col-dd-dot col-dd-dot--inactivo"></span> Inactivo
+                            </button>
+                        </div>
+                    </div>
+                </th>`;
         }
     }
 
-    _renderFilas(filas, tipo, conToggle);
+    _renderFilas(filas, tipo);
+}
+
+// ─── Filtro de estado en "Total Usuarios" ─────────────────────────────────────
+function seleccionarFiltroUsuario(valor, event) {
+    event.stopPropagation();
+    _filtroEstadoUsuarios = valor;
+
+    document.querySelectorAll('#dd-estado-usuarios .col-dropdown-item').forEach(btn => {
+        btn.classList.remove('col-dropdown-item--active');
+    });
+    if (event.currentTarget) event.currentTarget.classList.add('col-dropdown-item--active');
+
+    const menu = document.getElementById('dd-estado-usuarios');
+    if (menu) menu.classList.remove('col-dropdown-open');
+
+    let filasFiltradas = _datosListaCache;
+    if (valor === 'activo') {
+        filasFiltradas = _datosListaCache.filter(u => u.Estado_ID === 1);
+    } else if (valor === 'inactivo') {
+        filasFiltradas = _datosListaCache.filter(u => u.Estado_ID !== 1);
+    }
+    _renderFilas(filasFiltradas, 'Todos');
+}
+
+function aplicarFiltroEstadoUsuarios(valor) {
+    _filtroEstadoUsuarios = valor;
+    let filasFiltradas = _datosListaCache;
+    if (valor === 'activo') {
+        filasFiltradas = _datosListaCache.filter(u => u.Estado_ID === 1);
+    } else if (valor === 'inactivo') {
+        filasFiltradas = _datosListaCache.filter(u => u.Estado_ID !== 1);
+    }
+    _renderFilas(filasFiltradas, 'Todos');
 }
 
 // ─── Pintar filas ─────────────────────────────────────────────────────────────
-// El ID mostrado en pantalla SIEMPRE es secuencial (índice del bucle + 1),
-// independiente de los IDs internos reales de la base de datos.
 function _renderFilas(filas, tipo) {
     const body = document.getElementById('body-lista-dinamica');
     const noD  = document.getElementById('no-datos-lista');
@@ -264,29 +365,26 @@ function _renderFilas(filas, tipo) {
     if (filas.length === 0) { noD?.classList.remove('hidden'); return; }
     noD?.classList.add('hidden');
 
-    filas.forEach((u, idx) => {
+    filas.forEach((u) => {
         const tr          = document.createElement('tr');
         tr.className      = 'hover:bg-sky-50/50 transition-all';
         tr.dataset.nombre = (u.NombreCompleto || '').toUpperCase();
 
-        const idSecuencial = idx + 1;
         const estadoActivo = u.Estado_ID === 1;
         const badgeEstado  = estadoActivo
             ? '<span class="text-[9px] font-bold uppercase px-2 py-1 rounded-full bg-green-100 text-green-700">Activo</span>'
             : '<span class="text-[9px] font-bold uppercase px-2 py-1 rounded-full bg-red-100 text-red-700">Inactivo</span>';
 
         if (tipo === 'Especialista') {
-            // Estado de solo lectura: sin botones ni interruptores de cambio.
             tr.innerHTML = `
-                <td class="p-5 font-black text-slate-500 text-[11px]">#${idSecuencial}</td>
+                <td class="p-5 font-black text-slate-500 text-[11px]">#${u.Especialista_ID}</td>
                 <td class="p-5 font-black text-slate-800 text-[11px] uppercase">${u.NombreCompleto}</td>
                 <td class="p-5 text-[10px] font-bold text-sky-600 uppercase">${u.Especialidad || '—'}</td>
                 <td class="p-5">${badgeEstado}</td>`;
 
         } else if (tipo === 'Paciente') {
-            // Estado de solo lectura: sin botones ni interruptores de cambio.
             tr.innerHTML = `
-                <td class="p-5 font-black text-slate-500 text-[11px]">#${idSecuencial}</td>
+                <td class="p-5 font-black text-slate-500 text-[11px]">#${u.Paciente_ID}</td>
                 <td class="p-5 font-black text-slate-800 text-[11px] uppercase">${u.NombreCompleto}</td>
                 <td class="p-5 text-[10px] font-bold text-slate-600 uppercase">${u.RegimenEPS || '—'}</td>
                 <td class="p-5 text-[10px] font-bold text-slate-600 uppercase">${u.TipoAfiliacion || '—'}</td>
@@ -294,9 +392,8 @@ function _renderFilas(filas, tipo) {
                 <td class="p-5">${badgeEstado}</td>`;
 
         } else {
-            // Único lugar con botón de activar/desactivar usuario.
             tr.innerHTML = `
-                <td class="p-5 font-black text-slate-500 text-[11px]">#${idSecuencial}</td>
+                <td class="p-5 font-black text-slate-500 text-[11px]">#${u.Usuario_ID}</td>
                 <td class="p-5 font-black text-slate-800 text-[11px] uppercase">${u.NombreCompleto}</td>
                 <td class="p-5 text-[10px] font-bold text-slate-600">${u.TipoDoc || '—'}</td>
                 <td class="p-5 text-[10px] font-bold text-slate-600">${u.NumeroDocumento}</td>
@@ -304,7 +401,7 @@ function _renderFilas(filas, tipo) {
                 <td class="p-5 text-[10px] font-bold text-slate-600">${u.Correo}</td>
                 <td class="p-5">
                     <button
-                        onclick="toggleEstadoUsuario(${u.Usuario_ID}, ${u.Estado_ID}, this)"
+                        onclick="confirmarToggleEstadoUsuario(${u.Usuario_ID}, ${u.Estado_ID}, this)"
                         class="text-[9px] font-black uppercase px-3 py-1.5 rounded-full border transition-all
                             ${estadoActivo
                                 ? 'bg-green-100 text-green-700 border-green-200 hover:bg-green-200'
@@ -318,10 +415,20 @@ function _renderFilas(filas, tipo) {
     });
 }
 
+// ─── Confirmar toggle estado usuario ─────────────────────────────────────────
+function confirmarToggleEstadoUsuario(usuarioId, estadoActual, btnEl) {
+    const nuevoEstado = estadoActual === 1 ? 2 : 1;
+    const accion      = nuevoEstado === 1 ? 'activar' : 'inactivar';
+    mostrarModalAccion(
+        `¿${accion.charAt(0).toUpperCase() + accion.slice(1)} usuario?`,
+        `Esta acción cambiará el estado del usuario #${usuarioId} en el sistema.`,
+        'fas fa-user-cog',
+        nuevoEstado === 1 ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700',
+        () => toggleEstadoUsuario(usuarioId, estadoActual, btnEl)
+    );
+}
+
 // ─── Toggle estado usuario ────────────────────────────────────────────────────
-// Corregido: el endpoint real registrado en el backend es '/api/usuarios/<id>'
-// (plural), no '/api/usuario/<id>'. La URL incorrecta impedía que el cambio
-// de estado se guardara realmente en 'odent.db'.
 async function toggleEstadoUsuario(usuarioId, estadoActual, btnEl) {
     const nuevoEstado = estadoActual === 1 ? 2 : 1;
     const nuevoLabel  = nuevoEstado  === 1 ? 'Activo' : 'Inactivo';
@@ -335,7 +442,7 @@ async function toggleEstadoUsuario(usuarioId, estadoActual, btnEl) {
         const data = await res.json();
 
         if (data.ok) {
-            btnEl.setAttribute('onclick', `toggleEstadoUsuario(${usuarioId}, ${nuevoEstado}, this)`);
+            btnEl.setAttribute('onclick', `confirmarToggleEstadoUsuario(${usuarioId}, ${nuevoEstado}, this)`);
             btnEl.textContent = nuevoLabel;
             btnEl.className   = `text-[9px] font-black uppercase px-3 py-1.5 rounded-full border transition-all
                 ${nuevoEstado === 1
@@ -344,12 +451,13 @@ async function toggleEstadoUsuario(usuarioId, estadoActual, btnEl) {
             const idx = _datosListaCache.findIndex(u => u.Usuario_ID === usuarioId);
             if (idx !== -1) _datosListaCache[idx].Estado_ID = nuevoEstado;
             await actualizarStats();
+            mostrarToast(`Usuario #${usuarioId} ${nuevoLabel.toLowerCase()} correctamente.`);
         } else {
-            alert(`Error: ${data.error || 'No se pudo actualizar el estado.'}`);
+            mostrarToast(`Error: ${data.error || 'No se pudo actualizar el estado.'}`);
         }
     } catch (e) {
         console.error('[admin] Error toggle estado:', e);
-        alert('Error de conexión al actualizar estado.');
+        mostrarToast('Error de conexión al actualizar estado.');
     }
 }
 
@@ -366,27 +474,56 @@ function ocultarListaRapida() {
     const buscCont = document.getElementById('container-buscador-lista');
     cont?.classList.remove('seccion-visible');    cont?.classList.add('seccion-oculta');
     buscCont?.classList.remove('seccion-visible'); buscCont?.classList.add('seccion-oculta');
-    _vistaActualLista = '';
-    _datosListaCache  = [];
-}
-
-// ─── Filtrar historial de citas ───────────────────────────────────────────────
-function filtrarTablaCitas() {
-    const filtro = (document.getElementById('busqueda-citas')?.value || '').toLowerCase();
-    document.querySelectorAll('#tabla-body tr').forEach(fila => {
-        fila.style.display = fila.textContent.toLowerCase().includes(filtro) ? '' : 'none';
-    });
+    _vistaActualLista    = '';
+    _datosListaCache     = [];
+    _filtroEstadoUsuarios = '';
 }
 
 // ─── Historial de citas ───────────────────────────────────────────────────────
+// FIX PUNTO 5: comparación EXACTA con === para que "cancelado" y "multa"
+// sean mutuamente excluyentes y no se solapen jamás.
+function filtrarTablaCitas() {
+    const texto = (document.getElementById('busqueda-citas')?.value || '').toLowerCase();
+    document.querySelectorAll('#tabla-citas-body tr').forEach(fila => {
+        const matchTexto  = fila.textContent.toLowerCase().includes(texto);
+        // === en lugar de .includes() — garantiza exclusión mutua exacta
+        const matchEstado = _filtroCitaActivo === '' || (fila.dataset.estadoKey || '') === _filtroCitaActivo;
+        fila.style.display = (matchTexto && matchEstado) ? '' : 'none';
+    });
+}
+
+function seleccionarFiltroCita(clave, event) {
+    event.stopPropagation();
+    _filtroCitaActivo = clave;
+
+    document.querySelectorAll('#dd-estado-citas .col-dropdown-item').forEach(btn => {
+        btn.classList.remove('col-dropdown-item--active');
+    });
+    if (event.currentTarget) event.currentTarget.classList.add('col-dropdown-item--active');
+
+    const menu = document.getElementById('dd-estado-citas');
+    if (menu) menu.classList.remove('col-dropdown-open');
+
+    filtrarTablaCitas();
+}
+
 async function renderCitas() {
     try {
         const res  = await fetch('/api/citas');
         const data = await res.json();
 
-        const head = document.getElementById('tabla-head');
-        const body = document.getElementById('tabla-body');
-        const noD  = document.getElementById('no-datos');
+        // Cargar multas para identificar "cancelada con multa"
+        let multasMap = {};
+        try {
+            const resM  = await fetch('/api/multas');
+            const dataM = await resM.json();
+            const arr   = dataM.ok ? dataM.data : (Array.isArray(dataM) ? dataM : []);
+            arr.forEach(m => { multasMap[m.Cita_ID] = true; });
+        } catch (_) {}
+
+        const head = document.getElementById('tabla-citas-head');
+        const body = document.getElementById('tabla-citas-body');
+        const noD  = document.getElementById('no-datos-citas');
         if (!head || !body) return;
 
         head.innerHTML = `
@@ -395,24 +532,75 @@ async function renderCitas() {
                 <th class="p-6">Especialista</th>
                 <th class="p-6">Especialidad</th>
                 <th class="p-6">Fecha / Hora</th>
-                <th class="p-6">Estado</th>
+                <th class="p-6">
+                    <div class="col-filter-wrapper">
+                        <button class="col-filter-btn" onclick="toggleColDropdown('dd-estado-citas', event)">
+                            Estado <i class="fas fa-chevron-down col-filter-chevron"></i>
+                        </button>
+                        <div id="dd-estado-citas" class="col-dropdown-menu">
+                            <button class="col-dropdown-item col-dropdown-item--active" onclick="seleccionarFiltroCita('', event)">
+                                <i class="fas fa-circle-half-stroke"></i> Todos
+                            </button>
+                            <button class="col-dropdown-item" onclick="seleccionarFiltroCita('atendido', event)">
+                                <span class="col-dd-dot col-dd-dot--atendido"></span> Atendido
+                            </button>
+                            <button class="col-dropdown-item" onclick="seleccionarFiltroCita('proceso', event)">
+                                <span class="col-dd-dot col-dd-dot--proceso"></span> En proceso
+                            </button>
+                            <button class="col-dropdown-item" onclick="seleccionarFiltroCita('cancelado', event)">
+                                <span class="col-dd-dot col-dd-dot--cancelado"></span> Cancelada
+                            </button>
+                            <button class="col-dropdown-item" onclick="seleccionarFiltroCita('multa', event)">
+                                <span class="col-dd-dot col-dd-dot--multa"></span> Cancelada con multa
+                            </button>
+                        </div>
+                    </div>
+                </th>
             </tr>`;
 
-        const citas = Array.isArray(data) ? data : [];
-        if (citas.length === 0) { noD?.classList.remove('hidden'); body.innerHTML = ''; return; }
+        _citasCache = Array.isArray(data) ? data : [];
+        if (_citasCache.length === 0) { noD?.classList.remove('hidden'); body.innerHTML = ''; return; }
         noD?.classList.add('hidden');
 
-        body.innerHTML = citas.map(c => {
-            const estado = c.EstadoAgenda || '—';
-            const el     = estado.toLowerCase();
-            let cls = 'bg-slate-100 text-slate-600';
-            if      (el.includes('disponible') || el.includes('pendiente'))                       cls = 'bg-green-100 text-green-700';
-            else if (el.includes('ocup') || el.includes('proceso') || el.includes('atend'))       cls = 'bg-sky-100 text-sky-700';
-            else if (el.includes('cancel') || el.includes('multa'))                               cls = 'bg-red-100 text-red-700';
-            else if (el.includes('cumplid') || el.includes('finaliz'))                            cls = 'bg-emerald-100 text-emerald-700';
+        body.innerHTML = _citasCache.map(c => {
+            const estado     = (c.EstadoAgenda || '').trim();
+            const estadoLC   = estado.toLowerCase();
+            const tieneMulta = multasMap[c.Cita_ID] || false;
+
+            // FIX PUNTO 5: estadoKey con valores exactos y mutuamente excluyentes.
+            // 'cancelado' NUNCA coincide con 'multa' usando ===.
+            // Se evalúa tieneMulta PRIMERO para separar los dos casos de cancelación.
+            let estadoKey = '';
+            let badgeCls  = 'badge-cita-default';
+            let etiqueta  = estado;
+
+            if (estadoLC === 'cumplida' || estadoLC === 'atendido' || estadoLC === 'finalizado') {
+                estadoKey = 'atendido';
+                badgeCls  = 'badge-cita-atendido';
+                etiqueta  = 'Atendido';
+            } else if (estadoLC === 'ocupado' || estadoLC === 'en proceso' || estadoLC === 'atendiendo') {
+                // "En proceso" — vinculado a EstadoAgenda_ID=2 (Ocupado) en BD
+                estadoKey = 'proceso';
+                badgeCls  = 'badge-cita-proceso';
+                etiqueta  = 'En proceso';
+            } else if (estadoLC === 'cancelado' && tieneMulta) {
+                // EXACTO: cancelado + con multa → clave 'multa' (distinta de 'cancelado')
+                estadoKey = 'multa';
+                badgeCls  = 'badge-cita-multa';
+                etiqueta  = `Cancelada con multa <i class="fas fa-file-invoice-dollar ml-1 text-[9px]"></i>`;
+            } else if (estadoLC === 'cancelado' && !tieneMulta) {
+                // EXACTO: cancelado + sin multa → clave 'cancelado' (distinta de 'multa')
+                estadoKey = 'cancelado';
+                badgeCls  = 'badge-cita-cancelado';
+                etiqueta  = 'Cancelada';
+            } else if (estadoLC === 'disponible' || estadoLC === 'pendiente') {
+                estadoKey = 'proceso';
+                badgeCls  = 'badge-cita-proceso';
+                etiqueta  = 'En proceso';
+            }
 
             return `
-            <tr class="hover:bg-slate-50 transition-colors">
+            <tr class="hover:bg-slate-50 transition-colors" data-estado-key="${estadoKey}">
                 <td class="p-6 font-bold text-slate-800 text-[11px] uppercase">${c.NombrePaciente || '—'}</td>
                 <td class="p-6 text-[10px] font-black text-slate-600 uppercase">
                     <i class="fas fa-user-md mr-2 text-sky-500"></i>${c.NombreEspecialista || '—'}
@@ -420,30 +608,55 @@ async function renderCitas() {
                 <td class="p-6 text-sky-600 font-black text-[10px] uppercase">${c.Nombre_Especialidad || '—'}</td>
                 <td class="p-6 text-[10px] font-bold">${c.Fecha || '—'}<br><span class="text-slate-400">${c.Hora_Inicio || ''}</span></td>
                 <td class="p-6">
-                    <span class="text-[9px] font-black uppercase px-2 py-1 rounded-full ${cls}">${estado}</span>
+                    <span class="badge-cita ${badgeCls}">${etiqueta}</span>
                 </td>
             </tr>`;
         }).join('');
+
+        filtrarTablaCitas();
 
     } catch (e) {
         console.error('[admin] Error cargando citas:', e);
     }
 }
 
-// ─── Multas ───────────────────────────────────────────────────────────────────
+// ─── Multas con datos reales y dropdown de estado en columna ──────────────────
+function filtrarTablaMultas() {
+    const texto = (document.getElementById('busqueda-multas')?.value || '').toUpperCase();
+    document.querySelectorAll('#tabla-multas-body tr').forEach(fila => {
+        const matchTexto  = (fila.dataset.nombre || '').toUpperCase().includes(texto);
+        const matchEstado = _filtroMultaActivo === '' || (fila.dataset.estadoMulta || '') === _filtroMultaActivo;
+        fila.style.display = (matchTexto && matchEstado) ? '' : 'none';
+    });
+}
+
+function seleccionarFiltroMulta(clave, event) {
+    event.stopPropagation();
+    _filtroMultaActivo = clave;
+
+    document.querySelectorAll('#dd-estado-multas .col-dropdown-item').forEach(btn => {
+        btn.classList.remove('col-dropdown-item--active');
+    });
+    if (event.currentTarget) event.currentTarget.classList.add('col-dropdown-item--active');
+
+    const menu = document.getElementById('dd-estado-multas');
+    if (menu) menu.classList.remove('col-dropdown-open');
+
+    filtrarTablaMultas();
+}
+
 async function renderMultas() {
     try {
         const res    = await fetch('/api/multas');
         const json   = await res.json();
         const multas = json.ok ? json.data : (Array.isArray(json) ? json : []);
 
-        const head     = document.getElementById('tabla-head');
-        const body     = document.getElementById('tabla-body');
-        const noD      = document.getElementById('no-datos');
-        const filtroEl = document.getElementById('busqueda-multas');
-        if (!head || !body) return;
+        _multasCache = multas;
 
-        filtroEl?.closest('.filtro-multas-wrapper')?.classList.remove('hidden');
+        const head = document.getElementById('tabla-multas-head');
+        const body = document.getElementById('tabla-multas-body');
+        const noD  = document.getElementById('no-datos-multas');
+        if (!head || !body) return;
 
         head.innerHTML = `
             <tr>
@@ -452,23 +665,48 @@ async function renderMultas() {
                 <th class="p-5">Doc. Identidad</th>
                 <th class="p-5">Concepto</th>
                 <th class="p-5">Fecha Cita</th>
-                <th class="p-5 text-center">Estado</th>
+                <th class="p-5 text-center">
+                    <div class="col-filter-wrapper col-filter-wrapper--center">
+                        <button class="col-filter-btn" onclick="toggleColDropdown('dd-estado-multas', event)">
+                            Estado <i class="fas fa-chevron-down col-filter-chevron"></i>
+                        </button>
+                        <div id="dd-estado-multas" class="col-dropdown-menu col-dropdown-menu--right">
+                            <button class="col-dropdown-item col-dropdown-item--active" onclick="seleccionarFiltroMulta('', event)">
+                                <i class="fas fa-circle-half-stroke"></i> Todas
+                            </button>
+                            <button class="col-dropdown-item" onclick="seleccionarFiltroMulta('pendiente', event)">
+                                <span class="col-dd-dot col-dd-dot--pendiente"></span> Pendiente
+                            </button>
+                            <button class="col-dropdown-item" onclick="seleccionarFiltroMulta('pagada', event)">
+                                <span class="col-dd-dot col-dd-dot--pagada"></span> Pagada
+                            </button>
+                        </div>
+                    </div>
+                </th>
                 <th class="p-5 text-center">Acción</th>
             </tr>`;
+
+        const pendientes = multas.filter(m => (m.EstadoMulta || '').toLowerCase() === 'pendiente').length;
+        const pagadas    = multas.filter(m => (m.EstadoMulta || '').toLowerCase() === 'pagada').length;
+        setText('count-pendientes',   pendientes);
+        setText('count-pagadas',      pagadas);
+        setText('count-total-multas', multas.length);
 
         if (multas.length === 0) { noD?.classList.remove('hidden'); body.innerHTML = ''; return; }
         noD?.classList.add('hidden');
 
         body.innerHTML = multas.map(m => {
-            const esPagada  = m.EstadoMulta_ID === 2 || (m.EstadoMulta || '').toLowerCase() === 'pagada';
-            const badgeCls  = esPagada
-                ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                : 'bg-amber-100 text-amber-700 border border-amber-200';
+            const esPagada      = (m.EstadoMulta || '').toLowerCase() === 'pagada';
+            const estadoMultaLC = (m.EstadoMulta || '').toLowerCase();
+            const tipoDoc       = m.Nombre_Tipo_Documento ? `${m.Nombre_Tipo_Documento}: ` : '';
+
+            const badgeCls  = esPagada ? 'badge-multa-pagada' : 'badge-multa-pendiente';
             const badgeIcon = esPagada ? 'fa-circle-check' : 'fa-clock';
-            const tipoDoc   = m.Nombre_Tipo_Documento ? `${m.Nombre_Tipo_Documento}: ` : '';
 
             return `
-            <tr class="hover:bg-slate-50/70 transition-colors" data-nombre="${(m.NombrePaciente || '').toUpperCase()}">
+            <tr class="hover:bg-slate-50/70 transition-colors"
+                data-nombre="${(m.NombrePaciente || '').toUpperCase()}"
+                data-estado-multa="${estadoMultaLC}">
                 <td class="p-5 font-black text-slate-500 text-[11px]">#${m.Multa_ID}</td>
                 <td class="p-5 font-black text-slate-800 text-[11px] uppercase">${m.NombrePaciente || '—'}</td>
                 <td class="p-5 text-[10px] font-bold text-slate-500">${tipoDoc}${m.NumeroDocumento || '—'}</td>
@@ -478,7 +716,7 @@ async function renderMultas() {
                     <span class="text-slate-400">${m.Hora_Inicio || ''}</span>
                 </td>
                 <td class="p-5 text-center">
-                    <span class="inline-flex items-center gap-1.5 text-[9px] font-black uppercase px-3 py-1.5 rounded-full ${badgeCls}">
+                    <span class="badge-multa ${badgeCls}">
                         <i class="fas ${badgeIcon} text-[10px]"></i>
                         ${m.EstadoMulta || '—'}
                     </span>
@@ -486,7 +724,7 @@ async function renderMultas() {
                 <td class="p-5 text-center">
                     ${!esPagada
                         ? `<button
-                               onclick="pagarMulta(${m.Multa_ID}, this)"
+                               onclick="confirmarPagarMulta(${m.Multa_ID}, this)"
                                class="inline-flex items-center gap-2 text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-xl font-black hover:bg-emerald-100 transition-all uppercase active:scale-95">
                                <i class="fas fa-check"></i> Marcar Pagada
                            </button>`
@@ -495,17 +733,22 @@ async function renderMultas() {
             </tr>`;
         }).join('');
 
+        filtrarTablaMultas();
+
     } catch (e) {
         console.error('[admin] Error cargando multas:', e);
     }
 }
 
-// ─── Filtrar tabla de multas ──────────────────────────────────────────────────
-function filtrarTablaMultas() {
-    const filtro = (document.getElementById('busqueda-multas')?.value || '').toUpperCase();
-    document.querySelectorAll('#tabla-body tr').forEach(fila => {
-        fila.style.display = (fila.dataset.nombre || '').toUpperCase().includes(filtro) ? '' : 'none';
-    });
+// ─── Confirmar pagar multa ────────────────────────────────────────────────────
+function confirmarPagarMulta(multaId, btnEl) {
+    mostrarModalAccion(
+        '¿Marcar multa como pagada?',
+        `La multa #${multaId} quedará registrada como pagada en el sistema.`,
+        'fas fa-file-invoice-dollar',
+        'bg-emerald-600 hover:bg-emerald-700',
+        () => pagarMulta(multaId, btnEl)
+    );
 }
 
 // ─── Pagar multa ──────────────────────────────────────────────────────────────
@@ -518,20 +761,25 @@ async function pagarMulta(multaId, btnEl) {
             mostrarToast(`Multa #${multaId} marcada como Pagada.`);
             const tr = btnEl.closest('tr');
             if (tr) {
+                tr.dataset.estadoMulta = 'pagada';
                 const badgeTd  = tr.querySelector('td:nth-child(6)');
                 const accionTd = tr.querySelector('td:nth-child(7)');
                 if (badgeTd)  badgeTd.innerHTML  = `
-                    <span class="inline-flex items-center gap-1.5 text-[9px] font-black uppercase px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                    <span class="badge-multa badge-multa-pagada">
                         <i class="fas fa-circle-check text-[10px]"></i> Pagada
                     </span>`;
                 if (accionTd) accionTd.innerHTML = '<span class="text-slate-300 text-[10px] font-bold italic">— Pagada —</span>';
             }
+            const pendientes = document.querySelectorAll('#tabla-multas-body tr[data-estado-multa="pendiente"]').length;
+            const pagadas    = document.querySelectorAll('#tabla-multas-body tr[data-estado-multa="pagada"]').length;
+            setText('count-pendientes', pendientes);
+            setText('count-pagadas',    pagadas);
         } else {
-            alert(`Error: ${data.error || 'No se pudo marcar como pagada.'}`);
+            mostrarToast(`Error: ${data.error || 'No se pudo marcar como pagada.'}`);
         }
     } catch (e) {
         console.error('[admin] Error pagando multa:', e);
-        alert('Error de conexión al procesar la multa.');
+        mostrarToast('Error de conexión al procesar la multa.');
     }
 }
 
@@ -543,15 +791,12 @@ function cambiarSeccion(sec) {
     });
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
 
-    const filtroWrapper = document.getElementById('filtro-multas-wrapper');
-    if (filtroWrapper) filtroWrapper.classList.add('hidden');
-
     const secEl = document.getElementById(`sec-${sec}`);
     const btnEl = document.getElementById(`btn-${sec}`);
     if (secEl) { secEl.classList.remove('seccion-oculta'); secEl.classList.add('seccion-visible'); }
     if (btnEl) btnEl.classList.add('active');
 
-    const titles = { dashboard: 'Administrador', citas: 'Historial de Citas', multas: 'Gestión de Multas', config: 'Mi Perfil' };
+    const titles = { dashboard: 'Administrador', citas: 'Historial de citas', multas: 'Gestión de Multas', config: 'Mi Perfil' };
     const mainTitle = document.getElementById('main-title');
     if (mainTitle) mainTitle.textContent = titles[sec] || 'Administrador';
 
@@ -765,11 +1010,11 @@ window.guardarPerfilCompleto = async function () {
             });
             const data = await res.json();
             if (!data.ok && res.status !== 401) {
-                alert(`Error al guardar: ${data.error || 'No se pudo actualizar.'}`);
+                mostrarToast(`Error al guardar: ${data.error || 'No se pudo actualizar.'}`);
                 return;
             }
         } catch {
-            alert('Error de conexión al guardar perfil.');
+            mostrarToast('Error de conexión al guardar perfil.');
             return;
         }
     }
@@ -827,6 +1072,16 @@ window.addEventListener('DOMContentLoaded', () => {
         fechaEl.innerText = new Date().toLocaleDateString('es-CO', {
             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
         }).toUpperCase();
+    }
+
+    const btnConfirmar = document.getElementById('modal-accion-confirmar-btn');
+    if (btnConfirmar) {
+        btnConfirmar.addEventListener('click', () => {
+            if (typeof _accionPendienteCallback === 'function') {
+                _accionPendienteCallback();
+            }
+            cerrarModalAccion();
+        });
     }
 
     cargarSesion();
