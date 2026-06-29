@@ -364,6 +364,36 @@ INSERT OR IGNORE INTO config_ranking (Config_ID, Horas_Envio, Estado_Envio)
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
+# DML: nuevas especialidades solicitadas (idempotente — no duplica por nombre)
+# ─────────────────────────────────────────────────────────────────────────────
+
+SQL_ESPECIALIDADES_NUEVAS = """
+INSERT INTO especialidad (Nombre_Especialidad)
+SELECT 'Ortodoncia' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Ortodoncia');
+
+INSERT INTO especialidad (Nombre_Especialidad)
+SELECT 'Endodoncia' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Endodoncia');
+
+INSERT INTO especialidad (Nombre_Especialidad)
+SELECT 'Periodoncia' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Periodoncia');
+
+INSERT INTO especialidad (Nombre_Especialidad)
+SELECT 'Rehabilitacion Oral' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Rehabilitacion Oral');
+
+INSERT INTO especialidad (Nombre_Especialidad)
+SELECT 'Cirujia Oral' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Cirujia Oral');
+
+INSERT INTO especialidad (Nombre_Especialidad)
+SELECT 'Odontopeditria' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Odontopeditria');
+
+INSERT INTO especialidad (Nombre_Especialidad)
+SELECT 'Estetica Dental' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Estetica Dental');
+
+INSERT INTO especialidad (Nombre_Especialidad)
+SELECT 'Implantes Dentales' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Implantes Dentales');
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Datos de usuarios (seed)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -544,6 +574,11 @@ def create_database_and_tables():
         # ── 5. Insertar catálogos (INSERT OR IGNORE) ──────────────────────────
         print("Insertando datos de catálogos...")
         cursor.executescript(SQL_CATALOGOS)
+        connection.commit()
+
+        # ── 5.1 Insertar/garantizar especialidades nuevas solicitadas ─────────
+        print("Verificando especialidades adicionales...")
+        cursor.executescript(SQL_ESPECIALIDADES_NUEVAS)
         connection.commit()
 
         # ── 6. Insertar usuarios con contraseñas hasheadas ────────────────────

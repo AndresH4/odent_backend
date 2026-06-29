@@ -19,6 +19,9 @@ citas_bp = Blueprint('citas_bp', __name__)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH  = os.path.join(BASE_DIR, 'odent.db')
 
+# Última hora de inicio permitida para agendar/crear disponibilidad (4:00 PM)
+HORA_MAXIMA_CITA = '16:00:00'
+
 
 def _asegurar_columna_codigo_cita(conn):
     """
@@ -94,6 +97,31 @@ def _validar_hora_minimo_tres_horas(hora_str, fecha_str):
         return slot_dt >= limite
     except (ValueError, TypeError):
         return False
+
+
+def _validar_hora_maxima_permitida(hora_str):
+    """
+    Restricción de horario de citas: la última hora de inicio permitida
+    para agendar (independientemente de la fecha) es 4:00 PM (16:00).
+    """
+    try:
+        return hora_str[:8] <= HORA_MAXIMA_CITA
+    except (TypeError, IndexError):
+        return False
+
+
+def _generar_codigo_unico(cur, intentos=30):
+    """
+    Genera un código numérico de 6 dígitos garantizando unicidad: se valida
+    contra la tabla 'cita' (Codigo_Verificacion) hasta encontrar uno que no
+    exista todavía en la base de datos.
+    """
+    for _ in range(intentos):
+        codigo = str(random.randint(100000, 999999))
+        cur.execute("SELECT 1 FROM cita WHERE Codigo_Verificacion = ?", (codigo,))
+        if not cur.fetchone():
+            return codigo
+    raise RuntimeError('No se pudo generar un código de verificación único.')
 
 
 def _validar_politica_password(password):
@@ -592,6 +620,9 @@ def crear_agenda():
     mismo rango de hora mientras ese bloque siga activo (Disponible u
     Ocupado). Si ya existe, se rechaza con 409 (Conflict) y un mensaje claro,
     en vez de devolver silenciosamente el slot existente como éxito (200).
+
+    RESTRICCIÓN DE HORARIO: la última hora de inicio permitida es 4:00 PM
+    (16:00), independientemente de la fecha.
     """
     datos       = request.get_json(silent=True) or {}
     esp_id      = datos.get('Especialista_ID')
@@ -607,6 +638,11 @@ def crear_agenda():
     if not _validar_hora_minimo_tres_horas(hora_inicio, fecha):
         return _json_error(
             'Para citas del día de hoy, la hora debe ser al menos 3 horas posterior a la hora actual.'
+        )
+    if not _validar_hora_maxima_permitida(hora_inicio):
+        return _json_error(
+            f'No se pueden crear horarios después de las {HORA_MAXIMA_CITA[:5]}. '
+            'La última hora disponible para citas es 4:00 PM.'
         )
 
     con = None
@@ -750,6 +786,27 @@ def get_citas():
         if con: con.close()
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# GENERAR CÓDIGO DE VERIFICACIÓN ÚNICO — GET /api/citas/generar-codigo
+# Endpoint usado por el frontend para mostrar el código en el panel de
+# confirmación ANTES de guardar la cita. El backend revalida la unicidad
+# de todas formas al momento de insertar en /api/citas (crear_cita).
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/citas/generar-codigo', methods=['GET'])
+def generar_codigo_verificacion_endpoint():
+    con = None
+    try:
+        con = _get_conn()
+        cur = con.cursor()
+        codigo = _generar_codigo_unico(cur)
+        return _json_ok({"ok": True, "Codigo_Verificacion": codigo})
+    except Exception as exc:
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
 @citas_bp.route('/citas', methods=['POST'])
 def crear_cita():
     datos       = request.get_json(silent=True) or {}
@@ -811,11 +868,28 @@ def crear_cita():
             return _json_error(
                 'Para citas del día de hoy, la hora debe ser al menos 3 horas posterior a la hora actual.'
             )
+        if not _validar_hora_maxima_permitida(slot['Hora_Inicio']):
+            cur.execute("ROLLBACK")
+            return _json_error(
+                f'Ese horario excede el límite permitido. La última hora disponible es {HORA_MAXIMA_CITA[:5]} (4:00 PM).'
+            )
         if _tiene_cita_activa_por_usuario(cur, usuario_id_paciente):
             cur.execute("ROLLBACK")
             return _json_error('No puedes agendar. Ya tienes una cita activa en el sistema.', 409)
 
-        codigo_verificacion = str(random.randint(100000, 999999))
+        # ── Código único de verificación (6 dígitos numéricos) ───────────────
+        # Si el frontend ya pre-generó uno (vía /api/citas/generar-codigo) y
+        # sigue siendo único en este instante, se reutiliza; de lo contrario
+        # se genera uno nuevo garantizando unicidad contra la BD.
+        codigo_solicitado = (datos.get('Codigo_Verificacion') or '').strip()
+        codigo_verificacion = None
+        if codigo_solicitado and re.fullmatch(r'\d{6}', codigo_solicitado):
+            cur.execute("SELECT 1 FROM cita WHERE Codigo_Verificacion = ?", (codigo_solicitado,))
+            if not cur.fetchone():
+                codigo_verificacion = codigo_solicitado
+        if not codigo_verificacion:
+            codigo_verificacion = _generar_codigo_unico(cur)
+
         cur.execute(
             "INSERT INTO cita (Paciente_ID, Agenda_ID, Motivo_Consulta, Encuesta_Enviada, Codigo_Verificacion) VALUES (?, ?, ?, 0, ?)",
             (paciente_id, agenda_id, motivo, codigo_verificacion)
@@ -831,7 +905,12 @@ def crear_cita():
             return _json_error('No se pudo actualizar el estado de la agenda.', 500)
 
         cur.execute("COMMIT")
-        return _json_ok({"ok": True, "Cita_ID": cita_id, "status": "Cita registrada con éxito."}, 201)
+        return _json_ok({
+            "ok": True,
+            "Cita_ID": cita_id,
+            "Codigo_Verificacion": codigo_verificacion,
+            "status": "Cita registrada con éxito."
+        }, 201)
 
     except Exception as exc:
         if con:

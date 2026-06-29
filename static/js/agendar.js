@@ -11,11 +11,14 @@ let _sesionPacienteAgendar = null;
 let _tieneMultaActualAgendar = false;
 let _confirmResolver = null;
 let _tiposDocumentoAgendar = [];
+let codigoVerificacionGenerado = '';
+
+const HORA_MAXIMA_AGENDAR = '16:00:00'; // Última hora de inicio permitida (4:00 PM)
 
 const HORAS_DEFAULT = [
     '07:00:00', '07:30:00', '08:00:00', '08:30:00', '09:00:00', '09:30:00',
     '10:00:00', '10:30:00', '11:00:00', '11:30:00', '14:00:00', '14:30:00',
-    '15:00:00', '15:30:00', '16:00:00', '16:30:00', '17:00:00'
+    '15:00:00', '15:30:00', '16:00:00'
 ];
 
 const ESPECIALIDADES_FIJAS = [
@@ -64,6 +67,7 @@ function resetearFormulario() {
     pacienteIdAgendar = null;
     agendaDisponible  = [];
     _tieneMultaActualAgendar = false;
+    codigoVerificacionGenerado = '';
 }
 
 // ─── Modal genérico de alerta (reemplazo de alert()) ──────────────────────────
@@ -352,6 +356,11 @@ function _horaEsValida(horaStr, fechaISO) {
     return horaSlot.getTime() >= limiteMs;
 }
 
+// ─── Validación de hora máxima permitida (4:00 PM) ────────────────────────────
+function _horaDentroDelLimiteMaximo(horaStr) {
+    return horaStr.slice(0, 8) <= HORA_MAXIMA_AGENDAR;
+}
+
 function leerFechaISO() {
     const inputNativo = document.getElementById('fechaNativa');
     if (inputNativo?.value) return inputNativo.value;
@@ -390,8 +399,10 @@ function poblarHorasFallback(especialidad, fecha) {
         return;
     }
 
-    // Filtrar horas según validación de fecha/hora
-    const horasFiltradas = HORAS_DEFAULT.filter(hora => _horaEsValida(hora, fecha));
+    // Filtrar horas según validación de fecha/hora y límite máximo (4:00 PM)
+    const horasFiltradas = HORAS_DEFAULT
+        .filter(hora => _horaEsValida(hora, fecha))
+        .filter(hora => _horaDentroDelLimiteMaximo(hora));
 
     if (horasFiltradas.length === 0) {
         horaSelect.innerHTML = '<option value="" disabled selected>No hay horarios disponibles para hoy (mínimo 3 horas de anticipación)</option>';
@@ -480,7 +491,8 @@ async function cargarAgenda() {
 
         const slotsFiltrados = data
             .filter(slot => slot.Nombre_Especialidad === especialidad)
-            .filter(slot => _horaEsValida(slot.Hora_Inicio, fecha));
+            .filter(slot => _horaEsValida(slot.Hora_Inicio, fecha))
+            .filter(slot => _horaDentroDelLimiteMaximo(slot.Hora_Inicio));
 
         if (slotsFiltrados.length === 0) { poblarHorasFallback(especialidad, fecha); return; }
 
@@ -546,6 +558,22 @@ async function _verificarMultaActiva(pacId) {
     } catch {
         return false;
     }
+}
+
+// ─── GET /api/citas/generar-codigo — código único previo a la confirmación ───
+async function _generarCodigoVerificacion() {
+    try {
+        const res = await fetch('/api/citas/generar-codigo');
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.Codigo_Verificacion) return data.Codigo_Verificacion;
+        }
+    } catch (e) {
+        console.warn('[agendar] No se pudo generar código de verificación en el servidor:', e);
+    }
+    // Fallback local únicamente si el servidor no respondió (el backend
+    // revalida unicidad de todas formas al guardar la cita)
+    return String(Math.floor(100000 + Math.random() * 900000));
 }
 
 // ─── POST /api/actualizar-perfil-paciente — sincronizar datos editados ────────
@@ -656,6 +684,12 @@ async function validarYAgendar() {
         return;
     }
 
+    // Validación de hora máxima permitida (4:00 PM)
+    if (!_horaDentroDelLimiteMaximo(slotSeleccionado.Hora_Inicio)) {
+        mostrarAlertaGenerica('La última hora disponible para agendar es 4:00 PM.', 'Horario no válido', 'error');
+        return;
+    }
+
     if (!_sesionPacienteAgendar || !_sesionPacienteAgendar.Usuario_ID) {
         mostrarAlertaGenerica('Sesión no válida. Por favor inicie sesión nuevamente.', 'Sesión expirada', 'error');
         window.location.replace('/login');
@@ -684,6 +718,11 @@ async function validarYAgendar() {
         // Verificar multa activa
         const tieneMulta = await _verificarMultaActiva(pacienteIdAgendar);
         _tieneMultaActualAgendar = tieneMulta;
+
+        // Generar (pre-reservar) el código único de verificación que se
+        // mostrará en el panel de confirmación. El backend revalida su
+        // unicidad nuevamente al momento de guardar la cita.
+        codigoVerificacionGenerado = await _generarCodigoVerificacion();
 
         const alerta = document.getElementById('alertaMulta');
         const header = document.getElementById('headerVerificacion');
@@ -722,6 +761,12 @@ async function validarYAgendar() {
         resumen.innerHTML = `
             <div class="resumen-bloque-principal">
                 <span class="resumen-label">Cita Programada</span>
+                <p class="resumen-codigo-unico" style="font-size:20px;font-weight:800;color:#0369a1;margin:6px 0 2px;">
+                    Código: ${codigoVerificacionGenerado}
+                </p>
+                <p class="resumen-texto-codigo" style="font-size:12px;color:#64748b;margin:0 0 14px;">
+                    Este código es único para su cita y debe pasárselo al especialista para poder realizar la cita
+                </p>
                 <p class="resumen-valor-grande">${slotSeleccionado.Nombre_Especialidad}</p>
                 <p class="resumen-valor-sub">
                     Dr(a). ${slotSeleccionado.NombreEspecialista} &nbsp;|&nbsp;
@@ -769,6 +814,13 @@ async function finalizarTodo() {
         return;
     }
 
+    // Validación de hora máxima permitida (4:00 PM)
+    if (!_horaDentroDelLimiteMaximo(slotSeleccionado.Hora_Inicio)) {
+        cerrarModal();
+        mostrarAlertaGenerica('La última hora disponible para agendar es 4:00 PM.', 'Horario no válido', 'error');
+        return;
+    }
+
     // Interfaz 2: si hay multa activa, no se muestran pasos intermedios — se
     // procede directamente a confirmar y luego se lanza el mensaje de éxito
     // estándar con la nota de multa añadida.
@@ -791,14 +843,17 @@ async function finalizarTodo() {
 
     // POST /api/citas — el backend valida Paciente_ID, Agenda_ID, fecha/hora
     // y la restricción de cita única consultando directamente la base de datos.
+    // Se envía también el código de verificación pre-generado; el backend
+    // revalida su unicidad y, si ya no es único, genera uno nuevo.
     try {
         const res  = await fetch('/api/citas', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({
-                Paciente_ID:     pacienteIdAgendar,
-                Agenda_ID:       slotSeleccionado.Agenda_ID,
-                Motivo_Consulta: motivo
+                Paciente_ID:          pacienteIdAgendar,
+                Agenda_ID:            slotSeleccionado.Agenda_ID,
+                Motivo_Consulta:      motivo,
+                Codigo_Verificacion:  codigoVerificacionGenerado
             })
         });
         const data = await res.json();
@@ -817,6 +872,12 @@ async function finalizarTodo() {
 
         cerrarModal();
         if (data.ok) {
+            // El backend puede haber regenerado el código si hubo colisión;
+            // se sincroniza el valor final devuelto por el servidor.
+            if (data.Codigo_Verificacion) {
+                codigoVerificacionGenerado = data.Codigo_Verificacion;
+            }
+
             const msgEl = document.getElementById('mensajeExito');
             if (msgEl) msgEl.textContent = 'Su cita ha sido registrada exitosamente. ¡Gracias por confiar en Stylo Dental!';
 
