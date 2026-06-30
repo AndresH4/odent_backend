@@ -1,41 +1,4 @@
-// especialista.js v15.1 — RASTREO DE DATOS PESADO (DIAGNÓSTICO TEMPORAL)
-// REQ 1: Fix maquetación inputs agenda — clase .has-value se sincroniza con CSS para ocultar texto nativo duplicado
-// REQ 2: Automatización de multas por incumplimiento de horario (ping al backend)
-// REQ 3: Conexión en tiempo real de agenda médica con vista de agendar (ya servida vía /api/agenda)
-// REQ 4: Validación estricta de disponibilidades duplicadas — manejo de respuesta 409 del backend
-// REQ 5: Conexión total de Historia Clínica — fix de endpoint roto (/en-proceso -> /atender) y redirección robusta
-// REQ 6: Fix de registro de historial_bp sin url_prefix en app.py — la ruta /historial/paciente/<id>
-//        ahora es alcanzable directamente.
-// REQ 7: Fix crítico de renderizado — irAHistoriaClinica() navega a /historial/paciente/<id>
-//        que devuelve render_template HTML.
-// REQ 8 (v14.3): Separación total Vista / API en irAHistoriaClinica().
-// CAMBIO P1 (v14.4): Filtrado estricto "Atendidos Hoy" — solo citas con FechaAtencion == fecha actual real
-// CAMBIO P2 (v14.4): Modal de código de verificación de 6 dígitos antes de "Empezar Cita"
-// CAMBIO P3 (v14.4): Eliminado botón "Finalizar Consulta" del modal (solo queda "Historia Clínica")
-// CAMBIO P4 (v14.4): Icono agenda cambiado a fa-book-medical (en HTML)
-// CAMBIO P5 (v14.4): verReporteProfesional lee directamente /api/historial/paciente/<id>/evoluciones
-// CAMBIO P6 (v14.4): Campo "Nombre completo" concatenado.
-// CAMBIO P7 (v14.4): Orden descendente (más reciente primero) en todas las tablas de citas.
-// CAMBIO P8 (v14.5): Sección "Mi Perfil" — Nombres/Apellidos fusionados en un único input "Nombre completo".
-// CAMBIO P9 (v14.5): Columna "Motivo" muestra Especialidad en lugar del motivo de consulta del paciente.
-// CAMBIO P10 (v14.6): Validación inviolable del código de verificación contra el backend.
-// CAMBIO P11 (v14.6): El cambio de estado a "En proceso" ocurre únicamente al confirmar el código.
-// CAMBIO P12 (v14.7): verReporteProfesional consulta primero /api/historial/cita/<cita_id>.
-// CAMBIO P13 (v14.8): fetch con { cache: 'no-store' } + cache-busting (`_=timestamp`).
-// CAMBIO P14 (v14.9): lectura flexible Pascal/snake en cada fuente de datos del reporte.
-// CAMBIO P15 (v15.0): unificación definitiva de claves del reporte ('diagnostico', 'evolucion', 'tratamiento').
-// CAMBIO P16 (v15.1) — RASTREO DE DATOS PESADO (DIAGNÓSTICO TEMPORAL):
-//        Se inyectaron console.log + alert() justo dentro de cada
-//        '.then(data => {' que procesa la respuesta de las 3 fuentes del
-//        Reporte (/api/historial/cita/<id>, /api/historial/paciente/<id>/
-//        evoluciones y /api/historial-clinico/<id>), mostrando el payload
-//        EXACTO recibido por el navegador. Adicionalmente, dentro de
-//        setEl() (la función que finalmente inyecta los valores en el DOM
-//        del modal "Reporte") se agregó un console.log de control que
-//        muestra el ID del elemento objetivo y el valor que se le está
-//        asignando, para poder ver con precisión en qué punto exacto el
-//        dato se vuelve vacío/undefined. Estos logs y alerts son
-//        TEMPORALES y deben removerse una vez finalizado el diagnóstico.
+// especialista.js v17.0 — FIX MAPEO DE DATOS DEL REPORTE (modal vacío)
 'use strict';
 
 let indexActualGlobal     = null;
@@ -47,11 +10,9 @@ let filtroActivoInicio    = 'todos';
 let usuarioSesionActual   = null;
 let slotPendienteEliminar = null;
 
-// ─── PUNTO 2: Variable para índice pendiente de verificación ──────────────────
 let _indicePendienteVerificacion = null;
 let _validandoCodigoEnCurso = false;
 
-// ─── TOAST ────────────────────────────────────────────────────────────────────
 function mostrarToast(mensaje, tipo = 'info') {
     const container = document.getElementById('toast-container');
     if (!container) return;
@@ -68,7 +29,6 @@ function mostrarToast(mensaje, tipo = 'info') {
     }, 3500);
 }
 
-// ─── UTILIDADES ───────────────────────────────────────────────────────────────
 function mostrarSeccion(id) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -105,7 +65,6 @@ function _obtenerInicial(primerNombre) {
     return limpio ? limpio.charAt(0).toUpperCase() : 'E';
 }
 
-// ─── SMART PICKERS ────────────────────────────────────────────────────────────
 function dispararPicker(wrapper) {
     const input = wrapper.querySelector('input');
     if (!input) return;
@@ -133,7 +92,6 @@ function inicializarPlaceholdersAgenda() {
     });
 }
 
-// ─── DROPDOWN DE PERFIL ───────────────────────────────────────────────────────
 const toggleProfileDropdown = () => {
     const dp = document.getElementById('profile-dropdown');
     if (dp) dp.classList.toggle('show');
@@ -146,7 +104,6 @@ window.onclick = (e) => {
     }
 };
 
-// ─── RELOJ ────────────────────────────────────────────────────────────────────
 function actualizarReloj() {
     const ahora = new Date();
     const dia   = ahora.getDay();
@@ -185,7 +142,6 @@ function formatearHoraAmPm(horaStr) {
     return `${String(h).padStart(2,'0')}:${m} ${ampm}`;
 }
 
-// ─── PUNTO 8: UTILIDAD NOMBRE COMPLETO ⇄ NOMBRES/APELLIDOS ────────────────────
 function _concatenarNombreCompleto(nombres, apellidos) {
     return `${nombres || ''} ${apellidos || ''}`.trim();
 }
@@ -206,7 +162,6 @@ function _dividirNombreCompleto(nombreCompleto) {
     return { nombres, apellidos };
 }
 
-// ─── SESIÓN ───────────────────────────────────────────────────────────────────
 const cargarInfoSesion = () => {
     try {
         const raw = sessionStorage.getItem('odent_usuario');
@@ -237,7 +192,6 @@ function _inyectarCampo(id, val, esInput = false) {
         : (el.innerText = val);
 }
 
-// ─── PERFIL REAL DESDE BD ─────────────────────────────────────────────────────
 async function _cargarPerfilRealDesdeBD(usuarioId) {
     try {
         const res = await fetch(`/api/especialista/perfil/${usuarioId}`);
@@ -287,7 +241,6 @@ async function _cargarPerfilRealDesdeBD(usuarioId) {
     }
 }
 
-// ─── RESOLUCIÓN DE ESTADO ─────────────────────────────────────────────────────
 function _resolverEstadoCita(c) {
     const ea = (c.EstadoAgenda || '').toLowerCase();
     if (ea === 'cancelado' || ea === 'cancelada') return 'Cancelada';
@@ -297,7 +250,6 @@ function _resolverEstadoCita(c) {
     return 'Pendiente';
 }
 
-// ─── PUNTO 1: _esAtendidoHoy — filtrado estricto por fecha real del servidor ──
 function _esAtendidoHoy(cita) {
     if (cita.estado !== 'Atendido') return false;
     const hoy = new Date();
@@ -309,7 +261,6 @@ function _esAtendidoHoy(cita) {
     return cita.fecha === hoyStr;
 }
 
-// ─── CARGA DE CITAS ───────────────────────────────────────────────────────────
 const cargarDatosEspecialista = async () => {
     if (!usuarioSesionActual) return;
     const especialistaId = usuarioSesionActual.Especialista_ID || null;
@@ -351,7 +302,6 @@ const cargarDatosEspecialista = async () => {
     _renderTodas();
 };
 
-// ─── CARGA DE AGENDA ──────────────────────────────────────────────────────────
 async function _cargarAgendaEspecialista(especialistaId) {
     try {
         const res = await fetch(`/api/agenda?especialista_id=${especialistaId}`);
@@ -365,14 +315,12 @@ async function _cargarAgendaEspecialista(especialistaId) {
     _renderTablaAgenda();
 }
 
-// ─── RENDER GLOBAL ────────────────────────────────────────────────────────────
 function _renderTodas() {
     _actualizarStats();
     _renderTablaInicio(filtroActivoInicio);
     _renderTablaPacientes();
 }
 
-// ─── STATS ────────────────────────────────────────────────────────────────────
 function _actualizarStats() {
     const hoy          = new Date();
     const hoyStr       = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
@@ -394,7 +342,6 @@ function _actualizarStats() {
     setEl('stat-proxima-fecha', proxima ? proxima.fecha : 'Sin citas');
 }
 
-// ─── PUNTO 7: Función de ordenamiento descendente ─────────────────────────────
 function _ordenarDescendente(lista) {
     return [...lista].sort((a, b) => {
         const da = (a.fecha || '') + (a.hora || '');
@@ -403,7 +350,6 @@ function _ordenarDescendente(lista) {
     });
 }
 
-// ─── RENDER TABLA INICIO ──────────────────────────────────────────────────────
 function _renderTablaInicio(filtro) {
     filtroActivoInicio = filtro;
     const hoy    = new Date();
@@ -449,7 +395,7 @@ function _renderTablaInicio(filtro) {
             </td>
             <td class="px-8 py-6 font-black text-sky-600 uppercase text-[11px] tracking-widest">${cita.especialidad}</td>
             <td class="px-8 py-6">${_badgeEstado(cita.estado)}</td>
-            <td class="px-8 py-6 text-[11px] text-slate-500 font-bold" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;">${cita.especialidad}</td>
+            <td class="px-8 py-6 text-[11px] text-slate-500 font-bold" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;">${cita.motivo}</td>
             <td class="px-8 py-6" style="text-align:right;">${_botonesAccion(cita, idxReal)}</td>`;
         tbody.appendChild(row);
     });
@@ -458,7 +404,6 @@ function _renderTablaInicio(filtro) {
     if (noData) noData.style.display = listaOrdenada.length > 0 ? 'none' : 'block';
 }
 
-// ─── RENDER TABLA AGENDA ──────────────────────────────────────────────────────
 function _renderTablaAgenda() {
     const tbody = document.getElementById('tabla-agenda');
     if (!tbody) return;
@@ -490,7 +435,6 @@ function _renderTablaAgenda() {
     if (noData) noData.style.display = agendaEspecialista.length > 0 ? 'none' : 'block';
 }
 
-// ─── RENDER TABLA MIS PACIENTES ───────────────────────────────────────────────
 function _renderTablaPacientes() {
     const tbody = document.getElementById('tabla-pacientes');
     if (!tbody) return;
@@ -523,7 +467,6 @@ function _renderTablaPacientes() {
     if (noData) noData.style.display = listaOrdenada.length > 0 ? 'none' : 'block';
 }
 
-// ─── BADGE DE ESTADO ──────────────────────────────────────────────────────────
 function _badgeEstado(estado) {
     const mapa = {
         'Pendiente':  { cls: 'status-pendiente',    icon: 'fa-clock' },
@@ -535,7 +478,6 @@ function _badgeEstado(estado) {
     return `<span class="${cfg.cls} uppercase"><i class="fas ${cfg.icon} mr-2"></i>${estado}</span>`;
 }
 
-// ─── PUNTO 2: Modal de código de verificación ─────────────────────────────────
 function solicitarCodigoVerificacion(indice) {
     _indicePendienteVerificacion = indice;
     const input = document.getElementById('input-codigo-verificacion');
@@ -649,7 +591,6 @@ async function confirmarCodigoVerificacion() {
     }
 }
 
-// ─── PUNTO 2: BOTONES DE ACCIÓN — "Empezar Cita" pasa por verificación ────────
 function _botonesAccion(cita, idx) {
     const estado = cita.estado;
     if (estado === 'Pendiente') {
@@ -673,13 +614,11 @@ function _botonesAccion(cita, idx) {
     return '';
 }
 
-// ─── FILTRAR POR ESTADO ───────────────────────────────────────────────────────
 function filtrarPorEstado(estado) {
     cambiarSeccion('inicio');
     _renderTablaInicio(estado);
 }
 
-// ─── NAVEGACIÓN ───────────────────────────────────────────────────────────────
 const cambiarSeccion = (nombreSeccion) => {
     seccionActiva = nombreSeccion;
     const dpMenu = document.getElementById('profile-dropdown');
@@ -708,7 +647,6 @@ const cambiarSeccion = (nombreSeccion) => {
     if (nombreSeccion === 'agenda') inicializarPlaceholdersAgenda();
 };
 
-// ─── EMPEZAR CITA ─────────────────────────────────────────────────────────────
 const abrirEmpezarCita = (indice) => {
     try {
         const cita = historialTotal[indice];
@@ -720,7 +658,7 @@ const abrirEmpezarCita = (indice) => {
         set('empezar-nombre-dato',  cita.nombre);
         set('empezar-doc-dato',     `${cita.tipoDoc}: ${cita.numDoc}`);
         set('empezar-estado-dato',  'En Proceso — Atendiendo');
-        set('empezar-motivo-dato',  cita.especialidad);
+        set('empezar-motivo-dato',  cita.motivo);
 
         const avatarPaciente = document.getElementById('empezar-avatar-paciente');
         if (avatarPaciente) avatarPaciente.textContent = _obtenerInicial(cita.nombre);
@@ -737,7 +675,6 @@ const cerrarEmpezarCita = () => {
     if (modal) modal.style.display = 'none';
 };
 
-// ─── FINALIZAR CONSULTA (uso interno) ─────────────────────────────────────────
 const finalizarConsultaDirecto = async () => {
     const indice = citaActualEmpezar;
     if (indice === null || indice === undefined) return;
@@ -804,7 +741,6 @@ function logger_info(msg) {
     if (typeof console !== 'undefined') console.info(msg);
 }
 
-// ─── REQ 2: AUTOMATIZACIÓN DE MULTAS POR INCUMPLIMIENTO DE HORARIO ───────────
 async function _procesarVencimientosMultas() {
     try {
         const resp = await fetch('/api/multas/procesar-vencimientos', { method: 'POST' });
@@ -821,10 +757,9 @@ async function _procesarVencimientosMultas() {
     }
 }
 
-// ─── CAMBIO P15: lectura segura priorizando las claves OFICIALES simples
-//     ('diagnostico', 'evolucion', 'tratamiento') que ahora expone el
-//     backend en TODOS los endpoints del Reporte, conservando como
-//     respaldo las claves Pascal/legacy por compatibilidad retro ────────────
+// ── LECTURA FLEXIBLE: cubre TODAS las variantes de clave que el backend
+// puede llegar a devolver (Pascal, minúscula, snake_case) para blindar
+// el mapeo contra cualquier diferencia de nomenclatura. ──────────────────
 function _leerCampoFlexible(obj, ...claves) {
     if (!obj) return undefined;
     for (const clave of claves) {
@@ -835,45 +770,125 @@ function _leerCampoFlexible(obj, ...claves) {
     return undefined;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// CAMBIO P13/P14/P15/P16 — REPORTE PROFESIONAL: FIX DEFINITIVO DE
-// SINCRONIZACIÓN, UNIFICACIÓN DE CLAVES Y RASTREO DE DATOS PESADO.
-//
-// Fuente primaria: /api/historial/cita/<cita_id> (modulo_historial/routes.py).
-// CAMBIO P16: se inyectaron console.log + alert() de diagnóstico TEMPORAL
-// justo dentro de cada '.then(data => {' que procesa la respuesta de las
-// 3 fuentes de datos (primaria + 2 respaldos), mostrando el payload EXACTO
-// recibido en el navegador. También se agregó un console.log de control
-// dentro de setEl() para ver, elemento por elemento, qué valor se está
-// inyectando en el DOM del modal "Reporte".
-// ═══════════════════════════════════════════════════════════════════════════
+// ─── CONTROL DE SCROLL DEL BODY MIENTRAS UN MODAL ESTÁ ABIERTO ────────────────
+function _bloquearScrollBody() {
+    document.body.classList.add('overflow-hidden');
+}
+function _restaurarScrollBody() {
+    document.body.classList.remove('overflow-hidden');
+}
+
+function abrirModalReporte() {
+    const modal = document.getElementById('modalReporte');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    _bloquearScrollBody();
+}
+
+function cerrarModalReporte() {
+    const modal = document.getElementById('modalReporte');
+    if (modal) modal.style.display = 'none';
+    _restaurarScrollBody();
+}
+
+// ─── LIMPIEZA DE STRINGS DE DOCUMENTO MEZCLADO ("Tipo: Numero") ───────────────
+function _separarTipoYNumeroDocumento(tipoCrudo, numeroCrudo) {
+    let tipo   = (tipoCrudo   || '').toString().trim();
+    let numero = (numeroCrudo || '').toString().trim();
+
+    if (tipo.includes(':') && !numero) {
+        const partes = tipo.split(':');
+        tipo   = (partes[0] || '').trim();
+        numero = (partes.slice(1).join(':') || '').trim();
+    } else if (numero.includes(':')) {
+        const partes = numero.split(':');
+        tipo   = tipo || (partes[0] || '').trim();
+        numero = (partes.slice(1).join(':') || '').trim();
+    }
+
+    return {
+        tipo:   tipo   || 'Documento',
+        numero: numero || '—',
+    };
+}
+
+// ─── INYECCIÓN DE "DATOS DEL PACIENTE" EN LA GRILLA DEL MODAL ──────────────
+// IDs reales en templates/especialista.html (divs de solo lectura, NO
+// inputs): rep-tipo-doc, rep-num-doc, rep-paciente, rep-fecha-cita,
+// rep-hora-cita, rep-motivo. Se escriben con textContent porque son <div>.
+function _pintarDatosPacienteReporte({ tipoDoc, numDoc, nombre, fecha, hora, motivo }) {
+    const setBox = (id, val) => {
+        const el = document.getElementById(id);
+        if (!el) { console.warn(`[especialista][reporte] No existe el elemento #${id} en el DOM.`); return; }
+        el.textContent = (val !== undefined && val !== null && String(val).trim() !== '') ? val : '—';
+    };
+    const { tipo, numero } = _separarTipoYNumeroDocumento(tipoDoc, numDoc);
+    setBox('rep-tipo-doc',   tipo);
+    setBox('rep-num-doc',    numero);
+    setBox('rep-paciente',   nombre);
+    setBox('rep-fecha-cita', fecha);
+    setBox('rep-hora-cita',  hora);
+    setBox('rep-motivo',     motivo);
+}
+
+// ─── INYECCIÓN DE CAMPOS CLÍNICOS (textareas readonly) ─────────────────────
+// IDs reales: rep-diagnostico, rep-evolucion, rep-tratamiento — son
+// <textarea readonly>, por lo que SIEMPRE deben recibir el valor vía
+// .value (NUNCA textContent/innerText en un textarea ya renderizado).
+function _pintarCamposClinicosReporte({ diagnostico, evolucion, tratamiento }) {
+    const setArea = (id, val) => {
+        const el = document.getElementById(id);
+        if (!el) { console.warn(`[especialista][reporte] No existe el elemento #${id} en el DOM.`); return; }
+        el.value = (val !== undefined && val !== null && String(val).trim() !== '') ? val : '—';
+    };
+    setArea('rep-diagnostico', diagnostico);
+    setArea('rep-evolucion',   evolucion);
+    setArea('rep-tratamiento', tratamiento);
+}
+
 const verReporteProfesional = async (indice) => {
     try {
         const cita = historialTotal[indice];
         if (!cita) return;
 
-        let diagnostico   = 'Sin diagnóstico';
-        let evolucion     = 'Sin registro';
-        let prescripcion  = 'Sin prescripción';
-        let fechaAtencion = 'N/A';
-        let tipoDoc       = cita.tipoDoc || 'DOC';
-        let numDoc        = cita.numDoc  || '—';
+        // ── Pintura inmediata con los datos que YA tenemos en caché local
+        // (nunca se muestran cajas vacías mientras llega la red) ──────────
+        _pintarDatosPacienteReporte({
+            tipoDoc: cita.tipoDoc,
+            numDoc:  cita.numDoc,
+            nombre:  cita.nombre,
+            fecha:   cita.fecha,
+            hora:    formatearHoraAmPm(cita.hora),
+            motivo:  cita.motivo,
+        });
+
+        _pintarCamposClinicosReporte({
+            diagnostico: 'Cargando información clínica...',
+            evolucion:   'Cargando información clínica...',
+            tratamiento: 'Cargando información clínica...',
+        });
+
+        abrirModalReporte();
+
+        let diagnostico = 'Sin diagnóstico';
+        let evolucion   = 'Sin registro';
+        let tratamiento = 'Sin prescripción';
+        let tipoDoc     = cita.tipoDoc  || 'DOC';
+        let numDoc      = cita.numDoc   || '—';
+        let nombre      = cita.nombre   || '—';
+        let fecha       = cita.fecha    || '—';
+        let horaCruda   = cita.hora     || '—';
+        let motivo      = cita.motivo   || '—';
 
         if (cita.Cita_ID) {
             let datosObtenidos = false;
 
-            // ── Fuente primaria: /api/historial/cita/<id> ──────────────────
+            // 1) FUENTE PRIMARIA: /api/historial/cita/<id>
             const dataHc = await fetch(
                 `/api/historial/cita/${cita.Cita_ID}?_=${Date.now()}`,
                 { cache: 'no-store' }
             )
                 .then(r => (r.ok ? r.json() : null))
-                .then(data => {
-                    // CAMBIO P16 — RASTREO DE DATOS PESADO (fuente primaria)
-                    console.log("====== FRONTEND RECIBA DATA ======", data);
-                    alert("Datos recibidos en el navegador: " + JSON.stringify(data));
-                    return data;
-                })
                 .catch(errHc => {
                     console.warn('[especialista] No se pudo leer /api/historial/cita/<id>, usando rutas de respaldo:', errHc);
                     return null;
@@ -881,32 +896,33 @@ const verReporteProfesional = async (indice) => {
 
             if (dataHc && dataHc.ok && dataHc.data) {
                 const d = dataHc.data;
-                // CAMBIO P15: prioridad a las claves OFICIALES simples
-                const diagVal = _leerCampoFlexible(d, 'diagnostico', 'Diagnostico');
-                const evoVal  = _leerCampoFlexible(d, 'evolucion', 'Evolucion', 'evolucion_clinica');
-                const tratVal = _leerCampoFlexible(d, 'tratamiento', 'Tratamiento');
-                if (diagVal) { diagnostico  = diagVal; datosObtenidos = true; }
-                if (evoVal)  { evolucion    = evoVal;  datosObtenidos = true; }
-                if (tratVal) { prescripcion = tratVal; datosObtenidos = true; }
-                const fechaVal = _leerCampoFlexible(d, 'FechaAtencion', 'FechaRegistro');
-                if (fechaVal) fechaAtencion = fechaVal;
+
+                const diagVal   = _leerCampoFlexible(d, 'diagnostico', 'Diagnostico', 'diagnostico_texto');
+                const evoVal    = _leerCampoFlexible(d, 'evolucion', 'Evolucion', 'evolucion_clinica', 'evolucion_texto');
+                const tratVal   = _leerCampoFlexible(d, 'tratamiento', 'Tratamiento', 'tratamiento_texto');
+                const nombreVal = _leerCampoFlexible(d, 'NombrePaciente', 'nombre_paciente');
+                const motivoVal = _leerCampoFlexible(d, 'Motivo_Consulta', 'MotivoHC', 'motivo_consulta');
+                const fechaVal  = _leerCampoFlexible(d, 'Fecha', 'fecha');
+                const horaVal   = _leerCampoFlexible(d, 'Hora_Inicio', 'hora_inicio');
+
+                if (diagVal)   { diagnostico = diagVal; datosObtenidos = true; }
+                if (evoVal)    { evolucion   = evoVal;  datosObtenidos = true; }
+                if (tratVal)   { tratamiento = tratVal; datosObtenidos = true; }
                 if (d.TipoDocumento)   tipoDoc = d.TipoDocumento;
                 if (d.NumeroDocumento) numDoc  = d.NumeroDocumento;
+                if (nombreVal)         nombre  = nombreVal;
+                if (motivoVal)         motivo  = motivoVal;
+                if (fechaVal)          fecha   = fechaVal;
+                if (horaVal)           horaCruda = horaVal;
             }
 
-            // ── Respaldo 1: /api/historial/paciente/<id>/evoluciones ───────
+            // 2) FALLBACK: evoluciones del paciente filtradas por cita
             if (!datosObtenidos && cita.Paciente_ID) {
                 const dataEv = await fetch(
                     `/api/historial/paciente/${cita.Paciente_ID}/evoluciones?cita_id=${cita.Cita_ID}&_=${Date.now()}`,
                     { cache: 'no-store' }
                 )
                     .then(r => (r.ok ? r.json() : null))
-                    .then(data => {
-                        // CAMBIO P16 — RASTREO DE DATOS PESADO (respaldo 1)
-                        console.log("====== FRONTEND RECIBA DATA ======", data);
-                        alert("Datos recibidos en el navegador: " + JSON.stringify(data));
-                        return data;
-                    })
                     .catch(err => {
                         console.warn('[especialista] Fallback a evoluciones falló:', err);
                         return null;
@@ -917,27 +933,26 @@ const verReporteProfesional = async (indice) => {
                     const diagVal = _leerCampoFlexible(entrada, 'diagnostico', 'Diagnostico');
                     const evoVal  = _leerCampoFlexible(entrada, 'evolucion', 'Evolucion', 'evolucion_clinica');
                     const tratVal = _leerCampoFlexible(entrada, 'tratamiento', 'Tratamiento');
-                    if (diagVal) diagnostico  = diagVal;
-                    if (evoVal)  evolucion    = evoVal;
-                    if (tratVal) prescripcion = tratVal;
-                    fechaAtencion = entrada.FechaRegistro || cita.FechaAtencion || fechaAtencion;
+                    const motivoVal = _leerCampoFlexible(entrada, 'Motivo_Consulta');
+                    const fechaVal  = _leerCampoFlexible(entrada, 'Fecha');
+                    const horaVal   = _leerCampoFlexible(entrada, 'Hora_Inicio');
+                    if (diagVal) diagnostico = diagVal;
+                    if (evoVal)  evolucion   = evoVal;
+                    if (tratVal) tratamiento = tratVal;
+                    if (motivoVal) motivo    = motivoVal;
+                    if (fechaVal)  fecha     = fechaVal;
+                    if (horaVal)   horaCruda = horaVal;
                     datosObtenidos = true;
                 }
             }
 
-            // ── Respaldo 2: /api/historial-clinico/<cita_id> ───────────────
+            // 3) FALLBACK FINAL: /api/historial-clinico/<id>
             if (!datosObtenidos && diagnostico === 'Sin diagnóstico' && evolucion === 'Sin registro') {
                 const data2 = await fetch(
                     `/api/historial-clinico/${cita.Cita_ID}?_=${Date.now()}`,
                     { cache: 'no-store' }
                 )
                     .then(r => (r.ok ? r.json() : null))
-                    .then(data => {
-                        // CAMBIO P16 — RASTREO DE DATOS PESADO (respaldo 2)
-                        console.log("====== FRONTEND RECIBA DATA ======", data);
-                        alert("Datos recibidos en el navegador: " + JSON.stringify(data));
-                        return data;
-                    })
                     .catch(err2 => {
                         console.warn('[especialista] Usando caché local para reporte.', err2);
                         return null;
@@ -948,16 +963,23 @@ const verReporteProfesional = async (indice) => {
                     const diagVal = _leerCampoFlexible(d2, 'diagnostico', 'Diagnostico');
                     const evoVal  = _leerCampoFlexible(d2, 'evolucion', 'Evolucion', 'evolucion_clinica');
                     const tratVal = _leerCampoFlexible(d2, 'tratamiento', 'Tratamiento');
-                    if (diagVal) diagnostico  = diagVal;
-                    if (evoVal)  evolucion    = evoVal;
-                    if (tratVal) prescripcion = tratVal;
-                    fechaAtencion = d2.FechaRegistro || cita.FechaAtencion || fechaAtencion;
+                    const nombreVal = _leerCampoFlexible(d2, 'NombrePaciente');
+                    const motivoVal = _leerCampoFlexible(d2, 'Motivo_Consulta', 'MotivoHC');
+                    const fechaVal  = _leerCampoFlexible(d2, 'Fecha');
+                    const horaVal   = _leerCampoFlexible(d2, 'Hora_Inicio');
+                    if (diagVal) diagnostico = diagVal;
+                    if (evoVal)  evolucion   = evoVal;
+                    if (tratVal) tratamiento = tratVal;
+                    if (nombreVal) nombre    = nombreVal;
+                    if (motivoVal) motivo    = motivoVal;
+                    if (fechaVal)  fecha     = fechaVal;
+                    if (horaVal)   horaCruda = horaVal;
+                    if (d2.TipoDocumento)   tipoDoc = d2.TipoDocumento;
+                    if (d2.NumeroDocumento) numDoc  = d2.NumeroDocumento;
                 }
             }
 
-            if (cita.FechaAtencion && fechaAtencion === 'N/A') fechaAtencion = cita.FechaAtencion;
-
-            // ── Enriquecimiento de documento del paciente (no crítico) ─────
+            // 4) Enriquecimiento de documento si sigue sin datos reales
             if (tipoDoc === (cita.tipoDoc || 'DOC') && numDoc === (cita.numDoc || '—')) {
                 await fetch(`/api/citas/${cita.Cita_ID}?_=${Date.now()}`, { cache: 'no-store' })
                     .then(r => (r.ok ? r.json() : null))
@@ -965,6 +987,8 @@ const verReporteProfesional = async (indice) => {
                         if (dataCita) {
                             if (dataCita.TipoDocumento)   tipoDoc = dataCita.TipoDocumento;
                             if (dataCita.NumeroDocumento) numDoc  = dataCita.NumeroDocumento;
+                            if (dataCita.NombrePaciente)  nombre  = dataCita.NombrePaciente;
+                            if (dataCita.Motivo_Consulta) motivo  = dataCita.Motivo_Consulta;
                         }
                     })
                     .catch(err => {
@@ -973,34 +997,23 @@ const verReporteProfesional = async (indice) => {
             }
         }
 
-        // CAMBIO P16 — RASTREO DE DATOS PESADO: console.log de control
-        // dentro de setEl(), mostrando exactamente el ID destino y el
-        // valor que se está intentando inyectar en el DOM.
-        const setEl = (id, val) => {
-            const el = document.getElementById(id);
-            console.log("Intentando meter en el ID '" + id + "' el valor:", val);
-            if (!el) return;
-            el.innerText = val || '—';
-        };
-        setEl('rep-paciente',       cita.nombre);
-        setEl('rep-fecha-atencion', `Atendido: ${fechaAtencion}`);
-        setEl('rep-cita-info',      `Cita #${cita.Cita_ID || '—'} — ${cita.fecha} ${formatearHoraAmPm(cita.hora)}`);
-        setEl('rep-tipo-doc',       tipoDoc);
-        setEl('rep-num-doc',        numDoc);
-        setEl('rep-diagnostico',    diagnostico);
-        setEl('rep-evolucion',      evolucion);
-        setEl('rep-prescripcion',   prescripcion);
+        _pintarDatosPacienteReporte({
+            tipoDoc: tipoDoc,
+            numDoc:  numDoc,
+            nombre:  nombre,
+            fecha:   fecha,
+            hora:    formatearHoraAmPm(horaCruda),
+            motivo:  motivo,
+        });
 
-        document.getElementById('modalReporte').style.display = 'flex';
+        _pintarCamposClinicosReporte({ diagnostico, evolucion, tratamiento });
+
     } catch (err) {
         console.error('[especialista] Error cargando reporte:', err);
         mostrarToast('Error al cargar el reporte.', 'error');
     }
 };
 
-// ══════════════════════════════════════════════════════════════════════════════
-// irAHistoriaClinica() — NAVEGACIÓN A LA VISTA HTML DE HISTORIA CLÍNICA
-// ══════════════════════════════════════════════════════════════════════════════
 const irAHistoriaClinica = () => {
     try {
         const indice = citaActualEmpezar;
@@ -1060,7 +1073,6 @@ const irAHistoriaClinica = () => {
     }
 };
 
-// ─── GUARDAR FRANJA HORARIA ───────────────────────────────────────────────────
 const guardarFranjaHoraria = async () => {
     const especialistaId = usuarioSesionActual?.Especialista_ID;
     if (!especialistaId) { mostrarToast('No se pudo identificar el especialista.', 'error'); return; }
@@ -1130,7 +1142,6 @@ const guardarFranjaHoraria = async () => {
     }
 };
 
-// ─── ELIMINAR FRANJA ──────────────────────────────────────────────────────────
 function solicitarEliminarSlot(agendaId) {
     slotPendienteEliminar = agendaId;
     const modal = document.getElementById('modalEliminarSlot');
@@ -1158,7 +1169,6 @@ async function confirmarEliminarSlot() {
     slotPendienteEliminar = null;
 }
 
-// ─── TOGGLE CONTRASEÑA ────────────────────────────────────────────────────────
 window.togglePassVisibilidad = function(inputId, btn) {
     try {
         const input = document.getElementById(inputId);
@@ -1174,7 +1184,6 @@ window.togglePassVisibilidad = function(inputId, btn) {
     } catch (err) { console.warn('[especialista] Error toggle password:', err); }
 };
 
-// ─── VALIDACIÓN CONTRASEÑA ────────────────────────────────────────────────────
 function _cumpleRequisitosEsp(pass) {
     return {
         length:  pass.length >= 8,
@@ -1352,7 +1361,6 @@ const guardarPerfilCompleto = async () => {
     }
 };
 
-// ─── CONFIRMACIÓN SIMPLE ──────────────────────────────────────────────────────
 let accionPendienteSimple = '';
 function mostrarConfirmacionSimple(mensaje, accion) {
     try {
@@ -1375,7 +1383,6 @@ function ejecutarAccionSimple() {
     cerrarModalSimple();
 }
 
-// ─── INIT ─────────────────────────────────────────────────────────────────────
 window.onload = () => {
     try {
         ['inicio', 'agenda', 'pacientes', 'config'].forEach(s => {
@@ -1396,6 +1403,11 @@ window.onload = () => {
             const el = document.getElementById(id);
             if (el) el.addEventListener('change', () => actualizarPlaceholderVisual(el));
         });
+
+        const btnCerrarReporte = document.getElementById('btn-cerrar-reporte');
+        if (btnCerrarReporte) btnCerrarReporte.addEventListener('click', cerrarModalReporte);
+        const btnCerrarReporteX = document.getElementById('btn-cerrar-reporte-x');
+        if (btnCerrarReporteX) btnCerrarReporteX.addEventListener('click', cerrarModalReporte);
 
         inicializarPlaceholdersAgenda();
         cargarInfoSesion();

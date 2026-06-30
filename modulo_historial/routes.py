@@ -1,61 +1,6 @@
 """
 modulo_historial/routes.py — Stylo Dental
 ==========================================
-Endpoints para Historia Clínica.
-
-SEPARACIÓN ESTRICTA Vista / API
-────────────────────────────────
-  VISTA  (render_template, NUNCA jsonify):
-    GET  /historial/paciente/<paciente_id>
-         └─ Recibe cita_id como query param (?cita_id=)
-         └─ ÚNICO punto de entrada visual al HTML de Historia Clínica
-
-  API    (jsonify, NUNCA render_template):
-    GET  /api/historial/paciente/<paciente_id>/info
-    GET  /api/historial/paciente/<paciente_id>/evoluciones
-    GET  /api/historial/cita/<cita_id>          ← para la vista del especialista
-    GET  /api/historial-clinico/<cita_id>       ← endpoint de respaldo usado por especialista.js
-    POST /api/historial/guardar
-    POST /api/historial/finalizar
-
-REGISTRO EN app.py (sin url_prefix):
-    from modulo_historial.routes import historial_bp
-    app.register_blueprint(historial_bp)
-
-CAMBIO 3 — AISLAMIENTO DEL MOTIVO DE CONSULTA:
-  El campo MotivoConsulta que llega desde Historia Clínica se guarda
-  EXCLUSIVAMENTE en historial_clinico.MotivoHC (columna propia del historial).
-  Queda terminantemente prohibido que guardar_historia_clinica() y
-  finalizar_desde_historial() escriban sobre cita.Motivo_Consulta, que es
-  el campo estático que muestra la interfaz del especialista y debe
-  permanecer intacto.
-
-CAMBIO 4 (integración Reporte del Especialista) — FIX DE SINCRONIZACIÓN:
-  GET /api/historial/cita/<cita_id> es el puente OFICIAL de sincronización
-  Especialista ↔ Historia Clínica. especialista.js (verReporteProfesional)
-  consulta este endpoint como fuente PRIMARIA al hacer clic en "Reporte".
-
-CAMBIO 5 — FIX DEL ERROR 500 EN LOS ENDPOINTS DE REPORTE.
-
-CAMBIO 6 — FIX DEFINITIVO DEL 500 EN /api/historial/paciente/<id>/evoluciones.
-
-CAMBIO 7 — UNIFICACIÓN DEFINITIVA DE CLAVES PARA EL REPORTE DEL ESPECIALISTA:
-  Todos los endpoints de lectura relacionados con el Reporte ahora incluyen,
-  además de las claves Pascal ya existentes (compatibilidad retro), un set
-  de claves simples y directas en minúscula: 'diagnostico', 'evolucion' y
-  'tratamiento'. Estas tres claves son el contrato OFICIAL y PRIMARIO que
-  debe leer especialista.js.
-
-CAMBIO 8 — RASTREO DE DATOS PESADO (DIAGNÓSTICO TEMPORAL):
-  Se inyectó un bloque de print() de diagnóstico ANTES de cada
-  return _json_ok(...) en los endpoints relacionados con el Reporte
-  (/api/historial/cita/<id>, /api/historial-clinico/<id> y
-  /api/historial/paciente/<id>/evoluciones), mostrando en la terminal del
-  servidor exactamente qué fila/datos se recuperaron de SQL y qué
-  diccionario final se está serializando como JSON. Esto permite ver en
-  qué punto exacto el dato se vuelve vacío: si ya viene vacío desde SQL
-  (problema de datos/consulta) o si se vacía al construir el diccionario
-  de respuesta (problema de mapeo en el backend).
 """
 
 import os
@@ -65,7 +10,6 @@ from flask import Blueprint, request, jsonify, render_template
 
 historial_bp = Blueprint('historial_bp', __name__)
 
-# ─── Ruta absoluta a odent.db ─────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH  = os.path.join(BASE_DIR, 'odent.db')
 
@@ -91,7 +35,6 @@ def _json_error(msg, code=400):
 
 
 def _calcular_edad(fecha_nac_str):
-    """Calcula la edad a partir de una cadena de fecha (YYYY-MM-DD)."""
     if not fecha_nac_str:
         return None
     try:
@@ -103,10 +46,6 @@ def _calcular_edad(fecha_nac_str):
 
 
 def _get_alergias_condiciones(cur, usuario_id):
-    """
-    Intenta obtener alergias y condiciones de riesgo del paciente.
-    Devuelve (alergias_str, condiciones_str) o ('', '') si las tablas no existen.
-    """
     alergias    = ''
     condiciones = ''
     try:
@@ -135,10 +74,6 @@ def _get_alergias_condiciones(cur, usuario_id):
 
 
 def _ensure_historial_columns(cur):
-    """
-    Garantiza que historial_clinico tenga todas las columnas opcionales necesarias.
-    Agrega MotivoHC (CAMBIO 3), MapaDental y Hallazgos si no existen.
-    """
     try:
         cur.execute("PRAGMA table_info(historial_clinico)")
         hc_cols = [c[1] for c in cur.fetchall()]
@@ -146,19 +81,14 @@ def _ensure_historial_columns(cur):
             cur.execute("ALTER TABLE historial_clinico ADD COLUMN MapaDental TEXT")
         if 'Hallazgos' not in hc_cols:
             cur.execute("ALTER TABLE historial_clinico ADD COLUMN Hallazgos TEXT")
-        # CAMBIO 3: columna exclusiva para el motivo ingresado desde Historia Clínica
         if 'MotivoHC' not in hc_cols:
             cur.execute("ALTER TABLE historial_clinico ADD COLUMN MotivoHC TEXT")
         cur.connection.commit()
     except Exception:
-        # No debe abortar la lectura por un fallo al intentar migrar el esquema.
         pass
 
 
 def _ensure_cita_columns(cur):
-    """
-    CAMBIO 5: garantiza que 'cita' tenga la columna FechaAtencion.
-    """
     try:
         cur.execute("PRAGMA table_info(cita)")
         cita_cols = [c[1] for c in cur.fetchall()]
@@ -170,83 +100,77 @@ def _ensure_cita_columns(cur):
 
 
 def _descomprimir_evolucion_tratamiento(desc):
-    """
-    Separa el campo Tratamiento codificado como "evolucion\n---\ntratamiento".
-    Devuelve (evolucion, tratamiento), siempre como strings (nunca None).
-    """
     desc = desc or ''
+    desc = desc.strip()
+    if not desc:
+        return '', ''
     if '---' in desc:
         partes = desc.split('---', 1)
         return partes[0].strip(), partes[1].strip()
-    return desc, ''
+    return desc, desc
 
 
 def _aplicar_claves_unificadas_reporte(data, diagnostico, evolucion, tratamiento):
-    """
-    CAMBIO 7: aplica sobre el diccionario `data` el set COMPLETO de claves
-    que el Reporte del Especialista puede necesitar, en ambas convenciones
-    (Pascal legado + minúscula simple, que es ahora el contrato oficial
-    leído por especialista.js).
-    """
-    diagnostico = diagnostico or ''
-    evolucion   = evolucion or ''
-    tratamiento = tratamiento or ''
+    diagnostico = diagnostico if diagnostico is not None else ''
+    evolucion   = evolucion   if evolucion   is not None else ''
+    tratamiento = tratamiento if tratamiento is not None else ''
 
-    # Claves Pascal (compatibilidad retro con versiones anteriores del JS)
-    data['Diagnostico']        = diagnostico
-    data['Evolucion']          = evolucion
-    data['Tratamiento']        = tratamiento
-    data['evolucion_clinica']  = evolucion
-
-    # CAMBIO 7 — Claves OFICIALES simples en minúscula (contrato primario)
-    data['diagnostico'] = diagnostico
-    data['evolucion']   = evolucion
-    data['tratamiento'] = tratamiento
+    data['Diagnostico']       = diagnostico
+    data['Evolucion']         = evolucion
+    data['Tratamiento']       = tratamiento
+    data['diagnostico']       = diagnostico
+    data['evolucion']         = evolucion
+    data['tratamiento']       = tratamiento
+    data['evolucion_clinica'] = evolucion
+    data['diagnostico_texto'] = diagnostico
+    data['evolucion_texto']   = evolucion
+    data['tratamiento_texto'] = tratamiento
 
     return data
 
 
-def _respuesta_vacia_cita(cita_id):
-    """
-    CAMBIO 6: estructura por defecto cuando una cita no tiene historial
-    clínico todavía (paciente nuevo) o cuando ocurre cualquier error no
-    crítico al construir la respuesta. Nunca produce un 500.
+def _normalizar_datos_paciente(data):
+    data['NombrePaciente']      = data.get('NombrePaciente')      or ''
+    data['TipoDocumento']       = data.get('TipoDocumento')       or ''
+    data['NumeroDocumento']     = data.get('NumeroDocumento')     or ''
+    data['Motivo_Consulta']     = data.get('Motivo_Consulta')     or data.get('MotivoHC') or ''
+    data['Fecha']               = data.get('Fecha')               or ''
+    data['Hora_Inicio']         = data.get('Hora_Inicio')         or ''
+    data['EstadoAgenda']        = data.get('EstadoAgenda')        or ''
+    data['NombreEspecialista']  = data.get('NombreEspecialista')  or ''
+    data['Nombre_Especialidad'] = data.get('Nombre_Especialidad') or ''
+    return data
 
-    CAMBIO 7: se añadieron también las claves simples oficiales
-    'diagnostico', 'evolucion' y 'tratamiento'.
-    """
+
+def _respuesta_vacia_cita(cita_id):
     data = {
-        "Cita_ID": cita_id,
-        "Motivo_Consulta": "",
-        "Fecha": "",
-        "Hora_Inicio": "",
-        "EstadoAgenda": "",
-        "NombreEspecialista": "",
+        "Cita_ID":             cita_id,
+        "Motivo_Consulta":     "",
+        "Fecha":               "",
+        "Hora_Inicio":         "",
+        "EstadoAgenda":        "",
+        "NombreEspecialista":  "",
         "Nombre_Especialidad": "",
-        "NombrePaciente": "",
-        "TipoDocumento": "",
-        "NumeroDocumento": "",
-        "Historial_ID": None,
-        "MapaDental": "",
-        "Hallazgos": "",
-        "MotivoHC": "",
-        "FechaAtencion": "",
-        "FechaRegistro": "",
+        "NombrePaciente":      "",
+        "TipoDocumento":       "",
+        "NumeroDocumento":     "",
+        "Historial_ID":        None,
+        "MapaDental":          "",
+        "Hallazgos":           "",
+        "MotivoHC":            "",
+        "FechaAtencion":       "",
+        "FechaRegistro":       "",
     }
+    data = _normalizar_datos_paciente(data)
     return _aplicar_claves_unificadas_reporte(data, '', '', '')
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA PRINCIPAL
-# GET /historial/paciente/<paciente_id>?cita_id=<cita_id>
 # ══════════════════════════════════════════════════════════════════════════════
 
 @historial_bp.route('/historial/paciente/<int:paciente_id>', methods=['GET'])
 def vista_historia_clinica(paciente_id):
-    """
-    Ruta de VISTA — renderiza historia_clinica.html.
-    El frontend SIEMPRE debe navegar aquí (window.location.href).
-    """
     cita_id = request.args.get('cita_id', type=int)
     return render_template(
         'historia_clinica.html',
@@ -256,13 +180,49 @@ def vista_historia_clinica(paciente_id):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# API — CATÁLOGO DE DIAGNÓSTICOS (para autocompletado desde BD)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@historial_bp.route('/api/diagnosticos', methods=['GET'])
+def get_diagnosticos():
+    q = (request.args.get('q', '') or '').strip()
+    con = None
+    try:
+        con = _get_conn()
+        cur = con.cursor()
+        if q:
+            cur.execute("""
+                SELECT Diagnostico_ID, Nombre_Diagnostico
+                FROM diagnostico
+                WHERE Nombre_Diagnostico LIKE ?
+                ORDER BY Nombre_Diagnostico
+                LIMIT 30
+            """, (f'%{q}%',))
+        else:
+            cur.execute("""
+                SELECT Diagnostico_ID, Nombre_Diagnostico
+                FROM diagnostico
+                ORDER BY Nombre_Diagnostico
+                LIMIT 100
+            """)
+        rows = cur.fetchall()
+        return _json_ok({
+            "ok": True,
+            "data": [{"id": r["Diagnostico_ID"], "nombre": r["Nombre_Diagnostico"]} for r in rows]
+        })
+    except Exception as exc:
+        return _json_error(str(exc), 500)
+    finally:
+        if con:
+            con.close()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # API — INFORMACIÓN CLÍNICA DEL PACIENTE
-# GET /api/historial/paciente/<paciente_id>/info
 # ══════════════════════════════════════════════════════════════════════════════
 
 @historial_bp.route('/api/historial/paciente/<int:paciente_id>/info', methods=['GET'])
 def get_info_paciente(paciente_id):
-    """Ruta de API — devuelve datos clínicos del paciente como JSON."""
     con = None
     try:
         con = _get_conn()
@@ -329,30 +289,23 @@ def get_info_paciente(paciente_id):
 
 # ══════════════════════════════════════════════════════════════════════════════
 # API — EVOLUCIONES / HISTORIAL
-# GET /api/historial/paciente/<paciente_id>/evoluciones?cita_id=<cita_id>
-#
-# CAMBIO 8: print() de diagnóstico ANTES del return _json_ok exitoso, para
-# ver en la terminal exactamente qué filas crudas vinieron de SQL y qué
-# lista `filas` (ya mapeada con claves unificadas) se está serializando.
 # ══════════════════════════════════════════════════════════════════════════════
 
 @historial_bp.route('/api/historial/paciente/<int:paciente_id>/evoluciones', methods=['GET'])
 def get_evoluciones_paciente(paciente_id):
-    """Ruta de API — devuelve el historial de evoluciones como JSON."""
     cita_id = request.args.get('cita_id', type=int)
     con = None
     try:
         con = _get_conn()
         cur = con.cursor()
 
-        # CAMBIO 5: garantizar esquema ANTES de leer columnas dinámicas.
         _ensure_historial_columns(cur)
         _ensure_cita_columns(cur)
 
         sql = """
             SELECT
                 c.Cita_ID,
-                COALESCE(hc.MotivoHC, '') AS Motivo_Consulta,
+                COALESCE(hc.MotivoHC, c.Motivo_Consulta, '') AS Motivo_Consulta,
                 a.Fecha,
                 a.Hora_Inicio,
                 ea.Nombre_Estado                          AS EstadoAgenda,
@@ -361,6 +314,7 @@ def get_evoluciones_paciente(paciente_id):
                 hc.Historial_ID,
                 hc.MapaDental,
                 hc.Hallazgos,
+                COALESCE(hc.MotivoHC, '') AS MotivoHC,
                 (
                     SELECT d.Nombre_Diagnostico
                     FROM historial_diagnostico hd
@@ -368,14 +322,14 @@ def get_evoluciones_paciente(paciente_id):
                     WHERE hd.Historial_ID = hc.Historial_ID
                     ORDER BY hd.rowid DESC
                     LIMIT 1
-                ) AS Diagnostico,
+                ) AS DiagnosticoRaw,
                 (
                     SELECT t.Descripcion
                     FROM tratamiento t
                     WHERE t.Historial_ID = hc.Historial_ID
                     ORDER BY t.Tratamiento_ID DESC
                     LIMIT 1
-                ) AS Tratamiento,
+                ) AS TratamientoRaw,
                 (
                     SELECT t.FechaRegistro
                     FROM tratamiento t
@@ -384,10 +338,10 @@ def get_evoluciones_paciente(paciente_id):
                     LIMIT 1
                 ) AS FechaRegistro
             FROM cita c
-            JOIN agenda a        ON a.Agenda_ID        = c.Agenda_ID
-            JOIN estado_agenda ea ON ea.EstadoAgenda_ID = a.EstadoAgenda_ID
-            JOIN especialista e   ON e.Especialista_ID  = a.Especialista_ID
-            JOIN usuarios ue     ON ue.Usuario_ID       = e.Usuario_ID
+            JOIN agenda a         ON a.Agenda_ID         = c.Agenda_ID
+            JOIN estado_agenda ea ON ea.EstadoAgenda_ID  = a.EstadoAgenda_ID
+            JOIN especialista e   ON e.Especialista_ID   = a.Especialista_ID
+            JOIN usuarios ue      ON ue.Usuario_ID        = e.Usuario_ID
             LEFT JOIN especialista_especialidad ee ON ee.Especialista_ID = e.Especialista_ID
             LEFT JOIN especialidad esp ON esp.Especialidad_ID = ee.Especialidad_ID
             LEFT JOIN historial_clinico hc ON hc.Cita_ID = c.Cita_ID
@@ -404,41 +358,27 @@ def get_evoluciones_paciente(paciente_id):
             cur.execute(sql, params)
             filas_raw = cur.fetchall()
         except sqlite3.OperationalError:
-            # Si por algún motivo persiste un esquema desincronizado, no
-            # se revienta el endpoint: se responde con lista vacía.
             filas_raw = []
-
-        # CAMBIO 8 — RASTREO DE DATOS PESADO: filas crudas de SQL
-        print("========= BACKEND DIAGNOSTICO =========")
-        print("[evoluciones] Paciente_ID:", paciente_id, "| cita_id filtro:", cita_id)
-        print("Datos recuperados de SQL:", [dict(r) for r in filas_raw])
-        print("=======================================")
 
         filas = []
         for r in filas_raw:
             f = dict(r)
-            desc = f.get('Tratamiento') or ''
-            evolucion, tratamiento = _descomprimir_evolucion_tratamiento(desc)
-            diagnostico = f.get('Diagnostico') or ''
 
-            f = _aplicar_claves_unificadas_reporte(f, diagnostico, evolucion, tratamiento)
-            f['Motivo_Consulta']  = f.get('Motivo_Consulta') or ''
-            f['MapaDental']       = f.get('MapaDental') or ''
-            f['Hallazgos']        = f.get('Hallazgos') or ''
-            f['FechaRegistro']    = f.get('FechaRegistro') or ''
+            diagnostico_bd  = f.pop('DiagnosticoRaw',  None) or ''
+            tratamiento_raw = f.pop('TratamientoRaw',  None) or ''
+
+            evolucion_bd, tratamiento_bd = _descomprimir_evolucion_tratamiento(tratamiento_raw)
+
+            f = _aplicar_claves_unificadas_reporte(f, diagnostico_bd, evolucion_bd, tratamiento_bd)
+            f['Motivo_Consulta'] = f.get('Motivo_Consulta') or ''
+            f['MapaDental']      = f.get('MapaDental')      or ''
+            f['Hallazgos']       = f.get('Hallazgos')       or ''
+            f['FechaRegistro']   = f.get('FechaRegistro')   or ''
             filas.append(f)
 
-        # CAMBIO 8 — RASTREO DE DATOS PESADO: payload final a serializar
-        print("========= BACKEND DIAGNOSTICO =========")
-        print("Datos recuperados de SQL:", filas)
-        print("=======================================")
-
-        # CAMBIO 6 — FIX DEL 500: este return faltaba por completo.
         return _json_ok({"ok": True, "data": filas})
 
     except Exception:
-        # Garantiza que la ausencia/fallo de historial nunca rompa el flujo
-        # del Reporte: se responde 200 con lista vacía en vez de 500.
         return _json_ok({"ok": True, "data": []})
     finally:
         if con:
@@ -446,27 +386,16 @@ def get_evoluciones_paciente(paciente_id):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# API — DATOS CLÍNICOS DE UNA CITA ESPECÍFICA (para vista del Especialista)
-# GET /api/historial/cita/<cita_id>
-#
-# CAMBIO 8: print() de diagnóstico ANTES del return _json_ok, tanto de la
-# fila cruda devuelta por SQL (row) como del diccionario `data` final que
-# se está serializando como JSON. Este es el endpoint PRIMARIO que usa
-# verReporteProfesional, así que es el punto más importante a rastrear.
+# API — DATOS CLÍNICOS DE UNA CITA ESPECÍFICA (puente Especialista <-> HC)
 # ══════════════════════════════════════════════════════════════════════════════
 
 @historial_bp.route('/api/historial/cita/<int:cita_id>', methods=['GET'])
 def get_historial_por_cita(cita_id):
-    """
-    Ruta de API — devuelve todos los datos clínicos de una cita para el reporte
-    del especialista. Refleja en tiempo real los cambios guardados desde HC.
-    """
     con = None
     try:
         con = _get_conn()
         cur = con.cursor()
 
-        # CAMBIO 5: garantizar esquema ANTES de leer columnas dinámicas.
         _ensure_historial_columns(cur)
         _ensure_cita_columns(cur)
 
@@ -474,7 +403,7 @@ def get_historial_por_cita(cita_id):
             cur.execute("""
                 SELECT
                     c.Cita_ID,
-                    c.Motivo_Consulta,
+                    COALESCE(hc.MotivoHC, c.Motivo_Consulta, '') AS Motivo_Consulta,
                     c.FechaAtencion,
                     a.Fecha,
                     a.Hora_Inicio,
@@ -487,7 +416,7 @@ def get_historial_por_cita(cita_id):
                     hc.Historial_ID,
                     hc.MapaDental,
                     hc.Hallazgos,
-                    hc.MotivoHC,
+                    COALESCE(hc.MotivoHC, '') AS MotivoHC,
                     (
                         SELECT d.Nombre_Diagnostico
                         FROM historial_diagnostico hd
@@ -495,14 +424,14 @@ def get_historial_por_cita(cita_id):
                         WHERE hd.Historial_ID = hc.Historial_ID
                         ORDER BY hd.rowid DESC
                         LIMIT 1
-                    ) AS Diagnostico,
+                    ) AS DiagnosticoRaw,
                     (
                         SELECT t.Descripcion
                         FROM tratamiento t
                         WHERE t.Historial_ID = hc.Historial_ID
                         ORDER BY t.Tratamiento_ID DESC
                         LIMIT 1
-                    ) AS Tratamiento,
+                    ) AS TratamientoRaw,
                     (
                         SELECT t.FechaRegistro
                         FROM tratamiento t
@@ -519,66 +448,39 @@ def get_historial_por_cita(cita_id):
                 LEFT JOIN especialidad esp ON esp.Especialidad_ID = ee.Especialidad_ID
                 JOIN paciente p       ON p.Paciente_ID        = c.Paciente_ID
                 JOIN usuarios up      ON up.Usuario_ID        = p.Usuario_ID
-                LEFT JOIN tipo_documento td ON td.TipoDoc_ID = up.TipoDoc_ID
-                LEFT JOIN historial_clinico hc ON hc.Cita_ID = c.Cita_ID
+                LEFT JOIN tipo_documento td ON td.TipoDoc_ID  = up.TipoDoc_ID
+                LEFT JOIN historial_clinico hc ON hc.Cita_ID  = c.Cita_ID
                 WHERE c.Cita_ID = ?
                 LIMIT 1
             """, (cita_id,))
             row = cur.fetchone()
-        except sqlite3.OperationalError as exc_sql:
-            print("========= BACKEND DIAGNOSTICO =========")
-            print("[/api/historial/cita] Cita_ID:", cita_id, "| OperationalError:", exc_sql)
-            print("Datos recuperados de SQL:", None)
-            print("=======================================")
-            # CAMBIO 6: error de esquema -> respuesta vacía 200, no 500.
+        except sqlite3.OperationalError:
             return _json_ok({"ok": True, "data": _respuesta_vacia_cita(cita_id)})
 
-        # CAMBIO 8 — RASTREO DE DATOS PESADO: fila cruda devuelta por SQL
-        print("========= BACKEND DIAGNOSTICO =========")
-        print("[/api/historial/cita] Cita_ID:", cita_id)
-        print("Datos recuperados de SQL:", dict(row) if row else None)
-        print("=======================================")
-
         if not row:
-            # CAMBIO 6: cita sin historial (paciente nuevo) -> 200 con vacíos.
             return _json_ok({"ok": True, "data": _respuesta_vacia_cita(cita_id)})
 
         try:
             data = dict(row)
 
-            # Descomprimir Tratamiento + Evolución (acceso seguro vía .get)
-            desc = data.get('Tratamiento') or ''
-            evolucion, tratamiento = _descomprimir_evolucion_tratamiento(desc)
-            diagnostico = data.get('Diagnostico') or ''
+            diagnostico_bd  = data.pop('DiagnosticoRaw',  None) or ''
+            tratamiento_raw = data.pop('TratamientoRaw',  None) or ''
 
-            data = _aplicar_claves_unificadas_reporte(data, diagnostico, evolucion, tratamiento)
-            data['MotivoHC']            = data.get('MotivoHC') or ''
-            data['MapaDental']          = data.get('MapaDental') or ''
-            data['Hallazgos']           = data.get('Hallazgos') or ''
-            data['FechaAtencion']       = data.get('FechaAtencion') or ''
-            data['FechaRegistro']       = data.get('FechaRegistro') or ''
+            evolucion_bd, tratamiento_bd = _descomprimir_evolucion_tratamiento(tratamiento_raw)
 
-            # CAMBIO 8 — RASTREO DE DATOS PESADO: payload final a serializar
-            print("========= BACKEND DIAGNOSTICO =========")
-            print("[/api/historial/cita] Cita_ID:", cita_id, "| Payload final JSON ->")
-            print("Datos recuperados de SQL:", data)
-            print("=======================================")
+            data = _aplicar_claves_unificadas_reporte(data, diagnostico_bd, evolucion_bd, tratamiento_bd)
+            data['MotivoHC']      = data.get('MotivoHC')      or ''
+            data['MapaDental']    = data.get('MapaDental')     or ''
+            data['Hallazgos']     = data.get('Hallazgos')      or ''
+            data['FechaAtencion'] = data.get('FechaAtencion')  or ''
+            data['FechaRegistro'] = data.get('FechaRegistro')  or ''
+            data = _normalizar_datos_paciente(data)
 
             return _json_ok({"ok": True, "data": data})
-        except Exception as exc_build:
-            print("========= BACKEND DIAGNOSTICO =========")
-            print("[/api/historial/cita] Cita_ID:", cita_id, "| EXCEPCION construyendo data:", exc_build)
-            print("Datos recuperados de SQL:", dict(row) if row else None)
-            print("=======================================")
-            # CAMBIO 6: cualquier fallo al armar la respuesta -> vacíos 200.
+        except Exception:
             return _json_ok({"ok": True, "data": _respuesta_vacia_cita(cita_id)})
 
-    except Exception as exc_general:
-        print("========= BACKEND DIAGNOSTICO =========")
-        print("[/api/historial/cita] Cita_ID:", cita_id, "| EXCEPCION GENERAL:", exc_general)
-        print("Datos recuperados de SQL:", None)
-        print("=======================================")
-        # CAMBIO 6: este endpoint ya nunca devuelve 500.
+    except Exception:
         return _json_ok({"ok": True, "data": _respuesta_vacia_cita(cita_id)})
     finally:
         if con:
@@ -586,16 +488,11 @@ def get_historial_por_cita(cita_id):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# API — RESPALDO DE COMPATIBILIDAD PARA EL MODAL "REPORTE" DEL ESPECIALISTA
-# GET /api/historial-clinico/<cita_id>
-#
-# CAMBIO 8: print() de diagnóstico ANTES del return _json_ok, igual que en
-# /api/historial/cita/<id>.
+# API — RESPALDO DE COMPATIBILIDAD
 # ══════════════════════════════════════════════════════════════════════════════
 
 @historial_bp.route('/api/historial-clinico/<int:cita_id>', methods=['GET'])
 def get_historial_clinico_legacy(cita_id):
-    """Ruta de API (respaldo) — alias funcional de /api/historial/cita/<cita_id>."""
     con = None
     try:
         con = _get_conn()
@@ -608,12 +505,17 @@ def get_historial_clinico_legacy(cita_id):
             cur.execute("""
                 SELECT
                     c.Cita_ID,
-                    c.Motivo_Consulta,
+                    COALESCE(hc.MotivoHC, c.Motivo_Consulta, '') AS Motivo_Consulta,
                     c.FechaAtencion,
+                    a.Fecha,
+                    a.Hora_Inicio,
+                    up.Nombres || ' ' || up.Apellidos AS NombrePaciente,
+                    td.Nombre_Tipo_Documento           AS TipoDocumento,
+                    up.NumeroDocumento,
                     hc.Historial_ID,
                     hc.MapaDental,
                     hc.Hallazgos,
-                    hc.MotivoHC,
+                    COALESCE(hc.MotivoHC, '') AS MotivoHC,
                     (
                         SELECT d.Nombre_Diagnostico
                         FROM historial_diagnostico hd
@@ -621,14 +523,14 @@ def get_historial_clinico_legacy(cita_id):
                         WHERE hd.Historial_ID = hc.Historial_ID
                         ORDER BY hd.rowid DESC
                         LIMIT 1
-                    ) AS Diagnostico,
+                    ) AS DiagnosticoRaw,
                     (
                         SELECT t.Descripcion
                         FROM tratamiento t
                         WHERE t.Historial_ID = hc.Historial_ID
                         ORDER BY t.Tratamiento_ID DESC
                         LIMIT 1
-                    ) AS Tratamiento,
+                    ) AS TratamientoRaw,
                     (
                         SELECT t.FechaRegistro
                         FROM tratamiento t
@@ -637,59 +539,42 @@ def get_historial_clinico_legacy(cita_id):
                         LIMIT 1
                     ) AS FechaRegistro
                 FROM cita c
+                LEFT JOIN agenda a    ON a.Agenda_ID    = c.Agenda_ID
+                LEFT JOIN paciente p  ON p.Paciente_ID  = c.Paciente_ID
+                LEFT JOIN usuarios up ON up.Usuario_ID  = p.Usuario_ID
+                LEFT JOIN tipo_documento td ON td.TipoDoc_ID = up.TipoDoc_ID
                 LEFT JOIN historial_clinico hc ON hc.Cita_ID = c.Cita_ID
                 WHERE c.Cita_ID = ?
                 LIMIT 1
             """, (cita_id,))
             row = cur.fetchone()
-        except sqlite3.OperationalError as exc_sql:
-            print("========= BACKEND DIAGNOSTICO =========")
-            print("[/api/historial-clinico] Cita_ID:", cita_id, "| OperationalError:", exc_sql)
-            print("Datos recuperados de SQL:", None)
-            print("=======================================")
+        except sqlite3.OperationalError:
             return _json_ok({"ok": True, "data": _respuesta_vacia_cita(cita_id)})
-
-        # CAMBIO 8 — RASTREO DE DATOS PESADO: fila cruda devuelta por SQL
-        print("========= BACKEND DIAGNOSTICO =========")
-        print("[/api/historial-clinico] Cita_ID:", cita_id)
-        print("Datos recuperados de SQL:", dict(row) if row else None)
-        print("=======================================")
 
         if not row:
             return _json_ok({"ok": True, "data": _respuesta_vacia_cita(cita_id)})
 
         try:
             data = dict(row)
-            desc = data.get('Tratamiento') or ''
-            evolucion, tratamiento = _descomprimir_evolucion_tratamiento(desc)
-            diagnostico = data.get('Diagnostico') or ''
 
-            data = _aplicar_claves_unificadas_reporte(data, diagnostico, evolucion, tratamiento)
-            data['MotivoHC']           = data.get('MotivoHC') or ''
-            data['MapaDental']         = data.get('MapaDental') or ''
-            data['Hallazgos']          = data.get('Hallazgos') or ''
-            data['FechaAtencion']      = data.get('FechaAtencion') or ''
-            data['FechaRegistro']      = data.get('FechaRegistro') or ''
+            diagnostico_bd  = data.pop('DiagnosticoRaw',  None) or ''
+            tratamiento_raw = data.pop('TratamientoRaw',  None) or ''
 
-            # CAMBIO 8 — RASTREO DE DATOS PESADO: payload final a serializar
-            print("========= BACKEND DIAGNOSTICO =========")
-            print("[/api/historial-clinico] Cita_ID:", cita_id, "| Payload final JSON ->")
-            print("Datos recuperados de SQL:", data)
-            print("=======================================")
+            evolucion_bd, tratamiento_bd = _descomprimir_evolucion_tratamiento(tratamiento_raw)
+
+            data = _aplicar_claves_unificadas_reporte(data, diagnostico_bd, evolucion_bd, tratamiento_bd)
+            data['MotivoHC']      = data.get('MotivoHC')      or ''
+            data['MapaDental']    = data.get('MapaDental')     or ''
+            data['Hallazgos']     = data.get('Hallazgos')      or ''
+            data['FechaAtencion'] = data.get('FechaAtencion')  or ''
+            data['FechaRegistro'] = data.get('FechaRegistro')  or ''
+            data = _normalizar_datos_paciente(data)
 
             return _json_ok({"ok": True, "data": data})
-        except Exception as exc_build:
-            print("========= BACKEND DIAGNOSTICO =========")
-            print("[/api/historial-clinico] Cita_ID:", cita_id, "| EXCEPCION construyendo data:", exc_build)
-            print("Datos recuperados de SQL:", dict(row) if row else None)
-            print("=======================================")
+        except Exception:
             return _json_ok({"ok": True, "data": _respuesta_vacia_cita(cita_id)})
 
-    except Exception as exc_general:
-        print("========= BACKEND DIAGNOSTICO =========")
-        print("[/api/historial-clinico] Cita_ID:", cita_id, "| EXCEPCION GENERAL:", exc_general)
-        print("Datos recuperados de SQL:", None)
-        print("=======================================")
+    except Exception:
         return _json_ok({"ok": True, "data": _respuesta_vacia_cita(cita_id)})
     finally:
         if con:
@@ -697,21 +582,59 @@ def get_historial_clinico_legacy(cita_id):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# API — DATOS DE CITA (enriquecimiento de documento del paciente)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@historial_bp.route('/api/citas/<int:cita_id>', methods=['GET'])
+def get_cita_detalle(cita_id):
+    con = None
+    try:
+        con = _get_conn()
+        cur = con.cursor()
+        cur.execute("""
+            SELECT
+                c.Cita_ID,
+                c.Paciente_ID,
+                c.Motivo_Consulta,
+                up.Nombres || ' ' || up.Apellidos AS NombrePaciente,
+                td.Nombre_Tipo_Documento           AS TipoDocumento,
+                up.NumeroDocumento                 AS NumeroDocumento
+            FROM cita c
+            LEFT JOIN paciente p  ON p.Paciente_ID = c.Paciente_ID
+            LEFT JOIN usuarios up ON up.Usuario_ID  = p.Usuario_ID
+            LEFT JOIN tipo_documento td ON td.TipoDoc_ID = up.TipoDoc_ID
+            WHERE c.Cita_ID = ?
+            LIMIT 1
+        """, (cita_id,))
+        row = cur.fetchone()
+        if not row:
+            return _json_error('Cita no encontrada.', 404)
+        data = dict(row)
+        data['TipoDocumento']   = data.get('TipoDocumento')   or ''
+        data['NumeroDocumento'] = data.get('NumeroDocumento') or ''
+        return _json_ok(data)
+    except Exception as exc:
+        return _json_error(str(exc), 500)
+    finally:
+        if con:
+            con.close()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # API — GUARDAR HISTORIA CLÍNICA
-# POST /api/historial/guardar
 # ══════════════════════════════════════════════════════════════════════════════
 
 @historial_bp.route('/api/historial/guardar', methods=['POST'])
 def guardar_historia_clinica():
-    """Ruta de API — persiste motivo, diagnóstico, evolución y tratamiento."""
-    datos       = request.get_json(silent=True) or {}
-    cita_id     = datos.get('Cita_ID')
-    diagnostico = (datos.get('Diagnostico')   or '').strip()
-    evolucion   = (datos.get('Evolucion')     or '').strip()
-    tratamiento = (datos.get('Tratamiento')   or '').strip()
-    mapa_dental = datos.get('MapaDental')     or '{}'
-    hallazgos   = datos.get('Hallazgos')      or '[]'
-    motivo_hc   = (datos.get('MotivoConsulta') or '').strip()
+    datos         = request.get_json(silent=True) or {}
+    cita_id       = datos.get('Cita_ID')
+    diagnostico   = (datos.get('Diagnostico')    or '').strip()
+    diagnostico_id = datos.get('DiagnosticoID')
+    evolucion     = (datos.get('Evolucion')      or '').strip()
+    tratamiento   = (datos.get('Tratamiento')    or '').strip()
+    mapa_dental   = datos.get('MapaDental')      or '{}'
+    hallazgos     = datos.get('Hallazgos')       or '[]'
+    motivo_hc     = (datos.get('MotivoConsulta') or '').strip()
 
     if not cita_id:
         return _json_error('Cita_ID es obligatorio.')
@@ -748,27 +671,39 @@ def guardar_historia_clinica():
                 (motivo_hc, historial_id)
             )
 
-        if diagnostico:
-            cur.execute(
-                "SELECT Diagnostico_ID FROM diagnostico WHERE Nombre_Diagnostico = ?",
-                (diagnostico,)
-            )
-            dr = cur.fetchone()
-            diag_id = dr['Diagnostico_ID'] if dr else None
-            if not diag_id:
+        if diagnostico or diagnostico_id:
+            diag_id = None
+            if diagnostico_id:
                 cur.execute(
-                    "INSERT INTO diagnostico (Nombre_Diagnostico) VALUES (?)",
+                    "SELECT Diagnostico_ID FROM diagnostico WHERE Diagnostico_ID = ?",
+                    (diagnostico_id,)
+                )
+                dr = cur.fetchone()
+                diag_id = dr['Diagnostico_ID'] if dr else None
+
+            if not diag_id and diagnostico:
+                cur.execute(
+                    "SELECT Diagnostico_ID FROM diagnostico WHERE Nombre_Diagnostico = ?",
                     (diagnostico,)
                 )
-                diag_id = cur.lastrowid
-            cur.execute(
-                "DELETE FROM historial_diagnostico WHERE Historial_ID = ?",
-                (historial_id,)
-            )
-            cur.execute(
-                "INSERT INTO historial_diagnostico (Historial_ID, Diagnostico_ID) VALUES (?, ?)",
-                (historial_id, diag_id)
-            )
+                dr = cur.fetchone()
+                diag_id = dr['Diagnostico_ID'] if dr else None
+                if not diag_id:
+                    cur.execute(
+                        "INSERT INTO diagnostico (Nombre_Diagnostico) VALUES (?)",
+                        (diagnostico,)
+                    )
+                    diag_id = cur.lastrowid
+
+            if diag_id:
+                cur.execute(
+                    "DELETE FROM historial_diagnostico WHERE Historial_ID = ?",
+                    (historial_id,)
+                )
+                cur.execute(
+                    "INSERT INTO historial_diagnostico (Historial_ID, Diagnostico_ID) VALUES (?, ?)",
+                    (historial_id, diag_id)
+                )
 
         desc = ''
         if evolucion and tratamiento:
@@ -823,32 +758,21 @@ def guardar_historia_clinica():
 
 # ══════════════════════════════════════════════════════════════════════════════
 # API — FINALIZAR CONSULTA DESDE HISTORIA CLÍNICA
-# POST /api/historial/finalizar
 # ══════════════════════════════════════════════════════════════════════════════
 
 @historial_bp.route('/api/historial/finalizar', methods=['POST'])
 def finalizar_desde_historial():
-    """
-    Ruta de API — guarda la HC completa y marca la agenda como Cumplida.
-    Los datos quedan inmediatamente disponibles para la vista del especialista
-    a través de GET /api/historial/cita/<cita_id> y
-    GET /api/historial/paciente/<paciente_id>/evoluciones.
-    """
-    datos       = request.get_json(silent=True) or {}
-    cita_id     = datos.get('Cita_ID')
-    diagnostico = (datos.get('Diagnostico')    or '').strip()
-    evolucion   = (datos.get('Evolucion')      or '').strip()
-    tratamiento = (datos.get('Tratamiento')    or '').strip()
-    mapa_dental = datos.get('MapaDental')      or '{}'
-    hallazgos   = datos.get('Hallazgos')       or '[]'
-    motivo_hc   = (datos.get('MotivoConsulta') or '').strip()
-
-    print(f"[FINALIZAR] payload recibido -> Cita_ID={cita_id!r} "
-          f"Diagnostico={diagnostico!r} Evolucion={evolucion!r} "
-          f"Tratamiento={tratamiento!r} MotivoHC={motivo_hc!r}")
+    datos          = request.get_json(silent=True) or {}
+    cita_id        = datos.get('Cita_ID')
+    diagnostico    = (datos.get('Diagnostico')    or '').strip()
+    diagnostico_id = datos.get('DiagnosticoID')
+    evolucion      = (datos.get('Evolucion')      or '').strip()
+    tratamiento    = (datos.get('Tratamiento')    or '').strip()
+    mapa_dental    = datos.get('MapaDental')      or '{}'
+    hallazgos      = datos.get('Hallazgos')       or '[]'
+    motivo_hc      = (datos.get('MotivoConsulta') or '').strip()
 
     if not cita_id:
-        print("[FINALIZAR] ABORTADO: Cita_ID vacío/None — revisa _HC_CITA_ID en historia_clinica.js")
         return _json_error('Cita_ID es obligatorio.')
 
     con = None
@@ -866,16 +790,13 @@ def finalizar_desde_historial():
         cita_row = cur.fetchone()
         if not cita_row:
             cur.execute("ROLLBACK")
-            print(f"[FINALIZAR] ABORTADO: no existe cita ni agenda para Cita_ID={cita_id!r}")
             return _json_error('Cita no encontrada.', 404)
 
-        # Marcar agenda como Cumplida (EstadoAgenda_ID = 4)
         cur.execute(
             "UPDATE agenda SET EstadoAgenda_ID = 4 WHERE Agenda_ID = ?",
             (cita_row['Agenda_ID'],)
         )
 
-        # Registrar fecha de atención
         fecha_ahora = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         cur.execute("PRAGMA table_info(cita)")
         cita_cols = [c[1] for c in cur.fetchall()]
@@ -886,7 +807,6 @@ def finalizar_desde_historial():
             (fecha_ahora, cita_id)
         )
 
-        # Upsert historial_clinico
         cur.execute(
             "SELECT Historial_ID FROM historial_clinico WHERE Cita_ID = ?", (cita_id,)
         )
@@ -900,37 +820,46 @@ def finalizar_desde_historial():
 
         _ensure_historial_columns(cur)
 
-        # CAMBIO 3: guardar motivo exclusivamente en historial_clinico.MotivoHC
         if motivo_hc:
             cur.execute(
                 "UPDATE historial_clinico SET MotivoHC = ? WHERE Historial_ID = ?",
                 (motivo_hc, historial_id)
             )
 
-        # Diagnóstico
-        if diagnostico:
-            cur.execute(
-                "SELECT Diagnostico_ID FROM diagnostico WHERE Nombre_Diagnostico = ?",
-                (diagnostico,)
-            )
-            dr      = cur.fetchone()
-            diag_id = dr['Diagnostico_ID'] if dr else None
-            if not diag_id:
+        if diagnostico or diagnostico_id:
+            diag_id = None
+            if diagnostico_id:
                 cur.execute(
-                    "INSERT INTO diagnostico (Nombre_Diagnostico) VALUES (?)",
+                    "SELECT Diagnostico_ID FROM diagnostico WHERE Diagnostico_ID = ?",
+                    (diagnostico_id,)
+                )
+                dr = cur.fetchone()
+                diag_id = dr['Diagnostico_ID'] if dr else None
+
+            if not diag_id and diagnostico:
+                cur.execute(
+                    "SELECT Diagnostico_ID FROM diagnostico WHERE Nombre_Diagnostico = ?",
                     (diagnostico,)
                 )
-                diag_id = cur.lastrowid
-            cur.execute(
-                "DELETE FROM historial_diagnostico WHERE Historial_ID = ?",
-                (historial_id,)
-            )
-            cur.execute(
-                "INSERT INTO historial_diagnostico (Historial_ID, Diagnostico_ID) VALUES (?, ?)",
-                (historial_id, diag_id)
-            )
+                dr      = cur.fetchone()
+                diag_id = dr['Diagnostico_ID'] if dr else None
+                if not diag_id:
+                    cur.execute(
+                        "INSERT INTO diagnostico (Nombre_Diagnostico) VALUES (?)",
+                        (diagnostico,)
+                    )
+                    diag_id = cur.lastrowid
 
-        # Tratamiento + Evolución
+            if diag_id:
+                cur.execute(
+                    "DELETE FROM historial_diagnostico WHERE Historial_ID = ?",
+                    (historial_id,)
+                )
+                cur.execute(
+                    "INSERT INTO historial_diagnostico (Historial_ID, Diagnostico_ID) VALUES (?, ?)",
+                    (historial_id, diag_id)
+                )
+
         desc = ''
         if evolucion and tratamiento:
             desc = f"{evolucion}\n---\n{tratamiento}"
@@ -956,15 +885,12 @@ def finalizar_desde_historial():
                     (historial_id, desc)
                 )
 
-        # MapaDental / Hallazgos
         cur.execute(
             "UPDATE historial_clinico SET MapaDental = ?, Hallazgos = ? WHERE Historial_ID = ?",
             (str(mapa_dental), str(hallazgos), historial_id)
         )
 
         cur.execute("COMMIT")
-        print(f"[FINALIZAR] OK -> Cita_ID={cita_id} Historial_ID={historial_id} "
-              f"guardado correctamente en historial_clinico/tratamiento/historial_diagnostico.")
         return _json_ok({
             "ok": True,
             "Historial_ID":  historial_id,

@@ -214,7 +214,6 @@
             <div class="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden mb-10">
                 <div class="p-10 border-b border-slate-50 bg-slate-50/40">
                     <div class="flex items-center gap-5">
-                        <!-- PUNTO 4: icono cambiado de fa-plus-circle a fa-book-medical -->
                         <div class="w-12 h-12 bg-sky-600 text-white rounded-2xl flex items-center justify-center shadow-lg">
                             <i class="fas fa-book-medical text-xl"></i>
                         </div>
@@ -365,7 +364,6 @@
                     Gestión de Perfil Médico
                 </h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-12 relative z-10">
-                    <!-- PUNTO 6 (actualizado): "Nombres" y "Apellidos" fusionados en un único campo "Nombre completo" -->
                     <div class="space-y-3 md:col-span-2">
                         <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Nombre Completo</label>
                         <input type="text" id="conf-nombre-completo" class="input-consulta w-full" placeholder="Nombre completo">
@@ -455,7 +453,6 @@
             </div>
             <div class="p-10">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                    <!-- PUNTO 6: "Nombre completo" en lugar de campos separados -->
                     <div class="bg-slate-50 rounded-2xl p-6 border border-slate-100 md:col-span-2">
                         <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Nombre Completo</p>
                         <p id="empezar-nombre-dato" class="font-black text-slate-700 text-sm uppercase"></p>
@@ -468,13 +465,11 @@
                         <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Estado de la Cita</p>
                         <p id="empezar-estado-dato" class="font-black text-sky-600 text-sm uppercase"></p>
                     </div>
-                    <!-- PUNTO 3 (actualizado): el campo "Motivo de Consulta" ahora muestra la Especialidad de la cita -->
                     <div class="bg-slate-50 rounded-2xl p-6 border border-slate-100 md:col-span-2">
                         <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Motivo de Consulta</p>
                         <p id="empezar-motivo-dato" class="font-black text-slate-700 text-sm"></p>
                     </div>
                 </div>
-                <!-- PUNTO 3: Solo botón Historia Clínica, eliminado "Finalizar Consulta" -->
                 <div class="flex gap-4 flex-wrap justify-end border-t border-slate-100 pt-8">
                     <button onclick="irAHistoriaClinica()" class="bg-sky-50 text-sky-600 border-2 border-sky-200 px-10 py-4 rounded-2xl font-black text-[11px] hover:bg-sky-600 hover:text-white transition-all uppercase shadow-md active:scale-95">
                         <i class="fas fa-folder-open mr-2"></i>Historia Clínica
@@ -484,88 +479,112 @@
         </div>
     </div>
 
-    <!-- MODAL: REPORTE PROFESIONAL (Especialista) -->
+    <!-- ════════════════════════════════════════════════════════════════════ -->
+    <!-- MODAL: REPORTE CLÍNICO (Especialista) — REDISEÑO "DATOS DEL PACIENTE" -->
+    <!-- Jerarquía: 1) Nombre completo (destacado) 2) Tipo/Núm Documento       -->
+    <!-- 3) Motivo de la consulta (bloque amplio) 4) Fecha y Hora de la cita  -->
+    <!-- ════════════════════════════════════════════════════════════════════ -->
     <div id="modalReporte" class="modal-overlay">
-        <div class="modal-content overflow-hidden" style="max-width:860px;">
-            <div class="bg-gradient-to-r from-sky-700 to-sky-900 p-12 flex justify-between items-start text-white rounded-t-[45px]">
-                <div>
-                    <div class="flex items-center gap-4 mb-3">
-                        <div class="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center border border-white/20">
-                            <i class="fas fa-file-medical text-xl text-sky-200"></i>
-                        </div>
-                        <div>
-                            <p class="text-sky-300 text-[10px] font-black uppercase tracking-[0.4em]">Registro Clínico — Solo Lectura</p>
-                            <h3 class="font-black text-3xl tracking-tighter uppercase">Reporte de Atención</h3>
-                        </div>
+        <div class="modal-content overflow-hidden max-h-[85vh] md:max-h-[88vh] overflow-y-auto custom-scrollbar flex flex-col" style="max-width:880px;">
+            <div class="bg-gradient-to-r from-sky-700 to-sky-900 p-10 flex justify-between items-start text-white rounded-t-[45px] flex-shrink-0">
+                <div class="flex items-center gap-4">
+                    <div class="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center border border-white/20 flex-shrink-0">
+                        <i class="fas fa-file-medical-alt text-2xl text-sky-200"></i>
                     </div>
-                    <p id="rep-fecha-atencion" class="text-sky-300/70 font-bold text-[11px] uppercase tracking-[0.3em] ml-16"></p>
+                    <div>
+                        <p class="text-sky-300 text-[10px] font-black uppercase tracking-[0.4em] mb-1">Reporte Clínico — Solo Lectura</p>
+                        <h3 class="font-black text-2xl tracking-tight uppercase">Reporte de Atención</h3>
+                    </div>
                 </div>
-                <button onclick="document.getElementById('modalReporte').style.display='none'" class="text-white/40 hover:text-white transition-all mt-1">
+                <button id="btn-cerrar-reporte-x" onclick="cerrarModalReporte()" class="text-white/40 hover:text-white transition-all mt-1">
                     <i class="fas fa-times-circle text-4xl"></i>
                 </button>
             </div>
 
-            <div class="reporte-clinico-body">
-                <!-- Datos del paciente -->
-                <div class="reporte-clinico-card">
-                    <p class="reporte-section-label slate">
-                        <i class="fas fa-user-circle"></i> Información del Paciente
+            <div class="p-10 max-h-[75vh] overflow-y-auto custom-scrollbar flex-grow">
+
+                <!-- Datos del Paciente — Tablero clínico jerárquico -->
+                <div class="bg-slate-50 rounded-3xl border border-slate-200/80 p-8 mb-6">
+                    <p class="text-[10px] font-black text-sky-600 uppercase tracking-[0.3em] mb-5 flex items-center gap-2">
+                        <i class="fas fa-user-circle"></i> Datos del Paciente
                     </p>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <!-- PUNTO 6: "Nombre completo" en reporte -->
-                        <div class="md:col-span-1">
-                            <p class="reporte-dato-mini">Nombre Completo</p>
-                            <p id="rep-paciente" class="reporte-dato-valor uppercase"></p>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+
+                        <!-- Prioridad 1: Nombre completo — destacado, ancho completo -->
+                        <div class="md:col-span-3">
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Nombre Completo del Paciente</label>
+                            <div id="rep-paciente" class="bg-white border border-slate-200 rounded-2xl px-5 py-4 text-lg font-black text-slate-800 uppercase shadow-sm tracking-tight">—</div>
+                        </div>
+
+                        <!-- Prioridad 2: Identificación del paciente -->
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Tipo de Documento</label>
+                            <div id="rep-tipo-doc" class="bg-slate-50/60 border border-slate-150 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">—</div>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Número de Documento</label>
+                            <div id="rep-num-doc" class="bg-slate-50/60 border border-slate-150 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">—</div>
+                        </div>
+
+                        <!-- Prioridad 3: Motivo de la consulta — bloque amplio -->
+                        <div class="md:col-span-3">
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Motivo de la Consulta</label>
+                            <div id="rep-motivo" class="bg-slate-50/60 border border-slate-150 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm min-h-[3rem]">—</div>
+                        </div>
+
+                        <!-- Prioridad 4: Datos de agenda -->
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Fecha de la Cita</label>
+                            <div id="rep-fecha-cita" class="bg-slate-50/60 border border-slate-150 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">—</div>
                         </div>
                         <div>
-                            <p class="reporte-dato-mini">Tipo de Documento</p>
-                            <p id="rep-tipo-doc" class="reporte-dato-valor muted">—</p>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Hora de la Cita</label>
+                            <div id="rep-hora-cita" class="bg-slate-50/60 border border-slate-150 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">—</div>
                         </div>
-                        <div>
-                            <p class="reporte-dato-mini">Número de Documento</p>
-                            <p id="rep-num-doc" class="reporte-dato-valor muted">—</p>
-                        </div>
-                    </div>
-                    <div class="mt-4 pt-4 border-t border-slate-100">
-                        <p id="rep-cita-info" class="text-slate-400 text-xs font-bold uppercase tracking-widest"></p>
+
                     </div>
                 </div>
 
-                <!-- Diagnóstico y Evolución -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div class="reporte-clinico-card">
-                        <p class="reporte-section-label sky">
-                            <i class="fas fa-stethoscope"></i> Diagnóstico
-                        </p>
-                        <div id="rep-diagnostico" class="report-value-readonly min-h-[60px]"></div>
-                    </div>
-                    <div class="reporte-clinico-card">
-                        <p class="reporte-section-label amber">
-                            <i class="fas fa-chart-line"></i> Evolución Clínica
-                        </p>
-                        <div id="rep-evolucion" class="report-value-readonly min-h-[60px] max-h-40 overflow-y-auto"></div>
-                    </div>
+                <!-- Diagnóstico -->
+                <div class="bg-white rounded-3xl border border-slate-100 p-8 shadow-sm mb-6">
+                    <label class="block text-[10px] font-black text-sky-600 uppercase tracking-[0.3em] mb-3 flex items-center gap-2">
+                        <i class="fas fa-stethoscope"></i> Diagnóstico
+                    </label>
+                    <textarea id="rep-diagnostico" readonly rows="2"
+                        class="report-readonly-field w-full resize-none"></textarea>
                 </div>
 
-                <!-- Tratamiento -->
-                <div class="reporte-clinico-card" style="margin-top:20px;">
-                    <p class="reporte-section-label emerald">
-                        <i class="fas fa-pills"></i> Tratamiento y Plan a Seguir
-                    </p>
-                    <div id="rep-prescripcion" class="report-value-readonly min-h-[60px] max-h-48 overflow-y-auto"></div>
+                <!-- Evolución de la Consulta -->
+                <div class="bg-white rounded-3xl border border-slate-100 p-8 shadow-sm mb-6">
+                    <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em] mb-3 flex items-center gap-2">
+                        <i class="fas fa-chart-line"></i> Evolución de la Consulta
+                    </label>
+                    <textarea id="rep-evolucion" readonly rows="4"
+                        class="report-readonly-field w-full resize-none"></textarea>
                 </div>
 
-                <!-- Footer -->
-                <div class="flex items-center justify-between mt-6">
-                    <div class="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3">
-                        <i class="fas fa-lock text-amber-500 text-sm"></i>
-                        <p class="text-amber-700 text-[10px] font-black uppercase tracking-widest">Documento de solo lectura — No editable</p>
-                    </div>
-                    <button onclick="document.getElementById('modalReporte').style.display='none'"
-                        class="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-sky-600 transition-colors shadow-xl active:scale-95">
-                        Cerrar Reporte
-                    </button>
+                <!-- Plan / Tratamiento a Seguir -->
+                <div class="bg-white rounded-3xl border border-slate-100 p-8 shadow-sm mb-2">
+                    <label class="block text-[10px] font-black text-violet-600 uppercase tracking-[0.3em] mb-3 flex items-center gap-2">
+                        <i class="fas fa-pills"></i> Plan y Tratamiento a Seguir
+                    </label>
+                    <textarea id="rep-tratamiento" readonly rows="4"
+                        class="report-readonly-field w-full resize-none"></textarea>
                 </div>
+
+                <!-- Mensaje de estado (cuando no hay datos aún) -->
+                <p id="rep-mensaje-vacio" class="text-amber-600 text-xs font-bold uppercase tracking-widest mt-4" style="display:none;"></p>
+            </div>
+
+            <div class="px-10 pb-10 flex items-center justify-between flex-wrap gap-4 flex-shrink-0">
+                <div class="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3">
+                    <i class="fas fa-lock text-amber-500 text-sm"></i>
+                    <p class="text-amber-700 text-[10px] font-black uppercase tracking-widest">Documento de solo lectura — No editable</p>
+                </div>
+                <button id="btn-cerrar-reporte" onclick="cerrarModalReporte()"
+                    class="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-sky-600 transition-colors shadow-xl active:scale-95">
+                    Cerrar Reporte
+                </button>
             </div>
         </div>
     </div>
@@ -608,10 +627,7 @@
         </div>
     </div>
 
-    <!-- PUNTO 2 (actualizado): MODAL CÓDIGO DE VERIFICACIÓN — validación real contra el backend -->
-    <!-- El botón "Confirmar" ahora tiene id="btn-confirmar-codigo-verificacion" para que -->
-    <!-- especialista.js pueda deshabilitarlo de forma robusta mientras la petición -->
-    <!-- POST /api/citas/<id>/verificar-codigo está en curso, evitando doble envío. -->
+    <!-- MODAL CÓDIGO DE VERIFICACIÓN -->
     <div id="modalCodigoVerificacion" class="modal-overlay" style="display:none;">
         <div class="modal-content p-10 text-center border-t-8 border-sky-600" style="max-width:440px">
             <div class="text-sky-500 text-6xl mb-6"><i class="fas fa-shield-alt"></i></div>
@@ -635,6 +651,25 @@
 
     <!-- TOAST -->
     <div id="toast-container" class="fixed bottom-8 right-8 z-[9999] flex flex-col gap-3"></div>
+
+    <style>
+        .report-readonly-field {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 1rem;
+            padding: 0.85rem 1.1rem;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #334155;
+            cursor: default;
+        }
+        .report-readonly-field:focus { outline: none; }
+        body.overflow-hidden { overflow: hidden !important; }
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
 
     <script src="{{ url_for('static', filename='js/especialista.js') }}"></script>
 </body>
