@@ -3,7 +3,7 @@ app.py — Stylo Dental
 Punto de entrada de Flask. Registra todos los blueprints y sirve las vistas HTML.
 """
 
-from flask import Flask, jsonify, request, render_template, session
+from flask import Flask, jsonify, request, render_template, session, redirect, url_for
 from flask_cors import CORS
 
 import os
@@ -21,25 +21,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formatdate, make_msgid
 
-# ── CORRECCIÓN CRÍTICA ────────────────────────────────────────────────────────
-# ANTES (incorrecto):
-#   from modulo_historial.historial_clinico import historial_bp
-#   → Importaba el blueprint LEGACY que NO tiene vista_historia_clinica().
-#   → La ruta GET /historial/paciente/<id> nunca se registraba en Flask.
-#   → Al navegar a esa URL, Flask resolvía otro endpoint que devolvía JSON crudo.
-#
-# AHORA (correcto):
-#   from modulo_historial.routes import historial_bp
-#   → Importa el blueprint DEFINITIVO con:
-#       • GET  /historial/paciente/<id>              → render_template (VISTA HTML)
-#       • GET  /api/historial/paciente/<id>/info     → jsonify (API)
-#       • GET  /api/historial/paciente/<id>/evoluciones → jsonify (API)
-#       • POST /api/historial/guardar                → jsonify (API)
-#       • POST /api/historial/finalizar              → jsonify (API)
-# ─────────────────────────────────────────────────────────────────────────────
 from modulo_historial.routes                        import historial_bp
-
-# Los demás submódulos de historial siguen importándose igual
 from modulo_historial.tratamiento                   import tratamiento_bp
 from modulo_historial.tabla_diagnostico             import tabla_diag_bp
 from modulo_historial.historial_diagnostico         import historial_diag_bp
@@ -51,49 +33,77 @@ from modulo_eps.routes      import eps_bp
 
 from db import get_db_connection
 
-# ─── Ruta absoluta a odent.db ────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH  = os.path.join(BASE_DIR, 'odent.db')
 
 
 def _app_conn():
-    """Conexión directa con ruta absoluta garantizada."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-# =============================================================================
-# LOGGING
-# =============================================================================
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("stylo_dental_smtp")
 
-# =============================================================================
-# APLICACIÓN FLASK
-# =============================================================================
 app = Flask(__name__)
 app.secret_key = "CAMBIA-ESTO-POR-UNA-CLAVE-LARGA-Y-ALEATORIA"
 CORS(app, supports_credentials=True)
 
-# =============================================================================
-# REGISTRO DE BLUEPRINTS
-# =============================================================================
 app.register_blueprint(usuarios_bp,       url_prefix='/api')
-
-# ── historial_bp se registra SIN url_prefix ──────────────────────────────────
-# Sus rutas de VISTA  (/historial/paciente/<id>)       no llevan prefijo.
-# Sus rutas de API    (/api/historial/paciente/<id>/…) llevan /api embebido
-# en cada decorador @historial_bp.route, por lo que no necesitan url_prefix.
-# Esto evita la colisión con citas_bp que sí usa url_prefix='/api'.
 app.register_blueprint(historial_bp)
-
 app.register_blueprint(tratamiento_bp,    url_prefix='/api')
 app.register_blueprint(tabla_diag_bp,     url_prefix='/api')
 app.register_blueprint(historial_diag_bp, url_prefix='/api')
 app.register_blueprint(puntuacion_bp,     url_prefix='/api')
 app.register_blueprint(citas_bp,          url_prefix='/api')
 app.register_blueprint(eps_bp,            url_prefix='/api')
+
+
+# =============================================================================
+# INTERCEPTOR DE SEGURIDAD — EXPULSIÓN INMEDIATA POR INACTIVACIÓN
+# =============================================================================
+
+_RUTAS_PUBLICAS = {'/login', '/login.html', '/', '/api/auth/login',
+                   '/api/enviar-codigo', '/api/verificar-codigo',
+                   '/api/auth/solicitar-codigo', '/api/auth/verificar-codigo',
+                   '/api/auth/cambiar-password', '/vista/crear_usuario',
+                   '/creacion.html', '/api/test-smtp'}
+
+@app.before_request
+def verificar_estado_sesion():
+    ruta = request.path
+
+    if ruta in _RUTAS_PUBLICAS:
+        return
+
+    if ruta.startswith('/static/'):
+        return
+
+    usuario_id = session.get('usuario_id')
+    if not usuario_id:
+        return
+
+    con = None
+    try:
+        con = _app_conn()
+        cur = con.cursor()
+        cur.execute("SELECT Estado_ID FROM usuarios WHERE Usuario_ID = ?", (usuario_id,))
+        row = cur.fetchone()
+        if row and row['Estado_ID'] != 1:
+            session.clear()
+            if request.path.startswith('/api/'):
+                return jsonify({
+                    "ok": False,
+                    "error": "Tu cuenta ha sido desactivada. Contacta al administrador.",
+                    "forzar_logout": True
+                }), 403
+            return redirect(url_for('vista_login'))
+    except Exception:
+        pass
+    finally:
+        if con:
+            con.close()
 
 
 # =============================================================================
@@ -107,19 +117,12 @@ SMTP_FROM_NAME    = "Clínica Stylo Dental"
 SMTP_FROM         = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
 SMTP_TIMEOUT      = 20
 
-# =============================================================================
-# ALMACÉN DE CÓDIGOS TEMPORALES
-# =============================================================================
 _codigos_lock      = threading.Lock()
 codigos_temporales = {}
 CODIGO_EXPIRACION_S = 600
 
 _smtp_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="smtp")
 
-
-# =============================================================================
-# PLANTILLAS HTML DE CORREO
-# =============================================================================
 
 def _html_verificacion(nombre: str, codigo: str) -> str:
     return f"""
@@ -180,10 +183,6 @@ def _html_recuperacion(codigo: str) -> str:
     """
 
 
-# =============================================================================
-# FUNCIÓN CENTRALIZADA DE ENVÍO SMTP
-# =============================================================================
-
 def _enviar_correo_smtp(destinatario: str, asunto: str, cuerpo_html: str):
     try:
         import re as _re
@@ -229,10 +228,6 @@ def _enviar_correo_smtp(destinatario: str, asunto: str, cuerpo_html: str):
 
 enviar_correo_smtp = _enviar_correo_smtp
 
-
-# =============================================================================
-# HELPERS INTERNOS
-# =============================================================================
 
 def _guardar_codigo(correo: str, codigo: str) -> None:
     with _codigos_lock:
@@ -376,7 +371,6 @@ def vista_agendar():
 
 @app.route('/historia_clinica.html')
 def vista_historia_clinica_legacy():
-    """Ruta legacy — sirve el template con parámetros vacíos para compatibilidad."""
     return render_template('historia_clinica.html', paciente_id=0, cita_id='')
 
 @app.route('/ranking.html')

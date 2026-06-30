@@ -14,6 +14,34 @@ let _filtroMultaActivo     = '';
 let _filtroEstadoUsuarios  = '';
 let _accionPendienteCallback = null;
 
+// ─── Interceptor global de respuestas 403 con forzar_logout ──────────────────
+// Envuelve fetch globalmente para detectar expulsión por inactivación.
+// Cualquier endpoint que devuelva {"ok":false,"forzar_logout":true} limpia
+// la sesión del cliente y redirige al login de forma inmediata.
+(function _patchFetchParaLogoutForzado() {
+    const _fetchOriginal = window.fetch.bind(window);
+    window.fetch = async function (...args) {
+        const response = await _fetchOriginal(...args);
+        if (response.status === 403) {
+            // Clonar para no consumir el body antes de que el llamador lo lea
+            const clone = response.clone();
+            try {
+                const json = await clone.json();
+                if (json && json.forzar_logout === true) {
+                    sessionStorage.removeItem('odent_usuario');
+                    localStorage.removeItem('usuario_logueado');
+                    window.location.replace('/login');
+                    // Retornar la respuesta original para no romper el flujo
+                    return response;
+                }
+            } catch (_) {
+                // No era JSON o no tiene forzar_logout — dejar pasar normalmente
+            }
+        }
+        return response;
+    };
+})();
+
 // ─── Utilidades DOM ───────────────────────────────────────────────────────────
 function setText(id, val) {
     const el = document.getElementById(id);
@@ -480,13 +508,10 @@ function ocultarListaRapida() {
 }
 
 // ─── Historial de citas ───────────────────────────────────────────────────────
-// FIX PUNTO 5: comparación EXACTA con === para que "cancelado" y "multa"
-// sean mutuamente excluyentes y no se solapen jamás.
 function filtrarTablaCitas() {
     const texto = (document.getElementById('busqueda-citas')?.value || '').toLowerCase();
     document.querySelectorAll('#tabla-citas-body tr').forEach(fila => {
         const matchTexto  = fila.textContent.toLowerCase().includes(texto);
-        // === en lugar de .includes() — garantiza exclusión mutua exacta
         const matchEstado = _filtroCitaActivo === '' || (fila.dataset.estadoKey || '') === _filtroCitaActivo;
         fila.style.display = (matchTexto && matchEstado) ? '' : 'none';
     });
@@ -512,7 +537,6 @@ async function renderCitas() {
         const res  = await fetch('/api/citas');
         const data = await res.json();
 
-        // Cargar multas para identificar "cancelada con multa"
         let multasMap = {};
         try {
             const resM  = await fetch('/api/multas');
@@ -567,9 +591,6 @@ async function renderCitas() {
             const estadoLC   = estado.toLowerCase();
             const tieneMulta = multasMap[c.Cita_ID] || false;
 
-            // FIX PUNTO 5: estadoKey con valores exactos y mutuamente excluyentes.
-            // 'cancelado' NUNCA coincide con 'multa' usando ===.
-            // Se evalúa tieneMulta PRIMERO para separar los dos casos de cancelación.
             let estadoKey = '';
             let badgeCls  = 'badge-cita-default';
             let etiqueta  = estado;
@@ -579,17 +600,14 @@ async function renderCitas() {
                 badgeCls  = 'badge-cita-atendido';
                 etiqueta  = 'Atendido';
             } else if (estadoLC === 'ocupado' || estadoLC === 'en proceso' || estadoLC === 'atendiendo') {
-                // "En proceso" — vinculado a EstadoAgenda_ID=2 (Ocupado) en BD
                 estadoKey = 'proceso';
                 badgeCls  = 'badge-cita-proceso';
                 etiqueta  = 'En proceso';
             } else if (estadoLC === 'cancelado' && tieneMulta) {
-                // EXACTO: cancelado + con multa → clave 'multa' (distinta de 'cancelado')
                 estadoKey = 'multa';
                 badgeCls  = 'badge-cita-multa';
                 etiqueta  = `Cancelada con multa <i class="fas fa-file-invoice-dollar ml-1 text-[9px]"></i>`;
             } else if (estadoLC === 'cancelado' && !tieneMulta) {
-                // EXACTO: cancelado + sin multa → clave 'cancelado' (distinta de 'multa')
                 estadoKey = 'cancelado';
                 badgeCls  = 'badge-cita-cancelado';
                 etiqueta  = 'Cancelada';
@@ -620,7 +638,7 @@ async function renderCitas() {
     }
 }
 
-// ─── Multas con datos reales y dropdown de estado en columna ──────────────────
+// ─── Multas ───────────────────────────────────────────────────────────────────
 function filtrarTablaMultas() {
     const texto = (document.getElementById('busqueda-multas')?.value || '').toUpperCase();
     document.querySelectorAll('#tabla-multas-body tr').forEach(fila => {

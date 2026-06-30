@@ -83,7 +83,7 @@
                             <div class="form-group">
                                 <label class="form-label">Especialidad Requerida</label>
                                 <select id="servicio" class="form-control" required>
-                                    <option value="" disabled selected>Seleccione la especialidad</option>
+                                    <option value="" disabled selected>Cargando especialidades...</option>
                                 </select>
                                 <p id="err-servicio" class="error-msg">⚠ Este campo es obligatorio.</p>
                             </div>
@@ -167,20 +167,50 @@
         </div>
     </div>
 
-    <!-- Modal Éxito -->
-    <div id="modalExito" class="modal-overlay">
+    <!-- Modal Código de Verificación — muestra SOLO el código y su nota -->
+    <div id="modalCodigoCita" class="modal-overlay">
         <div class="modal-content modal-sm">
-            <div class="modal-body text-center" style="padding: 40px 32px;">
+            <div class="modal-body text-center" style="padding: 36px 32px 32px;">
+                <div class="codigo-cita-display" id="codigoCitaDisplay">------</div>
+                <div class="codigo-cita-nota">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Guarde este código. Deberá entregárselo al especialista el día de su cita para poder iniciar la consulta.</span>
+                </div>
+                <button type="button" onclick="cerrarModalCodigoYMostrarExito()" class="btn-primario btn-dark w-full" style="margin-top:20px;">
+                    <i class="fas fa-check"></i> Aceptar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Éxito Post-Código — mensaje de éxito con nota de multa condicional -->
+    <div id="modalExitoFinal" class="modal-overlay">
+        <div class="modal-content modal-sm">
+            <div class="modal-header modal-header-blue">
+                <h3>¡Cita Registrada Exitosamente!</h3>
+            </div>
+            <div class="modal-body text-center">
                 <div class="modal-icon modal-icon-green">
                     <i class="fas fa-check-circle"></i>
                 </div>
-                <h3 class="modal-title">¡Cita Agendada!</h3>
-                <p id="mensajeExito" class="modal-desc"></p>
-                <div id="notaMultaExito" class="nota-multa-exito hidden">
+                <p class="modal-desc">Su cita ha sido registrada en el sistema correctamente.</p>
+                <div id="notaMultaExitoFinal" class="nota-multa-exito hidden">
                     <i class="fas fa-info-circle"></i>
-                    Recuerde: tiene una multa pendiente que debe pagar el día de su atención.
+                    <span>Recuerde: tiene una multa pendiente que debe pagar el día de su atención.</span>
                 </div>
-                <button type="button" onclick="cerrarExitoYLimpiar()" class="btn-primario btn-dark w-full">Aceptar</button>
+                <button type="button" onclick="cerrarExitoFinalYFinalizar()" class="btn-primario btn-dark w-full" style="margin-top:20px;">
+                    <i class="fas fa-check"></i> Aceptar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Éxito (mantenido por compatibilidad interna, oculto al usuario) -->
+    <div id="modalExito" class="modal-overlay" style="display:none !important;">
+        <div class="modal-content modal-sm">
+            <div class="modal-body text-center" style="padding: 40px 32px;">
+                <p id="mensajeExito" class="modal-desc"></p>
+                <div id="notaMultaExito" class="nota-multa-exito hidden"></div>
             </div>
         </div>
     </div>
@@ -188,9 +218,6 @@
     <!-- Interfaz 3: Modal Error — Cita Activa Existente -->
     <div id="modalErrorCitaActiva" class="modal-overlay">
         <div class="modal-content modal-sm">
-            <div class="modal-header modal-header-error-suave">
-                <h3>No se pudo agendar</h3>
-            </div>
             <div class="modal-body text-center">
                 <div class="modal-icon modal-icon-error-suave">
                     <i class="fas fa-calendar-times"></i>

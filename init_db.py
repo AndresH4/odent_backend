@@ -305,12 +305,14 @@ INSERT OR IGNORE INTO rol (Rol_ID, Descripcion) VALUES
   (1, 'Administrador'), (2, 'Especialista'), (3, 'Paciente');
 
 INSERT OR IGNORE INTO especialidad (Especialidad_ID, Nombre_Especialidad) VALUES
-  (1, 'Endodoncia'),
-  (2, 'Odontopediatria'),
-  (3, 'Odontologia General'),
-  (4, 'Cirugia Oral'),
-  (5, 'Ortodoncia'),
-  (6, 'Control brackets');
+  (1, 'Ortodoncia'),
+  (2, 'Endodoncia'),
+  (3, 'Periodoncia'),
+  (4, 'Rehabilitación Oral'),
+  (5, 'Cirugía Oral'),
+  (6, 'Odontopediatría'),
+  (7, 'Estética Dental'),
+  (8, 'Implantes Dentales');
 
 INSERT OR IGNORE INTO regimen_eps (Regimen_ID, Descripcion) VALUES
   (1, 'Contributivo'), (2, 'Subsidiado');
@@ -378,16 +380,16 @@ INSERT INTO especialidad (Nombre_Especialidad)
 SELECT 'Periodoncia' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Periodoncia');
 
 INSERT INTO especialidad (Nombre_Especialidad)
-SELECT 'Rehabilitacion Oral' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Rehabilitacion Oral');
+SELECT 'Rehabilitacion Oral' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Rehabilitación Oral');
 
 INSERT INTO especialidad (Nombre_Especialidad)
-SELECT 'Cirujia Oral' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Cirujia Oral');
+SELECT 'Cirujia Oral' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Cirugía Oral');
 
 INSERT INTO especialidad (Nombre_Especialidad)
-SELECT 'Odontopeditria' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Odontopeditria');
+SELECT 'Odontopediatria' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Odontopediatría');
 
 INSERT INTO especialidad (Nombre_Especialidad)
-SELECT 'Estetica Dental' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Estetica Dental');
+SELECT 'Estetica Dental' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Estética Dental');
 
 INSERT INTO especialidad (Nombre_Especialidad)
 SELECT 'Implantes Dentales' WHERE NOT EXISTS (SELECT 1 FROM especialidad WHERE Nombre_Especialidad = 'Implantes Dentales');

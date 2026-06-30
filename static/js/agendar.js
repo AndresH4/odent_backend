@@ -1,4 +1,3 @@
-// Archivo: agendar.js
 'use strict';
 
 // ─── Estado ──────────────────────────────────────────────────────────────────
@@ -13,7 +12,7 @@ let _confirmResolver = null;
 let _tiposDocumentoAgendar = [];
 let codigoVerificacionGenerado = '';
 
-const HORA_MAXIMA_AGENDAR = '16:00:00'; // Última hora de inicio permitida (4:00 PM)
+const HORA_MAXIMA_AGENDAR = '16:00:00';
 
 const HORAS_DEFAULT = [
     '07:00:00', '07:30:00', '08:00:00', '08:30:00', '09:00:00', '09:30:00',
@@ -22,8 +21,9 @@ const HORAS_DEFAULT = [
 ];
 
 const ESPECIALIDADES_FIJAS = [
-    'Endodoncia', 'Odontopediatria', 'Odontologia General',
-    'Cirugia Oral', 'Ortodoncia', 'Control brackets'
+    'Ortodoncia', 'Endodoncia', 'Periodoncia',
+    'Rehabilitación Oral', 'Cirugía Oral', 'Odontopediatría',
+    'Estética Dental', 'Implantes Dentales'
 ];
 
 const TIPOS_DOCUMENTO_FALLBACK = [
@@ -70,16 +70,16 @@ function resetearFormulario() {
     codigoVerificacionGenerado = '';
 }
 
-// ─── Modal genérico de alerta (reemplazo de alert()) ──────────────────────────
+// ─── Modal genérico de alerta (reemplazo de alert()) ─────────────────────────
 function mostrarAlertaGenerica(mensaje, titulo, tipo) {
-    const modal   = document.getElementById('modalAlertaGenerica');
-    const msgEl   = document.getElementById('mensajeAlertaGenerica');
+    const modal    = document.getElementById('modalAlertaGenerica');
+    const msgEl    = document.getElementById('mensajeAlertaGenerica');
     const tituloEl = document.getElementById('tituloAlertaGenerica');
     const headerEl = document.getElementById('headerAlertaGenerica');
     const iconoEl  = document.getElementById('iconoAlertaGenerica');
 
-    if (msgEl) msgEl.textContent = mensaje || '';
-    if (tituloEl) tituloEl.textContent = titulo || 'Aviso';
+    if (msgEl)    msgEl.textContent    = mensaje || '';
+    if (tituloEl) tituloEl.textContent = titulo  || 'Aviso';
 
     if (headerEl) {
         headerEl.className = 'modal-header ' + (tipo === 'error' ? 'modal-header-red' : 'modal-header-orange');
@@ -146,6 +146,7 @@ async function cargarTiposDocumentoAgendar() {
             opt.textContent = t.Nombre_Tipo_Documento;
             select.appendChild(opt);
         });
+        _actualizarColorSelect(select);
     };
 
     try {
@@ -157,6 +158,66 @@ async function cargarTiposDocumentoAgendar() {
     } catch (e) {
         console.warn('[agendar] No se pudieron cargar tipos de documento, usando fallback:', e);
         poblar(TIPOS_DOCUMENTO_FALLBACK);
+    }
+}
+
+// ─── Carga dinámica de Especialidades desde /api/especialidades ───────────────
+async function cargarEspecialidadesDinamicas() {
+    const sel = document.getElementById('servicio');
+    if (!sel) return;
+
+    const poblarEspecialidades = (lista) => {
+        sel.innerHTML = '<option value="" disabled selected>Seleccione la especialidad</option>';
+        lista.forEach(esp => {
+            const opt = document.createElement('option');
+            opt.value       = esp.Nombre_Especialidad;
+            opt.textContent = esp.Nombre_Especialidad;
+            sel.appendChild(opt);
+        });
+        _actualizarColorSelect(sel);
+    };
+
+    const usarFallback = () => {
+        sel.innerHTML = '<option value="" disabled selected>Seleccione la especialidad</option>';
+        ESPECIALIDADES_FIJAS.forEach(nombre => {
+            const opt = document.createElement('option');
+            opt.value       = nombre;
+            opt.textContent = nombre;
+            sel.appendChild(opt);
+        });
+        _actualizarColorSelect(sel);
+    };
+
+    try {
+        const res = await fetch('/api/especialidades');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        let lista = null;
+        if (Array.isArray(data)) {
+            lista = data;
+        } else if (data && Array.isArray(data.data)) {
+            lista = data.data;
+        }
+
+        if (!lista || lista.length === 0) {
+            throw new Error('Lista de especialidades vacía o formato inesperado');
+        }
+
+        poblarEspecialidades(lista);
+    } catch (e) {
+        console.warn('[agendar] No se pudieron cargar especialidades desde /api/especialidades, usando especialidades fijas:', e);
+        usarFallback();
+    }
+}
+
+// ─── Control de color gris/negro en selects ───────────────────────────────────
+function _actualizarColorSelect(selectEl) {
+    if (!selectEl) return;
+    if (!selectEl.value || selectEl.value === '') {
+        selectEl.classList.add('sin-seleccion');
+    } else {
+        selectEl.classList.remove('sin-seleccion');
     }
 }
 
@@ -183,17 +244,12 @@ async function autocompletarDatosPaciente() {
 
     _sesionPacienteAgendar = sesion;
 
-    // Rellenar campos de texto con datos de sesión (precarga inmediata)
-    _setFieldValue('nombre',    sesion.Nombres    || '');
-    _setFieldValue('apellido',  sesion.Apellidos  || '');
-    _setFieldValue('telefono',  sesion.Telefono   || '');
-    _setFieldValue('correo',    sesion.Correo     || '');
-    _setFieldValue('num-doc',   sesion.NumeroDocumento || '');
+    _setFieldValue('nombre',   sesion.Nombres    || '');
+    _setFieldValue('apellido', sesion.Apellidos  || '');
+    _setFieldValue('telefono', sesion.Telefono   || '');
+    _setFieldValue('correo',   sesion.Correo     || '');
+    _setFieldValue('num-doc',  sesion.NumeroDocumento || '');
 
-    // Los campos quedan editables: el paciente puede modificar los datos
-    // autocompletados antes de confirmar el agendamiento.
-
-    // Obtener Paciente_ID
     try {
         const resPac = await fetch(`/api/paciente/por-usuario/${sesion.Usuario_ID}`);
         if (resPac.ok) {
@@ -204,9 +260,6 @@ async function autocompletarDatosPaciente() {
         console.warn('[agendar] No se pudo obtener Paciente_ID:', e);
     }
 
-    // Autoseleccionar el tipo de documento real del paciente, ahora que
-    // _tiposDocumentoAgendar fue poblado con TipoDoc_ID reales de la BD
-    // por cargarTiposDocumentoAgendar() (las opciones ya usan value=TipoDoc_ID).
     try {
         const selectTipoDoc = document.getElementById('tipo-doc');
         if (selectTipoDoc && sesion.TipoDoc_ID) {
@@ -216,6 +269,7 @@ async function autocompletarDatosPaciente() {
                     break;
                 }
             }
+            _actualizarColorSelect(selectTipoDoc);
         }
     } catch (e) {
         console.warn('[agendar] No se pudo autoseleccionar tipo de documento:', e);
@@ -236,7 +290,6 @@ function _bloquearCampo(id) {
     el.style.cursor = 'not-allowed';
     if (el.tagName === 'SELECT') {
         el.setAttribute('disabled', true);
-        // Para selects disabled, creamos un input hidden para que el valor se envíe
         el.style.pointerEvents = 'none';
     }
 }
@@ -249,7 +302,6 @@ function inicializarCampoFechaAgendar() {
 
     if (!inputTexto || !inputNativo || !btnCalendario) return;
 
-    // Establecer fecha mínima como hoy
     const hoy = new Date().toISOString().split('T')[0];
     inputNativo.min = hoy;
 
@@ -273,7 +325,6 @@ function inicializarCampoFechaAgendar() {
         if (raw.length === 8) {
             const isoDate = `${raw.slice(4, 8)}-${raw.slice(2, 4)}-${raw.slice(0, 2)}`;
 
-            // Validar que la fecha no sea anterior a hoy
             const errFecha = document.getElementById('err-fecha');
             if (!_validarFechaNoAnterior(isoDate)) {
                 if (errFecha) {
@@ -283,7 +334,6 @@ function inicializarCampoFechaAgendar() {
                 mostrarError(inputTexto, null);
                 inputNativo.value = '';
                 fechaISOAgendar = '';
-                // Limpiar horas
                 const horaSelect = document.getElementById('hora');
                 if (horaSelect) horaSelect.innerHTML = '<option value="" disabled selected>Seleccione la hora disponible</option>';
                 return;
@@ -308,8 +358,7 @@ function inicializarCampoFechaAgendar() {
         const val = inputNativo.value;
         if (!val) return;
 
-        // Validar que la fecha no sea anterior a hoy
-        const errFecha = document.getElementById('err-fecha');
+        const errFecha    = document.getElementById('err-fecha');
         const inputTexto2 = document.getElementById('fecha');
         if (!_validarFechaNoAnterior(val)) {
             if (errFecha) {
@@ -344,14 +393,13 @@ function _validarFechaNoAnterior(isoDate) {
 // ─── Validación de hora mínima (3 horas después si es hoy) ───────────────────
 function _horaEsValida(horaStr, fechaISO) {
     const hoy = new Date().toISOString().split('T')[0];
-    if (fechaISO !== hoy) return true; // Si no es hoy, todas las horas son válidas
+    if (fechaISO !== hoy) return true;
 
     const ahora = new Date();
     const [h, m] = horaStr.split(':').map(Number);
     const horaSlot = new Date();
     horaSlot.setHours(h, m, 0, 0);
 
-    // Mínimo 3 horas después de la hora actual
     const limiteMs = ahora.getTime() + (3 * 60 * 60 * 1000);
     return horaSlot.getTime() >= limiteMs;
 }
@@ -396,10 +444,10 @@ function poblarHorasFallback(especialidad, fecha) {
     if (especialistasConEsp.length === 0) {
         horaSelect.innerHTML = '<option value="" disabled selected>Sin especialistas disponibles para esta especialidad</option>';
         agendaDisponible = [];
+        _actualizarColorSelect(horaSelect);
         return;
     }
 
-    // Filtrar horas según validación de fecha/hora y límite máximo (4:00 PM)
     const horasFiltradas = HORAS_DEFAULT
         .filter(hora => _horaEsValida(hora, fecha))
         .filter(hora => _horaDentroDelLimiteMaximo(hora));
@@ -407,6 +455,7 @@ function poblarHorasFallback(especialidad, fecha) {
     if (horasFiltradas.length === 0) {
         horaSelect.innerHTML = '<option value="" disabled selected>No hay horarios disponibles para hoy (mínimo 3 horas de anticipación)</option>';
         agendaDisponible = [];
+        _actualizarColorSelect(horaSelect);
         return;
     }
 
@@ -431,36 +480,19 @@ function poblarHorasFallback(especialidad, fecha) {
         opt.textContent = `${formatHora(slot.Hora_Inicio)} — Dr(a). ${slot.NombreEspecialista}`;
         horaSelect.appendChild(opt);
     });
+    _actualizarColorSelect(horaSelect);
 }
 
-// ─── GET /api/especialistas ───────────────────────────────────────────────────
+// ─── GET /api/especialistas (para fallback de slots sintéticos) ───────────────
 async function cargarEspecialistas() {
-    const sel = document.getElementById('servicio');
-    if (!sel) return;
-
     try {
         const res  = await fetch('/api/especialistas');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        especialistasData = data;
-
-        sel.innerHTML = '<option value="" disabled selected>Seleccione la especialidad</option>';
-        const especialidades = [...new Set(data.flatMap(e => e.Especialidades.split(', ')))];
-        const lista = especialidades.length > 0 ? especialidades : ESPECIALIDADES_FIJAS;
-
-        lista.forEach(esp => {
-            const opt = document.createElement('option');
-            opt.value = esp; opt.textContent = esp;
-            sel.appendChild(opt);
-        });
+        especialistasData = Array.isArray(data) ? data : [];
     } catch (e) {
-        console.error('[agendar] Error cargando especialistas, usando fallback:', e);
-        sel.innerHTML = '<option value="" disabled selected>Seleccione la especialidad</option>';
-        ESPECIALIDADES_FIJAS.forEach(esp => {
-            const opt = document.createElement('option');
-            opt.value = esp; opt.textContent = esp;
-            sel.appendChild(opt);
-        });
+        console.warn('[agendar] No se pudo cargar lista de especialistas para fallback:', e);
+        especialistasData = [];
     }
 }
 
@@ -474,11 +506,12 @@ async function cargarAgenda() {
     horaSelect.innerHTML = '<option value="" disabled selected>Seleccione la hora disponible</option>';
     slotSeleccionado = null;
     agendaDisponible = [];
+    _actualizarColorSelect(horaSelect);
     if (!especialidad) return;
 
-    // Validar fecha antes de cargar
     if (fecha && !_validarFechaNoAnterior(fecha)) {
         horaSelect.innerHTML = '<option value="" disabled selected>Fecha no válida</option>';
+        _actualizarColorSelect(horaSelect);
         return;
     }
 
@@ -503,6 +536,7 @@ async function cargarAgenda() {
             opt.textContent = `${formatHora(slot.Hora_Inicio)} — Dr(a). ${slot.NombreEspecialista}`;
             horaSelect.appendChild(opt);
         });
+        _actualizarColorSelect(horaSelect);
     } catch (e) {
         console.error('[agendar] Error cargando agenda, usando horas por defecto:', e);
         poblarHorasFallback(especialidad, fecha);
@@ -521,6 +555,7 @@ function seleccionarSlot() {
         const idx = parseInt(val.replace('s_', ''), 10);
         slotSeleccionado = !isNaN(idx) ? agendaDisponible[idx] : null;
     }
+    _actualizarColorSelect(horaSelect);
 }
 
 // ─── POST /api/agenda — crear slot sintético en BD ────────────────────────────
@@ -560,29 +595,13 @@ async function _verificarMultaActiva(pacId) {
     }
 }
 
-// ─── GET /api/citas/generar-codigo — código único previo a la confirmación ───
-async function _generarCodigoVerificacion() {
-    try {
-        const res = await fetch('/api/citas/generar-codigo');
-        if (res.ok) {
-            const data = await res.json();
-            if (data && data.Codigo_Verificacion) return data.Codigo_Verificacion;
-        }
-    } catch (e) {
-        console.warn('[agendar] No se pudo generar código de verificación en el servidor:', e);
-    }
-    // Fallback local únicamente si el servidor no respondió (el backend
-    // revalida unicidad de todas formas al guardar la cita)
-    return String(Math.floor(100000 + Math.random() * 900000));
-}
-
 // ─── POST /api/actualizar-perfil-paciente — sincronizar datos editados ────────
 async function _sincronizarDatosPaciente() {
     const nombres   = document.getElementById('nombre')?.value.trim()    || '';
     const apellidos = document.getElementById('apellido')?.value.trim() || '';
     const documento = document.getElementById('num-doc')?.value.trim()  || '';
     const telefono  = document.getElementById('telefono')?.value.trim() || '';
-    const correo    = document.getElementById('correo')?.value.trim()  || '';
+    const correo    = document.getElementById('correo')?.value.trim()   || '';
     const tipoDocEl = document.getElementById('tipo-doc');
     const tipoDocId = tipoDocEl ? tipoDocEl.value : '';
 
@@ -605,13 +624,12 @@ async function _sincronizarDatosPaciente() {
         if (res.ok) {
             const data = await res.json();
             if (data.ok) {
-                // Mantener la sesión local congruente con lo guardado en BD
                 _sesionPacienteAgendar.Nombres         = nombres;
                 _sesionPacienteAgendar.Apellidos       = apellidos;
                 _sesionPacienteAgendar.NumeroDocumento = documento;
                 _sesionPacienteAgendar.Telefono        = telefono;
                 _sesionPacienteAgendar.Correo          = correo;
-                _sesionPacienteAgendar.TipoDoc_ID       = tipoDocId;
+                _sesionPacienteAgendar.TipoDoc_ID      = tipoDocId;
                 sessionStorage.setItem('odent_usuario', JSON.stringify(_sesionPacienteAgendar));
             }
         }
@@ -620,9 +638,9 @@ async function _sincronizarDatosPaciente() {
     }
 }
 
-// ─── Validar y abrir modal de verificación (Interfaz 1 / Interfaz 2) ──────────
+// ─── Validar y abrir modal de verificación ────────────────────────────────────
 async function validarYAgendar() {
-    const campos   = ['nombre', 'apellido', 'tipo-doc', 'num-doc', 'telefono', 'correo', 'servicio', 'fecha', 'hora'];
+    const campos    = ['nombre', 'apellido', 'tipo-doc', 'num-doc', 'telefono', 'correo', 'servicio', 'fecha', 'hora'];
     const regexLetr = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ ]+$/;
     let valido = true;
 
@@ -630,7 +648,6 @@ async function validarYAgendar() {
         const input = document.getElementById(id);
         const errEl = document.getElementById('err-' + id);
 
-        // Para el select tipo-doc que puede estar disabled, leer el value igualmente
         let rawVal;
         if (id === 'fecha') {
             rawVal = leerFechaISO();
@@ -656,7 +673,6 @@ async function validarYAgendar() {
             if (errEl) errEl.innerText = '⚠ Ingrese un correo válido.';
             esInval = true;
         }
-        // Validar fecha no anterior a hoy
         if (!esInval && id === 'fecha') {
             const fechaISO = leerFechaISO();
             if (!_validarFechaNoAnterior(fechaISO)) {
@@ -677,14 +693,12 @@ async function validarYAgendar() {
         return;
     }
 
-    // Validación adicional de hora (mínimo 3 horas si es hoy)
     const fechaSeleccionada = leerFechaISO();
     if (!_horaEsValida(slotSeleccionado.Hora_Inicio, fechaSeleccionada)) {
         mostrarAlertaGenerica('La hora seleccionada debe ser al menos 3 horas posterior a la hora actual para citas del día de hoy.', 'Horario no válido', 'error');
         return;
     }
 
-    // Validación de hora máxima permitida (4:00 PM)
     if (!_horaDentroDelLimiteMaximo(slotSeleccionado.Hora_Inicio)) {
         mostrarAlertaGenerica('La última hora disponible para agendar es 4:00 PM.', 'Horario no válido', 'error');
         return;
@@ -696,9 +710,6 @@ async function validarYAgendar() {
         return;
     }
 
-    // ── VERIFICACIÓN SEGURA: identificar al paciente directamente desde el
-    // endpoint /api/paciente/por-usuario (fuente única y confiable que ya
-    // resuelve Paciente_ID a partir de la sesión activa) ───────────────────
     try {
         const resPac = await fetch(`/api/paciente/por-usuario/${_sesionPacienteAgendar.Usuario_ID}`);
         if (!resPac.ok) {
@@ -712,24 +723,17 @@ async function validarYAgendar() {
         }
         pacienteIdAgendar = pac.Paciente_ID;
 
-        // Sincronizar con la BD los datos del formulario (autocompletados o editados)
         await _sincronizarDatosPaciente();
 
-        // Verificar multa activa
         const tieneMulta = await _verificarMultaActiva(pacienteIdAgendar);
         _tieneMultaActualAgendar = tieneMulta;
 
-        // Generar (pre-reservar) el código único de verificación que se
-        // mostrará en el panel de confirmación. El backend revalida su
-        // unicidad nuevamente al momento de guardar la cita.
-        codigoVerificacionGenerado = await _generarCodigoVerificacion();
+        codigoVerificacionGenerado = '';
 
         const alerta = document.getElementById('alertaMulta');
         const header = document.getElementById('headerVerificacion');
         const btnFin = document.getElementById('btnFinal');
 
-        // ── Interfaz 2: Confirmación con Multa (paleta suave) ──────────────────
-        // ── Interfaz 1: Confirmación Normal ─────────────────────────────────────
         if (tieneMulta) {
             alerta?.classList.remove('hidden');
             if (header) header.className = 'modal-header modal-header-orange';
@@ -746,8 +750,6 @@ async function validarYAgendar() {
         return;
     }
 
-    // Mostrar resumen en modal con jerarquía profesional, usando datos de
-    // sesión ya sincronizados con la BD.
     const fecha   = leerFechaISO();
     const resumen = document.getElementById('resumen');
     if (resumen) {
@@ -761,12 +763,6 @@ async function validarYAgendar() {
         resumen.innerHTML = `
             <div class="resumen-bloque-principal">
                 <span class="resumen-label">Cita Programada</span>
-                <p class="resumen-codigo-unico" style="font-size:20px;font-weight:800;color:#0369a1;margin:6px 0 2px;">
-                    Código: ${codigoVerificacionGenerado}
-                </p>
-                <p class="resumen-texto-codigo" style="font-size:12px;color:#64748b;margin:0 0 14px;">
-                    Este código es único para su cita y debe pasárselo al especialista para poder realizar la cita
-                </p>
                 <p class="resumen-valor-grande">${slotSeleccionado.Nombre_Especialidad}</p>
                 <p class="resumen-valor-sub">
                     Dr(a). ${slotSeleccionado.NombreEspecialista} &nbsp;|&nbsp;
@@ -800,7 +796,6 @@ async function finalizarTodo() {
         return;
     }
 
-    // Validación doble de fecha y hora antes de confirmar
     const fechaFinal = leerFechaISO();
     if (!fechaFinal || !_validarFechaNoAnterior(fechaFinal)) {
         cerrarModal();
@@ -814,19 +809,14 @@ async function finalizarTodo() {
         return;
     }
 
-    // Validación de hora máxima permitida (4:00 PM)
     if (!_horaDentroDelLimiteMaximo(slotSeleccionado.Hora_Inicio)) {
         cerrarModal();
         mostrarAlertaGenerica('La última hora disponible para agendar es 4:00 PM.', 'Horario no válido', 'error');
         return;
     }
 
-    // Interfaz 2: si hay multa activa, no se muestran pasos intermedios — se
-    // procede directamente a confirmar y luego se lanza el mensaje de éxito
-    // estándar con la nota de multa añadida.
     const motivo = document.getElementById('servicio').value;
 
-    // Si slot sintético → persistirlo primero via POST /api/agenda
     if (slotSeleccionado._esSintetico) {
         const nuevoAgendaId = await crearSlotEnBD(slotSeleccionado);
         if (nuevoAgendaId) {
@@ -841,29 +831,18 @@ async function finalizarTodo() {
         }
     }
 
-    // POST /api/citas — el backend valida Paciente_ID, Agenda_ID, fecha/hora
-    // y la restricción de cita única consultando directamente la base de datos.
-    // Se envía también el código de verificación pre-generado; el backend
-    // revalida su unicidad y, si ya no es único, genera uno nuevo.
     try {
         const res  = await fetch('/api/citas', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({
-                Paciente_ID:          pacienteIdAgendar,
-                Agenda_ID:            slotSeleccionado.Agenda_ID,
-                Motivo_Consulta:      motivo,
-                Codigo_Verificacion:  codigoVerificacionGenerado
+                Paciente_ID:     pacienteIdAgendar,
+                Agenda_ID:       slotSeleccionado.Agenda_ID,
+                Motivo_Consulta: motivo
             })
         });
         const data = await res.json();
 
-        // ── Interfaz 3: Manejo específico del rechazo por cita activa existente ──
-        // El backend responde 409 (Conflict) cuando la consulta a la BD confirma
-        // que el paciente ya tiene una cita Activa/Pendiente. Se corta el flujo
-        // inmediatamente: se cierra el modal de verificación y se muestra el
-        // modal de error dedicado (Interfaz 3), sin limpiar el formulario ni
-        // cambiar de pantalla.
         if (res.status === 409) {
             cerrarModal();
             mostrarModalErrorCitaActiva(data.error || 'No puedes agendar. Ya tienes una cita activa en el sistema.');
@@ -872,33 +851,53 @@ async function finalizarTodo() {
 
         cerrarModal();
         if (data.ok) {
-            // El backend puede haber regenerado el código si hubo colisión;
-            // se sincroniza el valor final devuelto por el servidor.
             if (data.Codigo_Verificacion) {
                 codigoVerificacionGenerado = data.Codigo_Verificacion;
             }
-
-            const msgEl = document.getElementById('mensajeExito');
-            if (msgEl) msgEl.textContent = 'Su cita ha sido registrada exitosamente. ¡Gracias por confiar en Stylo Dental!';
-
-            // Interfaz 2: nota recordatoria de multa en el mensaje final de éxito
-            const notaMulta = document.getElementById('notaMultaExito');
-            if (notaMulta) {
-                if (_tieneMultaActualAgendar) {
-                    notaMulta.classList.remove('hidden');
-                } else {
-                    notaMulta.classList.add('hidden');
-                }
-            }
-
-            document.getElementById('modalExito').style.display = 'flex';
+            _mostrarModalCodigoCita(codigoVerificacionGenerado);
         } else {
-            mostrarAlertaGenerica(data.error || 'No se pudo agendar la cita.', 'No se pudo agendar', 'error');
+            mostrarAlertaGenerica(data.error || 'No se pudo agendar la cita.', 'Error al agendar', 'error');
         }
     } catch (e) {
         cerrarModal();
         mostrarAlertaGenerica('Error de conexión. Intente de nuevo.', 'Error de conexión', 'error');
     }
+}
+
+// ─── Mostrar modal de código (solo código + nota, sin éxito ni multa) ─────────
+function _mostrarModalCodigoCita(codigo) {
+    const modal    = document.getElementById('modalCodigoCita');
+    const codigoEl = document.getElementById('codigoCitaDisplay');
+
+    if (codigoEl) codigoEl.textContent = codigo || '------';
+    if (modal)    modal.style.display  = 'flex';
+}
+
+// ─── Botón "Aceptar" del modal de código: cierra y abre modal de éxito ────────
+function cerrarModalCodigoYMostrarExito() {
+    const modalCodigo = document.getElementById('modalCodigoCita');
+    if (modalCodigo) modalCodigo.style.display = 'none';
+
+    const modalExitoFinal = document.getElementById('modalExitoFinal');
+    const notaMultaEl     = document.getElementById('notaMultaExitoFinal');
+
+    if (notaMultaEl) {
+        if (_tieneMultaActualAgendar) {
+            notaMultaEl.classList.remove('hidden');
+        } else {
+            notaMultaEl.classList.add('hidden');
+        }
+    }
+
+    if (modalExitoFinal) modalExitoFinal.style.display = 'flex';
+}
+
+// ─── Botón "Aceptar" del modal de éxito final: limpia y redirige ──────────────
+function cerrarExitoFinalYFinalizar() {
+    const modal = document.getElementById('modalExitoFinal');
+    if (modal) modal.style.display = 'none';
+    resetearFormulario();
+    window.location.href = '/paciente.html';
 }
 
 function cerrarModal()         { document.getElementById('modalVerificacion').style.display = 'none'; }
@@ -914,8 +913,29 @@ function cerrarExitoYLimpiar() {
 window.addEventListener('DOMContentLoaded', async () => {
     inicializarCampoFechaAgendar();
     await cargarTiposDocumentoAgendar();
+    await cargarEspecialidadesDinamicas();
+    await cargarEspecialistas();
     autocompletarDatosPaciente();
-    cargarEspecialistas();
-    document.getElementById('servicio')?.addEventListener('change', cargarAgenda);
-    document.getElementById('hora')?.addEventListener('change', seleccionarSlot);
+
+    const servicioSel = document.getElementById('servicio');
+    const horaSel     = document.getElementById('hora');
+    const tipoDocSel  = document.getElementById('tipo-doc');
+
+    if (servicioSel) {
+        servicioSel.addEventListener('change', () => {
+            _actualizarColorSelect(servicioSel);
+            cargarAgenda();
+        });
+    }
+    if (horaSel) {
+        horaSel.addEventListener('change', () => {
+            seleccionarSlot();
+            _actualizarColorSelect(horaSel);
+        });
+    }
+    if (tipoDocSel) {
+        tipoDocSel.addEventListener('change', () => {
+            _actualizarColorSelect(tipoDocSel);
+        });
+    }
 });

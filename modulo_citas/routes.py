@@ -19,17 +19,10 @@ citas_bp = Blueprint('citas_bp', __name__)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH  = os.path.join(BASE_DIR, 'odent.db')
 
-# Última hora de inicio permitida para agendar/crear disponibilidad (4:00 PM)
 HORA_MAXIMA_CITA = '16:00:00'
 
 
 def _asegurar_columna_codigo_cita(conn):
-    """
-    Garantiza que la tabla 'cita' tenga la columna Codigo_Verificacion
-    (código de 6 dígitos usado para verificar la cita en clínica).
-    No destructivo: solo añade la columna si falta y genera códigos
-    para citas que aún no lo tengan asignado.
-    """
     cur = conn.cursor()
     cur.execute("PRAGMA table_info(cita)")
     columnas = [col[1] for col in cur.fetchall()]
@@ -77,6 +70,25 @@ def _json_error(mensaje, code=400):
     return jsonify({"ok": False, "error": mensaje}), code
 
 
+def _get_json_seguro():
+    """
+    FIX 400 BAD REQUEST: request.get_json() estricto lanza una excepción
+    (que Flask convierte en 400) cuando el body está vacío, no es JSON
+    válido, o el header Content-Type no es exactamente 'application/json'.
+    Esta utilidad SIEMPRE usa silent=True y nunca deja que una llamada sin
+    body, con body vacío, o con Content-Type ausente/incorrecto tumbe el
+    endpoint con un 400. Si no hay JSON parseable, devuelve {} y el
+    endpoint sigue funcionando con valores por defecto.
+    """
+    try:
+        datos = request.get_json(silent=True)
+    except Exception:
+        datos = None
+    if not isinstance(datos, dict):
+        datos = {}
+    return datos
+
+
 def _validar_fecha_no_anterior(fecha_str):
     try:
         fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
@@ -100,10 +112,6 @@ def _validar_hora_minimo_tres_horas(hora_str, fecha_str):
 
 
 def _validar_hora_maxima_permitida(hora_str):
-    """
-    Restricción de horario de citas: la última hora de inicio permitida
-    para agendar (independientemente de la fecha) es 4:00 PM (16:00).
-    """
     try:
         return hora_str[:8] <= HORA_MAXIMA_CITA
     except (TypeError, IndexError):
@@ -111,11 +119,6 @@ def _validar_hora_maxima_permitida(hora_str):
 
 
 def _generar_codigo_unico(cur, intentos=30):
-    """
-    Genera un código numérico de 6 dígitos garantizando unicidad: se valida
-    contra la tabla 'cita' (Codigo_Verificacion) hasta encontrar uno que no
-    exista todavía en la base de datos.
-    """
     for _ in range(intentos):
         codigo = str(random.randint(100000, 999999))
         cur.execute("SELECT 1 FROM cita WHERE Codigo_Verificacion = ?", (codigo,))
@@ -390,7 +393,7 @@ def get_config_ranking():
 
 @citas_bp.route('/config-ranking', methods=['PUT'])
 def put_config_ranking():
-    datos        = request.get_json(silent=True) or {}
+    datos        = _get_json_seguro()
     horas_envio  = datos.get('Horas_Envio')
     estado_envio = datos.get('Estado_Envio')
 
@@ -473,6 +476,30 @@ def get_paciente_por_usuario(usuario_id):
         if not row:
             return _json_error('Paciente no encontrado para ese usuario.', 404)
         return _json_ok(dict(row))
+    except Exception as exc:
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ESPECIALIDADES — GET /api/especialidades
+# Devuelve las 8 especialidades ordenadas por Especialidad_ID (orden de registro).
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/especialidades', methods=['GET'])
+def get_especialidades_catalogo():
+    con = None
+    try:
+        con = _get_conn()
+        cur = con.cursor()
+        cur.execute("""
+            SELECT Especialidad_ID, Nombre_Especialidad
+            FROM especialidad
+            ORDER BY Especialidad_ID ASC
+        """)
+        rows = _rows_to_list(cur)
+        return _json_ok(rows)
     except Exception as exc:
         return _json_error(str(exc), 500)
     finally:
@@ -612,19 +639,7 @@ def get_agenda():
 
 @citas_bp.route('/agenda', methods=['POST'])
 def crear_agenda():
-    """
-    Crea un nuevo bloque de disponibilidad para un especialista.
-
-    REQ 4 — VALIDACIÓN ESTRICTA DE DISPONIBILIDADES DUPLICADAS:
-    Un mismo especialista NO puede registrar dos veces la misma fecha en el
-    mismo rango de hora mientras ese bloque siga activo (Disponible u
-    Ocupado). Si ya existe, se rechaza con 409 (Conflict) y un mensaje claro,
-    en vez de devolver silenciosamente el slot existente como éxito (200).
-
-    RESTRICCIÓN DE HORARIO: la última hora de inicio permitida es 4:00 PM
-    (16:00), independientemente de la fecha.
-    """
-    datos       = request.get_json(silent=True) or {}
+    datos       = _get_json_seguro()
     esp_id      = datos.get('Especialista_ID')
     fecha       = datos.get('Fecha')
     hora_inicio = datos.get('Hora_Inicio')
@@ -659,8 +674,6 @@ def crear_agenda():
             cur.execute("ROLLBACK")
             return _json_error('Especialista no encontrado.', 404)
 
-        # ── Validación estricta de duplicados (misma fecha + misma hora de
-        # inicio, mientras el bloque esté activo: Disponible u Ocupado) ──────
         cur.execute("""
             SELECT Agenda_ID FROM agenda
             WHERE Especialista_ID = ? AND Fecha = ? AND Hora_Inicio = ?
@@ -681,10 +694,6 @@ def crear_agenda():
         """, (esp_id, fecha, hora_inicio, hora_fin, estado_id))
         agenda_id = cur.lastrowid
 
-        # ── Salvaguarda a nivel de BD: si dos solicitudes concurrentes pasan
-        # la validación anterior casi al mismo tiempo, el índice UNIQUE
-        # parcial (ver init_db.py) hace que la segunda inserción falle con
-        # IntegrityError, capturado más abajo y traducido a 409 también. ────
         cur.execute("COMMIT")
         return _json_ok({"ok": True, "Agenda_ID": agenda_id}, 201)
     except sqlite3.IntegrityError:
@@ -788,9 +797,6 @@ def get_citas():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # GENERAR CÓDIGO DE VERIFICACIÓN ÚNICO — GET /api/citas/generar-codigo
-# Endpoint usado por el frontend para mostrar el código en el panel de
-# confirmación ANTES de guardar la cita. El backend revalida la unicidad
-# de todas formas al momento de insertar en /api/citas (crear_cita).
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/generar-codigo', methods=['GET'])
@@ -807,9 +813,61 @@ def generar_codigo_verificacion_endpoint():
         if con: con.close()
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# VERIFICAR CÓDIGO DE CITA — POST /api/citas/<id>/verificar-codigo
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/citas/<int:cita_id>/verificar-codigo', methods=['POST'])
+def verificar_codigo_cita(cita_id):
+    datos  = _get_json_seguro()
+    codigo = (datos.get('codigo') or '').strip()
+
+    if not codigo or not re.fullmatch(r'\d{6}', codigo):
+        return _json_error('El código debe ser un número de 6 dígitos.', 400)
+
+    con = None
+    try:
+        con = _get_conn()
+        cur = con.cursor()
+
+        cur.execute("""
+            SELECT c.Cita_ID, c.Codigo_Verificacion, a.EstadoAgenda_ID, a.Agenda_ID
+            FROM cita c
+            JOIN agenda a ON a.Agenda_ID = c.Agenda_ID
+            WHERE c.Cita_ID = ?
+        """, (cita_id,))
+        row = cur.fetchone()
+
+        if not row:
+            return _json_error('Cita no encontrada.', 404)
+
+        if row['EstadoAgenda_ID'] not in (1, 2):
+            return _json_error('La cita no está en un estado que permita verificación.', 409)
+
+        codigo_bd = (row['Codigo_Verificacion'] or '').strip()
+        if codigo_bd != codigo:
+            return _json_ok({"ok": False, "error": "Código incorrecto. Verifique e intente de nuevo."})
+
+        cur.execute(
+            "UPDATE agenda SET EstadoAgenda_ID = 2 WHERE Agenda_ID = ?",
+            (row['Agenda_ID'],)
+        )
+        con.commit()
+
+        return _json_ok({"ok": True, "mensaje": "Código verificado. Cita en proceso."})
+
+    except Exception as exc:
+        if con:
+            try: con.rollback()
+            except Exception: pass
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
 @citas_bp.route('/citas', methods=['POST'])
 def crear_cita():
-    datos       = request.get_json(silent=True) or {}
+    datos       = _get_json_seguro()
     paciente_id = datos.get('Paciente_ID')
     agenda_id   = datos.get('Agenda_ID')
     motivo      = (datos.get('Motivo_Consulta') or '').strip()
@@ -877,10 +935,6 @@ def crear_cita():
             cur.execute("ROLLBACK")
             return _json_error('No puedes agendar. Ya tienes una cita activa en el sistema.', 409)
 
-        # ── Código único de verificación (6 dígitos numéricos) ───────────────
-        # Si el frontend ya pre-generó uno (vía /api/citas/generar-codigo) y
-        # sigue siendo único en este instante, se reutiliza; de lo contrario
-        # se genera uno nuevo garantizando unicidad contra la BD.
         codigo_solicitado = (datos.get('Codigo_Verificacion') or '').strip()
         codigo_verificacion = None
         if codigo_solicitado and re.fullmatch(r'\d{6}', codigo_solicitado):
@@ -923,9 +977,6 @@ def crear_cita():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CITA INDIVIDUAL — GET /api/citas/<id>
-# Devuelve datos completos de una cita, incluyendo Paciente_ID.
-# Usado como fallback en irAHistoriaClinica() de especialista.js para
-# resolver Paciente_ID cuando el objeto en memoria no lo trae.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>', methods=['GET'])
@@ -982,8 +1033,6 @@ def get_cita(cita_id):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ATENDER CITA — PUT /api/citas/<id>/atender
-# (Alias de compatibilidad: /en-proceso apunta a la misma lógica, por si
-#  algún cliente cacheado en navegador todavía referencia el nombre viejo)
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>/atender', methods=['PUT'])
@@ -1004,11 +1053,12 @@ def atender_cita(cita_id):
             return _json_error('Cita no encontrada.', 404)
         if row['EstadoAgenda_ID'] not in (1, 2):
             return _json_error('La cita no está en un estado que permita atención.')
-        cur.execute(
-            "UPDATE agenda SET EstadoAgenda_ID = 2 WHERE Agenda_ID = ?",
-            (row['Agenda_ID'],)
-        )
-        con.commit()
+        if row['EstadoAgenda_ID'] == 1:
+            cur.execute(
+                "UPDATE agenda SET EstadoAgenda_ID = 2 WHERE Agenda_ID = ?",
+                (row['Agenda_ID'],)
+            )
+            con.commit()
         return _json_ok({"ok": True, "status": "Cita marcada como en atención."})
     except Exception as exc:
         if con: con.rollback()
@@ -1023,7 +1073,7 @@ def atender_cita(cita_id):
 
 @citas_bp.route('/citas/<int:cita_id>/atendido', methods=['PUT'])
 def marcar_atendido(cita_id):
-    datos        = request.get_json(silent=True) or {}
+    datos        = _get_json_seguro()
     diagnosticos = datos.get('Diagnosticos') or datos.get('diagnosticos') or []
     if isinstance(diagnosticos, str):
         diagnosticos = [diagnosticos]
@@ -1090,10 +1140,68 @@ def marcar_atendido(cita_id):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # FINALIZAR CONSULTA — PUT /api/citas/<id>/finalizar-consulta
+#
+# FIX 400 BAD REQUEST (causa raíz):
+#   Este endpoint recibe ahora un body opcional desde historia_clinica.js con
+#   el detalle clínico (Diagnostico/Evolucion/Tratamiento o sus variantes en
+#   minúscula diagnostico/evolucion_clinica/tratamiento). Anteriormente NO se
+#   leía ningún JSON, pero el frontend (y/o un proxy intermedio) podía enviar
+#   Content-Type: application/json con un body vacío o inconsistente, lo que
+#   provocaba que Flask intentara parsear JSON estricto en algún punto del
+#   stack y devolviera 400 antes de llegar a la lógica de negocio.
+#
+#   SOLUCIÓN APLICADA:
+#     1) Se usa _get_json_seguro(), que llama a request.get_json(silent=True)
+#        envuelto en try/except, garantizando que CUALQUIER body (vacío, mal
+#        formado, ausente, o con Content-Type incorrecto) jamás levante un
+#        400 por fallo de parseo. Si no hay JSON válido, se usa un diccionario
+#        vacío y se continúa con valores por defecto.
+#     2) Se extraen los campos de forma tolerante con .get(..., '') aceptando
+#        tanto las claves en mayúscula (Diagnostico, Evolucion, Tratamiento)
+#        como las variantes en minúscula (diagnostico, evolucion_clinica,
+#        tratamiento) que también puede enviar el frontend.
+#     3) Si llega información clínica en el body, se persiste también aquí
+#        mediante _garantizar_historial_clinico(), sin que esto sea
+#        obligatorio: si no llega nada, el endpoint sigue funcionando igual
+#        que antes (solo marca la agenda como Cumplida y dispara la encuesta).
+#     4) La respuesta exitosa incluye explícitamente {"status": "success"}
+#        además de los campos ya existentes ("ok", "status" descriptivo,
+#        "correo_enviado", "FechaAtencion"), preservando compatibilidad con
+#        cualquier consumidor que ya revisara esos campos.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>/finalizar-consulta', methods=['PUT'])
 def finalizar_consulta(cita_id):
+    datos = _get_json_seguro()
+
+    diagnostico = (
+        datos.get('Diagnostico')
+        or datos.get('diagnostico')
+        or ''
+    ).strip() if isinstance(datos.get('Diagnostico') or datos.get('diagnostico'), str) else ''
+
+    evolucion = (
+        datos.get('Evolucion')
+        or datos.get('evolucion_clinica')
+        or datos.get('evolucion')
+        or ''
+    ).strip() if isinstance(
+        datos.get('Evolucion') or datos.get('evolucion_clinica') or datos.get('evolucion'),
+        str
+    ) else ''
+
+    tratamiento = (
+        datos.get('Tratamiento')
+        or datos.get('tratamiento')
+        or ''
+    ).strip() if isinstance(datos.get('Tratamiento') or datos.get('tratamiento'), str) else ''
+
+    motivo_hc = (
+        datos.get('MotivoConsulta')
+        or datos.get('motivo_consulta')
+        or ''
+    ).strip() if isinstance(datos.get('MotivoConsulta') or datos.get('motivo_consulta'), str) else ''
+
     con = None
     try:
         con = _get_conn()
@@ -1121,9 +1229,19 @@ def finalizar_consulta(cita_id):
         if not row:
             return _json_error('Cita no encontrada.', 404)
 
-        if row['EstadoAgenda_ID'] not in (1, 2):
+        # FIX CONFLICTO DE ESTADOS: el endpoint /api/historial/finalizar
+        # (llamado primero desde historia_clinica.js) ya marca la agenda
+        # como Cumplida (EstadoAgenda_ID = 4) ANTES de que este endpoint
+        # se ejecute como segunda llamada en cadena. La validación original
+        # solo aceptaba (1, 2) — Disponible/Ocupado — y rechazaba con 400
+        # cualquier cita que ya estuviera en estado 4, aunque ese cambio de
+        # estado fuera legítimo y reciente. Ahora se acepta también el
+        # estado 4 (Cumplida) como un caso IDEMPOTENTE: si la cita ya fue
+        # finalizada (por este mismo flujo o por una llamada repetida), se
+        # continúa sin error en lugar de abortar con 400.
+        if row['EstadoAgenda_ID'] not in (1, 2, 4):
             return _json_error(
-                'Solo se puede finalizar una cita en estado Disponible u Ocupado.'
+                'Solo se puede finalizar una cita en estado Disponible, Ocupado o ya Cumplida.'
             )
 
         fecha_hora_fin = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -1145,6 +1263,42 @@ def finalizar_consulta(cita_id):
             "UPDATE cita SET FechaAtencion = ? WHERE Cita_ID = ?",
             (fecha_hora_fin, cita_id)
         )
+
+        # Persistencia tolerante del detalle clínico recibido en el body
+        # (si el frontend lo envía). Nunca es obligatorio para finalizar.
+        if diagnostico or evolucion or tratamiento or motivo_hc:
+            try:
+                _garantizar_historial_clinico(
+                    cur, cita_id,
+                    diagnosticos=[diagnostico] if diagnostico else [],
+                    evolucion=evolucion,
+                    tratamiento=tratamiento,
+                )
+                if motivo_hc:
+                    cur.execute(
+                        "SELECT Historial_ID FROM historial_clinico WHERE Cita_ID = ?",
+                        (cita_id,)
+                    )
+                    hc_row = cur.fetchone()
+                    if hc_row:
+                        cur.execute("PRAGMA table_info(historial_clinico)")
+                        hc_cols = [c[1] for c in cur.fetchall()]
+                        if 'MotivoHC' not in hc_cols:
+                            try:
+                                cur.execute(
+                                    "ALTER TABLE historial_clinico ADD COLUMN MotivoHC TEXT"
+                                )
+                            except Exception:
+                                pass
+                        cur.execute(
+                            "UPDATE historial_clinico SET MotivoHC = ? WHERE Historial_ID = ?",
+                            (motivo_hc, hc_row['Historial_ID'])
+                        )
+            except Exception as exc_hc:
+                logger.error(
+                    "[FINALIZAR-CONSULTA] No se pudo persistir detalle clínico para cita %d: %s",
+                    cita_id, exc_hc
+                )
 
         cur.execute("""
             CREATE TABLE IF NOT EXISTS encuesta_pendiente (
@@ -1177,7 +1331,8 @@ def finalizar_consulta(cita_id):
         if estado_envio == 0:
             return _json_ok({
                 "ok": True,
-                "status": "Consulta finalizada. Envío de encuesta desactivado (kill-switch).",
+                "status": "success",
+                "mensaje": "Consulta finalizada. Envío de encuesta desactivado (kill-switch).",
                 "correo_enviado": False,
                 "FechaAtencion": fecha_hora_fin,
             })
@@ -1213,7 +1368,8 @@ def finalizar_consulta(cita_id):
 
         return _json_ok({
             "ok": True,
-            "status": f"Consulta finalizada. {correo_msg}",
+            "status": "success",
+            "mensaje": f"Consulta finalizada. {correo_msg}",
             "correo_enviado": bool(correo_paciente),
             "FechaAtencion": fecha_hora_fin,
         })
@@ -1339,33 +1495,15 @@ def cancelar_cita_con_multa(cita_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# REQ 2 — AUTOMATIZACIÓN DE MULTAS POR CUMPLIMIENTO DE TIEMPO
+# AUTOMATIZACIÓN DE MULTAS POR CUMPLIMIENTO DE TIEMPO
 # POST /api/multas/procesar-vencimientos
-#
-# Recorre todas las citas cuyo bloque de agenda sigue "Disponible" (1) u
-# "Ocupado" (2) — es decir, nunca se marcó como Atendida (4) ni Cancelada
-# (3) — y cuya fecha+hora de inicio ya pasó. Esas citas se interpretan como
-# inasistencia del paciente: se marca la agenda como Cancelado (3) y se
-# genera/registra una multa (EstadoMulta_ID = 1, Pendiente) vinculada a esa
-# cita, de forma 100% persistida en odent.db (con conn.commit() explícito).
-#
-# Es idempotente: si la cita ya tiene una multa registrada, no duplica.
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _procesar_vencimientos_multas_interno(cur):
-    """
-    Lógica pura de negocio (reutilizable también desde un scheduler externo
-    si se decide automatizar con APScheduler/cron en el futuro). Recibe un
-    cursor ya abierto y NO hace commit — el llamador controla la transacción.
-    Devuelve la cantidad de citas procesadas.
-    """
     ahora_dt  = datetime.now()
     hoy_str   = ahora_dt.strftime('%Y-%m-%d')
     hora_str  = ahora_dt.strftime('%H:%M:%S')
 
-    # Candidatas: citas con bloque de agenda aún activo (1=Disponible,
-    # 2=Ocupado) cuya fecha ya pasó, o cuya fecha es hoy pero la hora de
-    # inicio ya venció.
     cur.execute("""
         SELECT c.Cita_ID, a.Agenda_ID, a.Fecha, a.Hora_Inicio
         FROM cita c
@@ -1383,15 +1521,11 @@ def _procesar_vencimientos_multas_interno(cur):
         cita_id   = fila['Cita_ID']
         agenda_id = fila['Agenda_ID']
 
-        # Marcar el bloque de agenda como Cancelado (3) — la cita venció
-        # sin que el especialista la marcara como Atendida.
         cur.execute(
             "UPDATE agenda SET EstadoAgenda_ID = 3 WHERE Agenda_ID = ?",
             (agenda_id,)
         )
 
-        # Evitar duplicar multas si el job corre más de una vez sobre la
-        # misma cita (idempotencia).
         cur.execute(
             "SELECT Multa_ID FROM multa WHERE Cita_ID = ?", (cita_id,)
         )
@@ -1420,7 +1554,7 @@ def procesar_vencimientos_multas():
         procesadas = _procesar_vencimientos_multas_interno(cur)
 
         cur.execute("COMMIT")
-        con.commit()  # asegurar persistencia explícita en odent.db
+        con.commit()
         return _json_ok({
             "ok": True,
             "procesadas": procesadas,
@@ -1610,10 +1744,6 @@ def multa_activa(paciente_id):
         if con: con.close()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# MULTAS DEL PACIENTE (SOLO LECTURA) — GET /api/multas/paciente/<paciente_id>
-# ─────────────────────────────────────────────────────────────────────────────
-
 @citas_bp.route('/multas/paciente/<int:paciente_id>', methods=['GET'])
 def get_multas_paciente(paciente_id):
     con = None
@@ -1654,7 +1784,7 @@ def get_multas_paciente(paciente_id):
 
 @citas_bp.route('/historial-clinico', methods=['POST'])
 def crear_historial_clinico():
-    datos       = request.get_json(silent=True) or {}
+    datos       = _get_json_seguro()
     cita_id     = datos.get('Cita_ID')
     evolucion   = (datos.get('Evolucion')   or '').strip()
     diagnostico = (datos.get('Diagnostico') or '').strip()
@@ -1760,7 +1890,7 @@ def get_historial_clinico(cita_id):
 
 @citas_bp.route('/respuesta', methods=['POST'])
 def crear_respuesta_ranking():
-    datos           = request.get_json(silent=True) or {}
+    datos           = _get_json_seguro()
     pregunta_id     = datos.get('ID_Pregunta')
     paciente_id     = datos.get('ID_Paciente')
     texto_respuesta = datos.get('Texto_Respuesta')
@@ -1894,7 +2024,7 @@ def crear_respuesta_ranking():
 def verificar_password():
     from werkzeug.security import check_password_hash
 
-    datos      = request.get_json(silent=True) or {}
+    datos      = _get_json_seguro()
     usuario_id = datos.get('usuario_id')
     password   = datos.get('password')
 
@@ -1933,7 +2063,7 @@ def verificar_password():
 def actualizar_perfil_paciente():
     from werkzeug.security import generate_password_hash, check_password_hash
 
-    datos             = request.get_json(silent=True) or {}
+    datos             = _get_json_seguro()
     usuario_id        = datos.get('usuario_id')
     correo            = datos.get('correo')
     telefono          = datos.get('telefono')
@@ -2023,6 +2153,93 @@ def actualizar_perfil_paciente():
 
         con.commit()
         return _json_ok({"ok": True, "mensaje": "Perfil actualizado correctamente."})
+    except Exception as exc:
+        if con: con.rollback()
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TIPOS DE DOCUMENTO — GET /api/tipos_documento
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/tipos_documento', methods=['GET'])
+def get_tipos_documento():
+    con = None
+    try:
+        con = _get_conn()
+        cur = con.cursor()
+        cur.execute("SELECT TipoDoc_ID, Nombre_Tipo_Documento FROM tipo_documento ORDER BY TipoDoc_ID")
+        return _json_ok(_rows_to_list(cur))
+    except Exception as exc:
+        return _json_error(str(exc), 500)
+    finally:
+        if con: con.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ACTUALIZAR USUARIO — PUT /api/usuarios/<id>
+# ─────────────────────────────────────────────────────────────────────────────
+
+@citas_bp.route('/usuarios/<int:usuario_id>', methods=['PUT'])
+def actualizar_usuario(usuario_id):
+    from werkzeug.security import generate_password_hash, check_password_hash
+
+    datos             = _get_json_seguro()
+    nombres           = datos.get('Nombres')
+    apellidos         = datos.get('Apellidos')
+    correo            = datos.get('Correo')
+    telefono          = datos.get('Telefono')
+    contrasena_actual = datos.get('ContrasenaActual')
+    nueva_pass        = datos.get('nuevaPass')
+
+    if not contrasena_actual:
+        return _json_error('ContrasenaActual es obligatoria para actualizar el perfil.', 400)
+
+    con = None
+    try:
+        con = _get_conn()
+        cur = con.cursor()
+
+        cur.execute("SELECT Contrasena FROM usuarios WHERE Usuario_ID = ?", (usuario_id,))
+        row = cur.fetchone()
+        if not row:
+            return _json_error('Usuario no encontrado.', 404)
+
+        hash_bd = row['Contrasena']
+        if hash_bd.startswith('scrypt:') or hash_bd.startswith('pbkdf2:'):
+            pwd_ok = check_password_hash(hash_bd, contrasena_actual)
+        else:
+            pwd_ok = (hash_bd == contrasena_actual)
+
+        if not pwd_ok:
+            return _json_error('Contraseña actual incorrecta.', 401)
+
+        campos  = []
+        valores = []
+        if nombres:   campos.append("Nombres = ?");   valores.append(nombres)
+        if apellidos: campos.append("Apellidos = ?"); valores.append(apellidos)
+        if correo:    campos.append("Correo = ?");    valores.append(correo)
+        if telefono:  campos.append("Telefono = ?");  valores.append(telefono)
+
+        if nueva_pass:
+            ok, msg = _validar_politica_password(nueva_pass)
+            if not ok:
+                return _json_error(msg, 400)
+            campos.append("Contrasena = ?")
+            valores.append(generate_password_hash(nueva_pass, method='scrypt'))
+
+        if not campos:
+            return _json_error('No hay campos para actualizar.')
+
+        valores.append(usuario_id)
+        cur.execute(
+            f"UPDATE usuarios SET {', '.join(campos)} WHERE Usuario_ID = ?",
+            tuple(valores)
+        )
+        con.commit()
+        return _json_ok({"ok": True, "mensaje": "Usuario actualizado correctamente."})
     except Exception as exc:
         if con: con.rollback()
         return _json_error(str(exc), 500)

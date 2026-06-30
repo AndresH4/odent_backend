@@ -2,7 +2,7 @@
 modulo_usuarios/routes.py — Stylo Dental
 """
 
-from flask import Blueprint, request, jsonify, render_template
+from flask import Blueprint, request, jsonify, render_template, session
 import sqlite3
 import os
 import re
@@ -49,8 +49,9 @@ def _verificar_password_contra_hash(hash_bd, password_ingresada):
 
 # =============================================================================
 # AUTENTICACIÓN — LOGIN
-# PUNTO 8: Verificar Estado_ID del usuario. Si es Inactivo (Estado_ID != 1),
-#           denegar acceso y retornar mensaje de error.
+# BLOQUEO ABSOLUTO: verifica Estado_ID antes de crear sesión.
+# Si el usuario está Inactivo (Estado_ID != 1), se rechaza el acceso
+# incluso con credenciales correctas y no se escribe ningún dato de sesión.
 # =============================================================================
 
 @usuarios_bp.route('/auth/login', methods=['POST'])
@@ -76,16 +77,19 @@ def login():
         if not _verificar_password_contra_hash(fila['Contrasena'], contrasena):
             return jsonify({"ok": False, "error": "Correo o contraseña incorrectos"}), 401
 
-        # PUNTO 8: bloquear acceso si el usuario está Inactivo
+        # BLOQUEO ABSOLUTO: cuenta inactiva — no se crea sesión bajo ninguna circunstancia
         if fila['Estado_ID'] != 1:
             return jsonify({
                 "ok": False,
-                "error": "Tu cuenta está inactiva. Contacta al administrador para más información.",
+                "error": "Cuenta inactiva. Acceso denegado. Contacta al administrador.",
                 "inactivo": True
             }), 403
 
         usuario_data = dict(fila)
         usuario_data.pop('Contrasena', None)
+
+        # Registrar usuario_id en sesión del servidor para el interceptor before_request
+        session['usuario_id'] = usuario_data['Usuario_ID']
 
         if usuario_data.get('Rol_ID') == 2:
             cursor.execute(
@@ -142,7 +146,6 @@ def get_reporte_roles():
 
 # =============================================================================
 # USUARIOS — GET lista
-# PUNTO 2: ORDER BY u.Usuario_ID ASC para orden ascendente obligatorio
 # =============================================================================
 
 @usuarios_bp.route('/usuarios', methods=['GET'])
@@ -181,6 +184,9 @@ def get_usuarios():
 
 # =============================================================================
 # USUARIOS — GET / PUT / DELETE por ID
+# PERSISTENCIA DEL CAMBIO DE ESTADO: el PUT actualiza Estado_ID de forma
+# inmediata y segura en la BD, lo que activa el interceptor before_request
+# en la siguiente petición del usuario afectado, forzando su expulsión.
 # =============================================================================
 
 @usuarios_bp.route('/usuarios/<int:id>', methods=['GET', 'PUT', 'DELETE'])
@@ -258,8 +264,13 @@ def crud_usuario(id):
             if apellidos: campos.append("Apellidos = ?"); valores.append(apellidos)
             if correo:    campos.append("Correo = ?");    valores.append(correo)
             if telefono:  campos.append("Telefono = ?");  valores.append(telefono)
+
+            # PERSISTENCIA DEL CAMBIO DE ESTADO: se persiste de forma inmediata
+            # en la BD sin condiciones adicionales, garantizando que el interceptor
+            # before_request detecte el cambio en la siguiente request del usuario.
             if estado_id is not None:
-                campos.append("Estado_ID = ?"); valores.append(int(estado_id))
+                campos.append("Estado_ID = ?")
+                valores.append(int(estado_id))
 
             if nueva_pass:
                 valida, msg_pwd = _validar_politica_password(nueva_pass)
@@ -679,10 +690,6 @@ def get_tipo_afiliacion_eps():
         if conexion:
             conexion.close()
 
-
-# =============================================================================
-# TIPO EPS — alias para el frontend (/api/tipo-eps)
-# =============================================================================
 
 @usuarios_bp.route('/tipo-eps', methods=['GET'])
 def get_tipo_eps():
@@ -1273,7 +1280,6 @@ def pagar_multa(multa_id):
 
 # =============================================================================
 # ESPECIALISTAS — GET vista admin con ID real de BD
-# PUNTO 1: Exponer Especialista_ID real de la BD (se mantiene tal cual)
 # =============================================================================
 
 @usuarios_bp.route('/especialistas-admin', methods=['GET'])
@@ -1309,7 +1315,6 @@ def get_especialistas_admin():
 
 # =============================================================================
 # PACIENTES — GET vista admin con ID real de BD
-# PUNTO 1: Exponer Paciente_ID real de la BD (se mantiene tal cual)
 # =============================================================================
 
 @usuarios_bp.route('/pacientes-admin', methods=['GET'])

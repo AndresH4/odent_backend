@@ -1,33 +1,41 @@
-// especialista.js v14.4
+// especialista.js v15.1 — RASTREO DE DATOS PESADO (DIAGNÓSTICO TEMPORAL)
 // REQ 1: Fix maquetación inputs agenda — clase .has-value se sincroniza con CSS para ocultar texto nativo duplicado
 // REQ 2: Automatización de multas por incumplimiento de horario (ping al backend)
 // REQ 3: Conexión en tiempo real de agenda médica con vista de agendar (ya servida vía /api/agenda)
 // REQ 4: Validación estricta de disponibilidades duplicadas — manejo de respuesta 409 del backend
 // REQ 5: Conexión total de Historia Clínica — fix de endpoint roto (/en-proceso -> /atender) y redirección robusta
 // REQ 6: Fix de registro de historial_bp sin url_prefix en app.py — la ruta /historial/paciente/<id>
-//        ahora es alcanzable directamente. irAHistoriaClinica() resuelve Paciente_ID desde memoria
-//        y como fallback desde /api/citas/<id> (servido por citas_bp con url_prefix='/api').
+//        ahora es alcanzable directamente.
 // REQ 7: Fix crítico de renderizado — irAHistoriaClinica() navega a /historial/paciente/<id>
-//        que devuelve render_template HTML. Eliminada toda llamada fetch() que causaba
-//        que el navegador mostrara JSON crudo en lugar de la vista visual.
-// REQ 8 (v14.3): Separación total Vista / API en irAHistoriaClinica():
-//        ▸ window.location.href → /historial/paciente/<id>?cita_id=<id>  (VISTA HTML)
-//        ▸ fetch()              → /api/historial/...  o  /api/citas/...  (JSON solamente)
-//        El navegador NUNCA visita un endpoint de API directamente.
+//        que devuelve render_template HTML.
+// REQ 8 (v14.3): Separación total Vista / API en irAHistoriaClinica().
 // CAMBIO P1 (v14.4): Filtrado estricto "Atendidos Hoy" — solo citas con FechaAtencion == fecha actual real
 // CAMBIO P2 (v14.4): Modal de código de verificación de 6 dígitos antes de "Empezar Cita"
 // CAMBIO P3 (v14.4): Eliminado botón "Finalizar Consulta" del modal (solo queda "Historia Clínica")
 // CAMBIO P4 (v14.4): Icono agenda cambiado a fa-book-medical (en HTML)
 // CAMBIO P5 (v14.4): verReporteProfesional lee directamente /api/historial/paciente/<id>/evoluciones
-// CAMBIO P6 (v14.4): Campo "Nombre completo" concatenado — eliminado campo independiente "Apellidos" en vistas
-// CAMBIO P7 (v14.4): Orden descendente (más reciente primero) en todas las tablas de citas
-// CAMBIO P8 (v14.5): Sección "Mi Perfil" — Nombres/Apellidos fusionados en un único input "Nombre completo"
-//        (conf-nombre-completo). Al guardar, el texto se separa en Nombres/Apellidos para mantener
-//        compatibilidad con el esquema de 'usuarios' (columnas independientes NOT NULL).
-// CAMBIO P9 (v14.5): El campo "Motivo" visible para el especialista (tabla inicio, tabla pacientes,
-//        modal Empezar Cita) ahora muestra la Especialidad de la cita en lugar del motivo de consulta
-//        ingresado por el paciente. El dato Motivo_Consulta original se sigue recibiendo del backend
-//        y queda disponible en memoria (cita.motivo) sin alterarse ni perderse.
+// CAMBIO P6 (v14.4): Campo "Nombre completo" concatenado.
+// CAMBIO P7 (v14.4): Orden descendente (más reciente primero) en todas las tablas de citas.
+// CAMBIO P8 (v14.5): Sección "Mi Perfil" — Nombres/Apellidos fusionados en un único input "Nombre completo".
+// CAMBIO P9 (v14.5): Columna "Motivo" muestra Especialidad en lugar del motivo de consulta del paciente.
+// CAMBIO P10 (v14.6): Validación inviolable del código de verificación contra el backend.
+// CAMBIO P11 (v14.6): El cambio de estado a "En proceso" ocurre únicamente al confirmar el código.
+// CAMBIO P12 (v14.7): verReporteProfesional consulta primero /api/historial/cita/<cita_id>.
+// CAMBIO P13 (v14.8): fetch con { cache: 'no-store' } + cache-busting (`_=timestamp`).
+// CAMBIO P14 (v14.9): lectura flexible Pascal/snake en cada fuente de datos del reporte.
+// CAMBIO P15 (v15.0): unificación definitiva de claves del reporte ('diagnostico', 'evolucion', 'tratamiento').
+// CAMBIO P16 (v15.1) — RASTREO DE DATOS PESADO (DIAGNÓSTICO TEMPORAL):
+//        Se inyectaron console.log + alert() justo dentro de cada
+//        '.then(data => {' que procesa la respuesta de las 3 fuentes del
+//        Reporte (/api/historial/cita/<id>, /api/historial/paciente/<id>/
+//        evoluciones y /api/historial-clinico/<id>), mostrando el payload
+//        EXACTO recibido por el navegador. Adicionalmente, dentro de
+//        setEl() (la función que finalmente inyecta los valores en el DOM
+//        del modal "Reporte") se agregó un console.log de control que
+//        muestra el ID del elemento objetivo y el valor que se le está
+//        asignando, para poder ver con precisión en qué punto exacto el
+//        dato se vuelve vacío/undefined. Estos logs y alerts son
+//        TEMPORALES y deben removerse una vez finalizado el diagnóstico.
 'use strict';
 
 let indexActualGlobal     = null;
@@ -41,6 +49,7 @@ let slotPendienteEliminar = null;
 
 // ─── PUNTO 2: Variable para índice pendiente de verificación ──────────────────
 let _indicePendienteVerificacion = null;
+let _validandoCodigoEnCurso = false;
 
 // ─── TOAST ────────────────────────────────────────────────────────────────────
 function mostrarToast(mensaje, tipo = 'info') {
@@ -177,12 +186,6 @@ function formatearHoraAmPm(horaStr) {
 }
 
 // ─── PUNTO 8: UTILIDAD NOMBRE COMPLETO ⇄ NOMBRES/APELLIDOS ────────────────────
-// El esquema de 'usuarios' (init_db.py) mantiene Nombres y Apellidos como
-// columnas independientes NOT NULL, y el backend (/api/usuarios/<id> y
-// /api/especialista/perfil/<id>) las espera/devuelve por separado. La UI de
-// "Mi Perfil" ahora solo expone un input "Nombre completo"; estas utilidades
-// concatenan para mostrar y separan para guardar, sin tocar el esquema ni
-// los endpoints existentes.
 function _concatenarNombreCompleto(nombres, apellidos) {
     return `${nombres || ''} ${apellidos || ''}`.trim();
 }
@@ -197,9 +200,6 @@ function _dividirNombreCompleto(nombreCompleto) {
     if (partes.length === 2) {
         return { nombres: partes[0], apellidos: partes[1] };
     }
-    // Convención hispana habitual: primera mitad = nombres, segunda mitad = apellidos.
-    // Con número impar de palabras, el nombre se queda con la palabra extra
-    // (ej. "Juan Carlos Perez" -> nombres="Juan Carlos", apellidos="Perez").
     const mitad     = Math.ceil(partes.length / 2);
     const nombres   = partes.slice(0, mitad).join(' ');
     const apellidos = partes.slice(mitad).join(' ');
@@ -277,7 +277,6 @@ async function _cargarPerfilRealDesdeBD(usuarioId) {
             : (p.NumeroDocumento || '—');
         _inyectarCampo('doc-menu-concat', docConcatenado);
 
-        // PUNTO 8: un solo input "Nombre completo" en el formulario de Mi Perfil
         _inyectarCampo('conf-nombre-completo', _concatenarNombreCompleto(p.Nombres, p.Apellidos), true);
         _inyectarCampo('conf-email',     p.Correo,    true);
         _inyectarCampo('conf-tel',       p.Telefono,  true);
@@ -380,7 +379,6 @@ function _actualizarStats() {
     const noCanceladas = historialTotal.filter(c => c.estado !== 'Cancelada');
     const total        = noCanceladas.length;
     const pendientes   = noCanceladas.filter(c => c.estado === 'Pendiente').length;
-    // PUNTO 1: filtrado estricto por fecha actual
     const atendidosHoy = noCanceladas.filter(c => _esAtendidoHoy(c)).length;
 
     const futuras = noCanceladas
@@ -417,7 +415,6 @@ function _renderTablaInicio(filtro) {
     const mapa = {
         todos:     { lista: historialTotal.filter(c => c.estado !== 'Cancelada'), titulo: 'Total Pacientes' },
         Pendiente: { lista: historialTotal.filter(c => c.estado === 'Pendiente'), titulo: 'Por Atender' },
-        // PUNTO 1: Filtrado estricto "Atendidos Hoy" por fecha real
         Atendido:  { lista: historialTotal.filter(c => _esAtendidoHoy(c)), titulo: 'Atendidos Hoy' },
         proxima:   {
             lista: (() => {
@@ -434,15 +431,12 @@ function _renderTablaInicio(filtro) {
     if (titulo) titulo.innerText = cfg.titulo;
 
     tbody.innerHTML = '';
-    // PUNTO 7: orden descendente — más reciente primero
     const listaOrdenada = _ordenarDescendente(cfg.lista);
 
     listaOrdenada.forEach(cita => {
         const idxReal = historialTotal.indexOf(cita);
         const row = document.createElement('tr');
         row.className = 'transition-all duration-300 hover:bg-sky-50/30';
-        // PUNTO 6: etiqueta "Nombre completo" — nombre ya viene concatenado desde BD
-        // PUNTO 9: columna "Motivo" ahora muestra la Especialidad de la cita
         row.innerHTML = `
             <td class="px-8 py-6">
                 <p class="font-black text-slate-800 text-sm">${formatearHoraAmPm(cita.hora)}</p>
@@ -503,14 +497,12 @@ function _renderTablaPacientes() {
     tbody.innerHTML = '';
 
     const pacientesHistorial = historialTotal.filter(c => c.estado === 'Atendido' || c.estado === 'Cancelada');
-    // PUNTO 7: orden descendente — más reciente primero
     const listaOrdenada = _ordenarDescendente(pacientesHistorial);
 
     listaOrdenada.forEach(cita => {
         const idxReal = historialTotal.indexOf(cita);
         const row = document.createElement('tr');
         row.className = 'transition-all duration-300 hover:bg-sky-50/30';
-        // PUNTO 6: etiqueta "Nombre completo"
         row.innerHTML = `
             <td class="px-8 py-6">
                 <p class="font-black text-slate-800 text-sm">${formatearHoraAmPm(cita.hora)}</p>
@@ -549,7 +541,10 @@ function solicitarCodigoVerificacion(indice) {
     const input = document.getElementById('input-codigo-verificacion');
     const error = document.getElementById('error-codigo-verificacion');
     if (input) input.value = '';
-    if (error) error.style.display = 'none';
+    if (error) {
+        error.style.display = 'none';
+        error.textContent = 'El código debe tener exactamente 6 dígitos.';
+    }
     const modal = document.getElementById('modalCodigoVerificacion');
     if (modal) modal.style.display = 'flex';
     if (input) setTimeout(() => input.focus(), 100);
@@ -559,22 +554,98 @@ function cerrarModalCodigoVerificacion() {
     const modal = document.getElementById('modalCodigoVerificacion');
     if (modal) modal.style.display = 'none';
     _indicePendienteVerificacion = null;
+    _validandoCodigoEnCurso = false;
 }
 
-function confirmarCodigoVerificacion() {
+async function confirmarCodigoVerificacion() {
     const input = document.getElementById('input-codigo-verificacion');
     const error = document.getElementById('error-codigo-verificacion');
     const codigo = (input?.value || '').trim();
+
+    if (_validandoCodigoEnCurso) return;
+
     if (codigo.length !== 6 || !/^\d{6}$/.test(codigo)) {
-        if (error) error.style.display = 'block';
+        if (error) {
+            error.textContent = 'El código debe tener exactamente 6 dígitos.';
+            error.style.display = 'block';
+        }
         return;
     }
+
+    if (_indicePendienteVerificacion === null || _indicePendienteVerificacion === undefined) {
+        if (error) {
+            error.textContent = 'No se pudo identificar la cita a verificar.';
+            error.style.display = 'block';
+        }
+        return;
+    }
+
+    const cita = historialTotal[_indicePendienteVerificacion];
+    if (!cita || !cita.Cita_ID) {
+        if (error) {
+            error.textContent = 'No se pudo identificar la cita a verificar.';
+            error.style.display = 'block';
+        }
+        return;
+    }
+
     if (error) error.style.display = 'none';
-    const modal = document.getElementById('modalCodigoVerificacion');
-    if (modal) modal.style.display = 'none';
-    if (_indicePendienteVerificacion !== null) {
-        abrirEmpezarCita(_indicePendienteVerificacion);
+    _validandoCodigoEnCurso = true;
+
+    const btnConfirmar = document.querySelector('#modalCodigoVerificacion .flex-1.bg-sky-600');
+    if (btnConfirmar) btnConfirmar.disabled = true;
+
+    try {
+        const resp = await fetch(`/api/citas/${cita.Cita_ID}/verificar-codigo`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ codigo }),
+        });
+
+        const data = await resp.json().catch(() => null);
+
+        if (!resp.ok || !data || data.ok !== true) {
+            const mensaje = (data && (data.error || data.mensaje))
+                ? data.error || data.mensaje
+                : 'Código incorrecto. Verifique e intente de nuevo.';
+            if (error) {
+                error.textContent = mensaje;
+                error.style.display = 'block';
+            }
+            mostrarToast(mensaje, 'error');
+            _validandoCodigoEnCurso = false;
+            if (btnConfirmar) btnConfirmar.disabled = false;
+            return;
+        }
+
+        historialTotal[_indicePendienteVerificacion].estado       = 'En proceso';
+        historialTotal[_indicePendienteVerificacion].EstadoAgenda = 'Ocupado';
+        _renderTodas();
+
+        const indiceConfirmado = _indicePendienteVerificacion;
+
+        if (error) error.style.display = 'none';
+        if (input) input.value = '';
+        _validandoCodigoEnCurso = false;
+        if (btnConfirmar) btnConfirmar.disabled = false;
+
+        const modal = document.getElementById('modalCodigoVerificacion');
+        if (modal) modal.style.display = 'none';
         _indicePendienteVerificacion = null;
+
+        mostrarToast('Código verificado correctamente. Cita en proceso.', 'success');
+        abrirEmpezarCita(indiceConfirmado);
+
+    } catch (err) {
+        console.error('[especialista] Error de red validando código de verificación:', err);
+        const mensaje = 'Error de conexión al validar el código. Intente de nuevo.';
+        if (error) {
+            error.textContent = mensaje;
+            error.style.display = 'block';
+        }
+        mostrarToast(mensaje, 'error');
+        _validandoCodigoEnCurso = false;
+        if (btnConfirmar) btnConfirmar.disabled = false;
     }
 }
 
@@ -582,7 +653,6 @@ function confirmarCodigoVerificacion() {
 function _botonesAccion(cita, idx) {
     const estado = cita.estado;
     if (estado === 'Pendiente') {
-        // PUNTO 2: llama a solicitarCodigoVerificacion en lugar de abrirEmpezarCita directamente
         return `<button onclick="solicitarCodigoVerificacion(${idx})"
             class="btn-empezar-cita px-8 py-4 rounded-2xl font-black text-[10px] transition-all uppercase shadow-lg btn-action">
             <i class="fas fa-play mr-1"></i>Empezar Cita</button>`;
@@ -639,7 +709,7 @@ const cambiarSeccion = (nombreSeccion) => {
 };
 
 // ─── EMPEZAR CITA ─────────────────────────────────────────────────────────────
-const abrirEmpezarCita = async (indice) => {
+const abrirEmpezarCita = (indice) => {
     try {
         const cita = historialTotal[indice];
         if (!cita) return;
@@ -647,32 +717,15 @@ const abrirEmpezarCita = async (indice) => {
 
         const set = (id, val) => { const e = document.getElementById(id); if (e) e.innerText = val || '—'; };
         set('empezar-nombre-modal', cita.nombre);
-        // PUNTO 6: nombre completo ya concatenado en cita.nombre
         set('empezar-nombre-dato',  cita.nombre);
         set('empezar-doc-dato',     `${cita.tipoDoc}: ${cita.numDoc}`);
         set('empezar-estado-dato',  'En Proceso — Atendiendo');
-        // PUNTO 9: el modal "Empezar Cita" muestra la Especialidad en el campo Motivo de Consulta
         set('empezar-motivo-dato',  cita.especialidad);
 
         const avatarPaciente = document.getElementById('empezar-avatar-paciente');
         if (avatarPaciente) avatarPaciente.textContent = _obtenerInicial(cita.nombre);
 
         document.getElementById('modalEmpezarCita').style.display = 'flex';
-
-        if (cita.Cita_ID && cita.estado === 'Pendiente') {
-            try {
-                const resp = await fetch(`/api/citas/${cita.Cita_ID}/atender`, { method: 'PUT' });
-                if (!resp.ok) {
-                    const errData = await resp.json().catch(() => ({}));
-                    console.warn('[especialista] No se pudo marcar en proceso:', resp.status, errData.error || '');
-                }
-            } catch (err) {
-                console.warn('[especialista] Error marcando en proceso:', err);
-            }
-            historialTotal[indice].estado       = 'En proceso';
-            historialTotal[indice].EstadoAgenda = 'Ocupado';
-            _renderTodas();
-        }
     } catch (err) {
         console.error('[especialista] Error abriendo cita:', err);
         mostrarToast('Error al abrir la cita.', 'error');
@@ -684,9 +737,7 @@ const cerrarEmpezarCita = () => {
     if (modal) modal.style.display = 'none';
 };
 
-// ─── FINALIZAR CONSULTA ───────────────────────────────────────────────────────
-// PUNTO 3: finalizarConsultaDirecto se conserva para uso interno desde historia clínica
-// pero ya NO tiene botón visible en el modal de empezar cita
+// ─── FINALIZAR CONSULTA (uso interno) ─────────────────────────────────────────
 const finalizarConsultaDirecto = async () => {
     const indice = citaActualEmpezar;
     if (indice === null || indice === undefined) return;
@@ -770,7 +821,32 @@ async function _procesarVencimientosMultas() {
     }
 }
 
-// ─── PUNTO 5: REPORTE PROFESIONAL — Lee directamente de historia clínica en BD ─
+// ─── CAMBIO P15: lectura segura priorizando las claves OFICIALES simples
+//     ('diagnostico', 'evolucion', 'tratamiento') que ahora expone el
+//     backend en TODOS los endpoints del Reporte, conservando como
+//     respaldo las claves Pascal/legacy por compatibilidad retro ────────────
+function _leerCampoFlexible(obj, ...claves) {
+    if (!obj) return undefined;
+    for (const clave of claves) {
+        if (obj[clave] !== undefined && obj[clave] !== null && obj[clave] !== '') {
+            return obj[clave];
+        }
+    }
+    return undefined;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CAMBIO P13/P14/P15/P16 — REPORTE PROFESIONAL: FIX DEFINITIVO DE
+// SINCRONIZACIÓN, UNIFICACIÓN DE CLAVES Y RASTREO DE DATOS PESADO.
+//
+// Fuente primaria: /api/historial/cita/<cita_id> (modulo_historial/routes.py).
+// CAMBIO P16: se inyectaron console.log + alert() de diagnóstico TEMPORAL
+// justo dentro de cada '.then(data => {' que procesa la respuesta de las
+// 3 fuentes de datos (primaria + 2 respaldos), mostrando el payload EXACTO
+// recibido en el navegador. También se agregó un console.log de control
+// dentro de setEl() para ver, elemento por elemento, qué valor se está
+// inyectando en el DOM del modal "Reporte".
+// ═══════════════════════════════════════════════════════════════════════════
 const verReporteProfesional = async (indice) => {
     try {
         const cita = historialTotal[indice];
@@ -784,62 +860,128 @@ const verReporteProfesional = async (indice) => {
         let numDoc        = cita.numDoc  || '—';
 
         if (cita.Cita_ID) {
-            // PUNTO 5: Leer primero desde /api/historial/paciente/<id>/evoluciones (historia clínica completa)
-            // Esta es la MISMA fuente que alimenta historia_clinica.html, por lo tanto cualquier
-            // diagnóstico, evolución o tratamiento guardado allí aparece aquí de forma instantánea.
-            if (cita.Paciente_ID) {
-                try {
-                    const res = await fetch(`/api/historial/paciente/${cita.Paciente_ID}/evoluciones?cita_id=${cita.Cita_ID}`);
-                    if (res.ok) {
-                        const data = await res.json();
-                        if (data && data.ok && Array.isArray(data.data) && data.data.length > 0) {
-                            const entrada = data.data[0];
-                            diagnostico   = entrada.Diagnostico   || diagnostico;
-                            evolucion     = entrada.Evolucion     || evolucion;
-                            prescripcion  = entrada.Tratamiento   || prescripcion;
-                            fechaAtencion = entrada.FechaRegistro || cita.FechaAtencion || fechaAtencion;
-                        }
-                    }
-                } catch (err) {
-                    console.warn('[especialista] Fallback a historial-clinico:', err);
+            let datosObtenidos = false;
+
+            // ── Fuente primaria: /api/historial/cita/<id> ──────────────────
+            const dataHc = await fetch(
+                `/api/historial/cita/${cita.Cita_ID}?_=${Date.now()}`,
+                { cache: 'no-store' }
+            )
+                .then(r => (r.ok ? r.json() : null))
+                .then(data => {
+                    // CAMBIO P16 — RASTREO DE DATOS PESADO (fuente primaria)
+                    console.log("====== FRONTEND RECIBA DATA ======", data);
+                    alert("Datos recibidos en el navegador: " + JSON.stringify(data));
+                    return data;
+                })
+                .catch(errHc => {
+                    console.warn('[especialista] No se pudo leer /api/historial/cita/<id>, usando rutas de respaldo:', errHc);
+                    return null;
+                });
+
+            if (dataHc && dataHc.ok && dataHc.data) {
+                const d = dataHc.data;
+                // CAMBIO P15: prioridad a las claves OFICIALES simples
+                const diagVal = _leerCampoFlexible(d, 'diagnostico', 'Diagnostico');
+                const evoVal  = _leerCampoFlexible(d, 'evolucion', 'Evolucion', 'evolucion_clinica');
+                const tratVal = _leerCampoFlexible(d, 'tratamiento', 'Tratamiento');
+                if (diagVal) { diagnostico  = diagVal; datosObtenidos = true; }
+                if (evoVal)  { evolucion    = evoVal;  datosObtenidos = true; }
+                if (tratVal) { prescripcion = tratVal; datosObtenidos = true; }
+                const fechaVal = _leerCampoFlexible(d, 'FechaAtencion', 'FechaRegistro');
+                if (fechaVal) fechaAtencion = fechaVal;
+                if (d.TipoDocumento)   tipoDoc = d.TipoDocumento;
+                if (d.NumeroDocumento) numDoc  = d.NumeroDocumento;
+            }
+
+            // ── Respaldo 1: /api/historial/paciente/<id>/evoluciones ───────
+            if (!datosObtenidos && cita.Paciente_ID) {
+                const dataEv = await fetch(
+                    `/api/historial/paciente/${cita.Paciente_ID}/evoluciones?cita_id=${cita.Cita_ID}&_=${Date.now()}`,
+                    { cache: 'no-store' }
+                )
+                    .then(r => (r.ok ? r.json() : null))
+                    .then(data => {
+                        // CAMBIO P16 — RASTREO DE DATOS PESADO (respaldo 1)
+                        console.log("====== FRONTEND RECIBA DATA ======", data);
+                        alert("Datos recibidos en el navegador: " + JSON.stringify(data));
+                        return data;
+                    })
+                    .catch(err => {
+                        console.warn('[especialista] Fallback a evoluciones falló:', err);
+                        return null;
+                    });
+
+                if (dataEv && dataEv.ok && Array.isArray(dataEv.data) && dataEv.data.length > 0) {
+                    const entrada = dataEv.data[0];
+                    const diagVal = _leerCampoFlexible(entrada, 'diagnostico', 'Diagnostico');
+                    const evoVal  = _leerCampoFlexible(entrada, 'evolucion', 'Evolucion', 'evolucion_clinica');
+                    const tratVal = _leerCampoFlexible(entrada, 'tratamiento', 'Tratamiento');
+                    if (diagVal) diagnostico  = diagVal;
+                    if (evoVal)  evolucion    = evoVal;
+                    if (tratVal) prescripcion = tratVal;
+                    fechaAtencion = entrada.FechaRegistro || cita.FechaAtencion || fechaAtencion;
+                    datosObtenidos = true;
                 }
             }
 
-            // Fallback al endpoint /api/historial-clinico/<cita_id> si no se obtuvo datos
-            if (diagnostico === 'Sin diagnóstico' && evolucion === 'Sin registro') {
-                try {
-                    const res2 = await fetch(`/api/historial-clinico/${cita.Cita_ID}`);
-                    if (res2.ok) {
-                        const data2 = await res2.json();
-                        if (data2 && data2.ok && data2.data) {
-                            diagnostico   = data2.data.Diagnostico   || diagnostico;
-                            evolucion     = data2.data.Evolucion     || evolucion;
-                            prescripcion  = data2.data.Tratamiento   || prescripcion;
-                            fechaAtencion = data2.data.FechaRegistro || cita.FechaAtencion || fechaAtencion;
-                        }
-                    }
-                } catch (err2) {
-                    console.warn('[especialista] Usando caché local para reporte.', err2);
+            // ── Respaldo 2: /api/historial-clinico/<cita_id> ───────────────
+            if (!datosObtenidos && diagnostico === 'Sin diagnóstico' && evolucion === 'Sin registro') {
+                const data2 = await fetch(
+                    `/api/historial-clinico/${cita.Cita_ID}?_=${Date.now()}`,
+                    { cache: 'no-store' }
+                )
+                    .then(r => (r.ok ? r.json() : null))
+                    .then(data => {
+                        // CAMBIO P16 — RASTREO DE DATOS PESADO (respaldo 2)
+                        console.log("====== FRONTEND RECIBA DATA ======", data);
+                        alert("Datos recibidos en el navegador: " + JSON.stringify(data));
+                        return data;
+                    })
+                    .catch(err2 => {
+                        console.warn('[especialista] Usando caché local para reporte.', err2);
+                        return null;
+                    });
+
+                if (data2 && data2.ok && data2.data) {
+                    const d2 = data2.data;
+                    const diagVal = _leerCampoFlexible(d2, 'diagnostico', 'Diagnostico');
+                    const evoVal  = _leerCampoFlexible(d2, 'evolucion', 'Evolucion', 'evolucion_clinica');
+                    const tratVal = _leerCampoFlexible(d2, 'tratamiento', 'Tratamiento');
+                    if (diagVal) diagnostico  = diagVal;
+                    if (evoVal)  evolucion    = evoVal;
+                    if (tratVal) prescripcion = tratVal;
+                    fechaAtencion = d2.FechaRegistro || cita.FechaAtencion || fechaAtencion;
                 }
             }
 
             if (cita.FechaAtencion && fechaAtencion === 'N/A') fechaAtencion = cita.FechaAtencion;
 
-            // Enriquecer documento del paciente
-            try {
-                const resCita = await fetch(`/api/citas/${cita.Cita_ID}`);
-                if (resCita.ok) {
-                    const dataCita = await resCita.json();
-                    if (dataCita.TipoDocumento)  tipoDoc = dataCita.TipoDocumento;
-                    if (dataCita.NumeroDocumento) numDoc  = dataCita.NumeroDocumento;
-                }
-            } catch (err) {
-                console.warn('[especialista] No se pudo enriquecer datos del paciente.', err);
+            // ── Enriquecimiento de documento del paciente (no crítico) ─────
+            if (tipoDoc === (cita.tipoDoc || 'DOC') && numDoc === (cita.numDoc || '—')) {
+                await fetch(`/api/citas/${cita.Cita_ID}?_=${Date.now()}`, { cache: 'no-store' })
+                    .then(r => (r.ok ? r.json() : null))
+                    .then(dataCita => {
+                        if (dataCita) {
+                            if (dataCita.TipoDocumento)   tipoDoc = dataCita.TipoDocumento;
+                            if (dataCita.NumeroDocumento) numDoc  = dataCita.NumeroDocumento;
+                        }
+                    })
+                    .catch(err => {
+                        console.warn('[especialista] No se pudo enriquecer datos del paciente.', err);
+                    });
             }
         }
 
-        const setEl = (id, val) => { const el = document.getElementById(id); if (!el) return; el.innerText = val || '—'; };
-        // PUNTO 6: nombre completo ya concatenado
+        // CAMBIO P16 — RASTREO DE DATOS PESADO: console.log de control
+        // dentro de setEl(), mostrando exactamente el ID destino y el
+        // valor que se está intentando inyectar en el DOM.
+        const setEl = (id, val) => {
+            const el = document.getElementById(id);
+            console.log("Intentando meter en el ID '" + id + "' el valor:", val);
+            if (!el) return;
+            el.innerText = val || '—';
+        };
         setEl('rep-paciente',       cita.nombre);
         setEl('rep-fecha-atencion', `Atendido: ${fechaAtencion}`);
         setEl('rep-cita-info',      `Cita #${cita.Cita_ID || '—'} — ${cita.fecha} ${formatearHoraAmPm(cita.hora)}`);
@@ -857,22 +999,7 @@ const verReporteProfesional = async (indice) => {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
-// REQ 5 + REQ 6 + REQ 7 + REQ 8
 // irAHistoriaClinica() — NAVEGACIÓN A LA VISTA HTML DE HISTORIA CLÍNICA
-//
-// REGLA DE ORO:
-//   window.location.href → /historial/paciente/<id>?cita_id=<id>
-//   └─ Esta URL apunta a historial_bp → vista_historia_clinica()
-//   └─ Flask devuelve render_template('historia_clinica.html')   ← HTML
-//   └─ El navegador carga la interfaz visual normalmente
-//
-// NUNCA hacer:
-//   fetch('/historial/paciente/...') ← devolvería HTML al fetch y se ignora
-//   window.location.href = '/api/historial/...'  ← mostraría JSON crudo
-//
-// El único fetch() permitido aquí es el fallback para resolver Paciente_ID
-// desde /api/citas/<id> cuando no está en caché — ese endpoint devuelve JSON
-// limpio y no navega; solo alimenta el dato para construir la URL de vista.
 // ══════════════════════════════════════════════════════════════════════════════
 const irAHistoriaClinica = () => {
     try {
@@ -892,37 +1019,21 @@ const irAHistoriaClinica = () => {
             return;
         }
 
-        // Guardar respaldo en sessionStorage para resistir recargas de página
         sessionStorage.setItem('hc_cita_id',     String(cita.Cita_ID));
         sessionStorage.setItem('hc_paciente_id', String(cita.Paciente_ID || ''));
 
-        /**
-         * navegarAHistoriaClinica(pacienteId)
-         * ─────────────────────────────────────
-         * Construye la URL de VISTA y navega con window.location.href.
-         * La ruta destino es:
-         *   GET /historial/paciente/<pacienteId>?cita_id=<citaId>
-         *   └─ historial_bp → vista_historia_clinica() → render_template HTML
-         *
-         * NO es una ruta de API. El navegador recibirá HTML, no JSON.
-         */
         const navegarAHistoriaClinica = (pacienteId) => {
             const params = new URLSearchParams({ cita_id: cita.Cita_ID });
-            // ✅ RUTA DE VISTA — render_template, siempre devuelve HTML
             window.location.href = `/historial/paciente/${pacienteId}?${params.toString()}`;
         };
 
         const pacienteId = cita.Paciente_ID || 0;
 
         if (pacienteId) {
-            // Caso directo: Paciente_ID ya está en caché → navegamos de inmediato
             navegarAHistoriaClinica(pacienteId);
             return;
         }
 
-        // Fallback: Paciente_ID no está en caché.
-        // Hacemos fetch a /api/citas/<id> (JSON puro, citas_bp) para obtenerlo.
-        // Este fetch NO navega — solo extrae el dato y llama a navegarAHistoriaClinica().
         fetch(`/api/citas/${cita.Cita_ID}`)
             .then(r => {
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -934,7 +1045,6 @@ const irAHistoriaClinica = () => {
                     mostrarToast('No se pudo resolver el paciente de esta cita.', 'error');
                     return;
                 }
-                // Actualizar caché en memoria para la próxima vez
                 historialTotal[indice].Paciente_ID = pid;
                 sessionStorage.setItem('hc_paciente_id', String(pid));
                 navegarAHistoriaClinica(pid);
@@ -1168,10 +1278,6 @@ window.validarPasswordActualEsp = function () {
     .catch(() => mostrarToast('Error de conexión al verificar la contraseña.', 'error'));
 };
 
-// PUNTO 8: guardarPerfilCompleto ahora lee el input único "Nombre completo"
-// (conf-nombre-completo) y lo divide en Nombres/Apellidos antes de enviarlo
-// al backend, ya que /api/usuarios/<id> y la tabla 'usuarios' siguen
-// esperando ambos campos por separado.
 const guardarPerfilCompleto = async () => {
     const usuarioId  = usuarioSesionActual?.Usuario_ID;
     const errActual  = document.getElementById('error-pass-actual');
@@ -1297,7 +1403,6 @@ window.onload = () => {
         setInterval(actualizarReloj, 1000);
         cargarDatosEspecialista();
 
-        // REQ 2: procesar vencimientos de multas al cargar y luego cada 60s
         _procesarVencimientosMultas();
         setInterval(_procesarVencimientosMultas, 60000);
 

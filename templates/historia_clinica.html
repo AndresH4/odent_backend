@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Historia Clínica | Stylo Dental</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/historia_clinica.css') }}">
@@ -13,171 +12,236 @@
     data-paciente-id="{{ paciente_id | default(0) | int }}"
     data-cita-id="{{ cita_id | default(0) | int }}">
 
-    <header class="hc-header">
-        <div class="hc-header-inner">
-            <div class="hc-brand">
-                <div class="hc-logo">OD</div>
-                <div class="hc-brand-text">
-                    <h1>STYLO<span style="color:white;">DENTAL</span></h1>
-                    <p>Historia Clínica Digital</p>
+    <!-- ══════════════════════════════════════════════════════════
+         BLOQUE STICKY: HEADER + BANNER PACIENTE
+    ══════════════════════════════════════════════════════════ -->
+    <div class="hc-sticky-top">
+
+        <header class="hc-header">
+            <div class="hc-header-inner">
+                <div class="hc-brand">
+                    <!-- CAMBIO 1: logo muestra inicial del paciente, cargada dinámicamente por JS -->
+                    <div class="hc-logo" id="hc-logo-inicial">?</div>
+                    <div class="hc-brand-text">
+                        <h1>STYLO<span style="color:white;">DENTAL</span></h1>
+                        <p>Historia Clínica Digital</p>
+                    </div>
+                </div>
+                <div class="hc-header-actions">
+                    <button class="btn-hc btn-back" onclick="volverAlPanel()">
+                        <i class="fas fa-arrow-left"></i> Volver
+                    </button>
+                    <button class="btn-hc btn-finish" id="btn-finalizar" onclick="finalizarConsulta()">
+                        <i class="fas fa-check-circle"></i> Finalizar Consulta
+                    </button>
                 </div>
             </div>
-            <div class="hc-header-actions">
-                <button class="btn-hc btn-back" onclick="volverAlPanel()">
-                    <i class="fas fa-arrow-left"></i> Volver
-                </button>
-                <button class="btn-hc btn-save" id="btn-guardar" onclick="guardarHistoria(false)">
-                    <i class="fas fa-save"></i> Guardar
-                </button>
-                <button class="btn-hc btn-finish" id="btn-finalizar" onclick="guardarHistoria(true)">
-                    <i class="fas fa-check-circle"></i> Finalizar Consulta
-                </button>
-            </div>
-        </div>
-    </header>
+        </header>
 
-    <div class="hc-patient-bar" id="patient-bar">
-        <div class="hc-patient-bar-inner">
-            <div class="hc-info-chip">
-                <span class="lbl">Paciente</span>
-                <span class="val accent skeleton skeleton-line w-60" id="p-nombre" style="height:16px;"></span>
+        <!-- BANNER DATOS DEL PACIENTE -->
+        <div class="hc-patient-bar" id="patient-bar">
+            <div class="hc-patient-bar-inner">
+                <div class="hc-info-chip">
+                    <span class="lbl">PACIENTE</span>
+                    <span class="val skeleton skeleton-line w-60" id="p-nombre" style="height:14px;"></span>
+                </div>
+                <div class="hc-info-chip">
+                    <span class="lbl">DOCUMENTO</span>
+                    <span class="val skeleton skeleton-line w-40" id="p-doc" style="height:14px;"></span>
+                </div>
+                <div class="hc-info-chip">
+                    <span class="lbl">EDAD</span>
+                    <span class="val skeleton skeleton-line" id="p-edad" style="height:14px;width:50px;"></span>
+                </div>
+                <div class="hc-info-chip">
+                    <span class="lbl">EPS</span>
+                    <span class="val skeleton skeleton-line w-60" id="p-eps" style="height:14px;"></span>
+                </div>
+                <div class="hc-info-chip">
+                    <span class="lbl">TELÉFONO</span>
+                    <span class="val skeleton skeleton-line w-40" id="p-tel" style="height:14px;"></span>
+                </div>
+                <div class="hc-info-chip">
+                    <span class="lbl">CORREO</span>
+                    <span class="val skeleton skeleton-line w-60" id="p-correo" style="height:14px;"></span>
+                </div>
             </div>
-            <div class="hc-info-chip">
-                <span class="lbl">Documento</span>
-                <span class="val skeleton skeleton-line w-40" id="p-doc" style="height:16px;"></span>
+
+            <!-- ALERTAS CRÍTICAS DE VIDA O MUERTE -->
+            <div class="hc-critical-alerts" id="hc-critical-alerts" style="display:none;">
+                <div class="hc-alert-strip">
+                    <div class="hc-alert-item hc-alert-alergia" id="alert-alergias-wrap">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span class="hc-alert-label">ALERGIAS:</span>
+                        <span class="hc-alert-val" id="alert-alergias-val"></span>
+                    </div>
+                    <div class="hc-alert-item hc-alert-condicion" id="alert-condiciones-wrap" style="display:none;">
+                        <i class="fas fa-heartbeat"></i>
+                        <span class="hc-alert-label">CONDICIONES DE RIESGO:</span>
+                        <span class="hc-alert-val" id="alert-condiciones-val"></span>
+                    </div>
+                </div>
             </div>
-            <div class="hc-info-chip">
-                <span class="lbl">Edad</span>
-                <span class="val skeleton skeleton-line" id="p-edad" style="height:16px;width:40px;"></span>
-            </div>
-            <div class="hc-info-chip">
-                <span class="lbl">EPS</span>
-                <span class="val skeleton skeleton-line w-60" id="p-eps" style="height:16px;"></span>
-            </div>
-            <div class="hc-info-chip">
-                <span class="lbl">Teléfono</span>
-                <span class="val skeleton skeleton-line w-40" id="p-tel" style="height:16px;"></span>
-            </div>
-            <div class="hc-info-chip">
-                <span class="lbl">Correo</span>
-                <span class="val skeleton skeleton-line w-60" id="p-correo" style="height:16px;"></span>
+            <div class="hc-no-alerts" id="hc-no-alerts" style="display:none;">
+                <i class="fas fa-shield-alt"></i>
+                <span>Sin alertas médicas críticas registradas</span>
             </div>
         </div>
+
     </div>
+    <!-- /hc-sticky-top -->
 
     <main class="hc-main">
 
-        <!-- 1. MOTIVO DE LA CONSULTA -->
-        <div class="aseg-card">
-            <div class="aseg-card-label">
-                <i class="fas fa-comment-medical"></i>
-                1. Motivo de la Consulta
-            </div>
-            <div class="form-group">
-                <textarea id="hc-motivo" class="hc-textarea"
-                    placeholder="¿Cuál es la razón principal de la visita hoy?"></textarea>
-            </div>
-        </div>
-
-        <!-- 2. EXAMEN Y MAPA DENTAL -->
-        <div class="aseg-card">
-            <div class="aseg-card-label">
-                <i class="fas fa-tooth"></i>
-                2. Examen y Mapa Dental
-            </div>
-
-            <div class="odontograma-wrap" id="odontograma-wrap">
-                <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;" id="odo-sup"></div>
-                <div class="odo-divider"></div>
-                <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;" id="odo-inf"></div>
-
-                <div id="selector-estado" onclick="event.stopPropagation()">
-                    <p style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;
-                               letter-spacing:.15em;margin:0 0 8px 2px;">
-                        Diente <span id="num-diente-sel" style="color:var(--primary);">--</span>
-                    </p>
-                    <button class="sel-btn" onclick="asignarEstado('azul')">
-                        <span class="dot" style="background:#3b82f6;"></span> Tratamiento
-                    </button>
-                    <button class="sel-btn" onclick="asignarEstado('rojo')">
-                        <span class="dot" style="background:#ef4444;"></span> Daño / Caries
-                    </button>
-                    <button class="sel-btn" onclick="asignarEstado('verde')">
-                        <span class="dot" style="background:#22c55e;"></span> Sano / Listo
-                    </button>
-                    <button class="sel-btn" onclick="asignarEstado('amarillo')">
-                        <span class="dot" style="background:#eab308;"></span> En Observación
-                    </button>
-                    <button class="sel-btn" onclick="asignarEstado('')">
-                        <span class="dot" style="border:2px solid #cbd5e1;background:white;"></span> Limpiar
-                    </button>
-                </div>
-            </div>
-
-            <div style="display:flex;gap:16px;margin:14px 0 20px;flex-wrap:wrap;">
-                <span class="leyenda-item" style="color:#1d4ed8;">
-                    <span class="dot" style="background:#3b82f6;"></span>Tratamiento
-                </span>
-                <span class="leyenda-item" style="color:#b91c1c;">
-                    <span class="dot" style="background:#ef4444;"></span>Daño/Caries
-                </span>
-                <span class="leyenda-item" style="color:#15803d;">
-                    <span class="dot" style="background:#22c55e;"></span>Sano
-                </span>
-                <span class="leyenda-item" style="color:#854d0e;">
-                    <span class="dot" style="background:#eab308;"></span>Observación
-                </span>
-            </div>
-
-            <div class="hallazgos-wrap">
-                <p class="hallazgos-titulo">Observaciones y Hallazgos</p>
-                <div id="lista-hallazgos"></div>
-                <button onclick="agregarHallazgo()" class="btn-agregar-hallazgo">
-                    <i class="fas fa-plus-circle" style="font-size:15px;"></i>
-                    Añadir hallazgo
-                </button>
-            </div>
-        </div>
-
-        <!-- 3. EVOLUCIÓN CLÍNICA -->
-        <div class="aseg-card">
-            <div class="aseg-card-label">
-                <i class="fas fa-clipboard-check"></i>
-                3. Evolución Clínica
-            </div>
-            <div class="form-group">
-                <label class="hc-label">Evolución / Procedimiento realizado</label>
-                <textarea id="hc-evolucion" class="hc-textarea"
-                    placeholder="Describa los avances y procedimientos realizados en esta sesión..."></textarea>
-            </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label class="hc-label">Diagnóstico</label>
-                    <input type="text" id="hc-diag" class="hc-input"
-                        placeholder="Conclusión médica">
-                </div>
-                <div class="form-group">
-                    <label class="hc-label">Plan a seguir / Tratamiento</label>
-                    <input type="text" id="hc-plan" class="hc-input"
-                        placeholder="Próxima cita / Medicamentos">
-                </div>
-            </div>
-        </div>
-
-        <!-- 4. HISTORIAL DE EVOLUCIONES PREVIAS -->
-        <div class="aseg-card">
-            <div class="aseg-card-label">
+        <!-- SISTEMA DE PESTAÑAS -->
+        <div class="hc-tabs-nav" role="tablist">
+            <button class="hc-tab-btn active" data-tab="actual" onclick="cambiarTab('actual')" role="tab" aria-selected="true">
+                <i class="fas fa-user-md"></i>
+                Consulta Actual
+            </button>
+            <button class="hc-tab-btn" data-tab="historial" onclick="cambiarTab('historial')" role="tab" aria-selected="false">
                 <i class="fas fa-history"></i>
-                4. Historial de Evoluciones
-            </div>
-            <div id="evoluciones-container">
-                <div style="display:flex;flex-direction:column;gap:8px;">
-                    <div class="skeleton skeleton-line"></div>
-                    <div class="skeleton skeleton-line w-60"></div>
-                    <div class="skeleton skeleton-line w-40"></div>
+                Historial Clínico
+            </button>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════════
+             PESTAÑA 1: CONSULTA ACTUAL
+        ══════════════════════════════════════════════════════════ -->
+        <div class="hc-tab-panel" id="tab-actual" role="tabpanel">
+
+            <!-- 1. MOTIVO DE LA CONSULTA -->
+            <div class="aseg-card">
+                <div class="aseg-card-label">
+                    <i class="fas fa-comment-medical"></i>
+                    1. Motivo de la Consulta
+                </div>
+                <div class="form-group">
+                    <textarea id="hc-motivo" class="hc-textarea"
+                        placeholder="¿Cuál es la razón principal de la visita hoy?"></textarea>
                 </div>
             </div>
+
+            <!-- 2. EXAMEN Y MAPA DENTAL -->
+            <div class="aseg-card">
+                <div class="aseg-card-label">
+                    <i class="fas fa-tooth"></i>
+                    2. Examen y Mapa Dental
+                </div>
+
+                <div class="odontograma-wrap" id="odontograma-wrap">
+                    <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;" id="odo-sup"></div>
+                    <div class="odo-divider"></div>
+                    <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;" id="odo-inf"></div>
+
+                    <div id="selector-estado" onclick="event.stopPropagation()">
+                        <p style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;
+                                   letter-spacing:.15em;margin:0 0 8px 2px;">
+                            Diente <span id="num-diente-sel" style="color:var(--primary);">--</span>
+                        </p>
+                        <button class="sel-btn" onclick="asignarEstado('azul')">
+                            <span class="dot" style="background:#3b82f6;"></span> Tratamiento
+                        </button>
+                        <button class="sel-btn" onclick="asignarEstado('rojo')">
+                            <span class="dot" style="background:#ef4444;"></span> Daño / Caries
+                        </button>
+                        <button class="sel-btn" onclick="asignarEstado('verde')">
+                            <span class="dot" style="background:#22c55e;"></span> Sano / Listo
+                        </button>
+                        <button class="sel-btn" onclick="asignarEstado('amarillo')">
+                            <span class="dot" style="background:#eab308;"></span> En Observación
+                        </button>
+                        <button class="sel-btn" onclick="asignarEstado('')">
+                            <span class="dot" style="border:2px solid #cbd5e1;background:white;"></span> Limpiar
+                        </button>
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:16px;margin:14px 0 20px;flex-wrap:wrap;">
+                    <span class="leyenda-item" style="color:#1d4ed8;">
+                        <span class="dot" style="background:#3b82f6;"></span>Tratamiento
+                    </span>
+                    <span class="leyenda-item" style="color:#b91c1c;">
+                        <span class="dot" style="background:#ef4444;"></span>Daño/Caries
+                    </span>
+                    <span class="leyenda-item" style="color:#15803d;">
+                        <span class="dot" style="background:#22c55e;"></span>Sano
+                    </span>
+                    <span class="leyenda-item" style="color:#854d0e;">
+                        <span class="dot" style="background:#eab308;"></span>Observación
+                    </span>
+                </div>
+
+                <div class="hallazgos-wrap">
+                    <p class="hallazgos-titulo">Observaciones y Hallazgos</p>
+                    <div id="lista-hallazgos"></div>
+                    <button onclick="agregarHallazgo()" class="btn-agregar-hallazgo" type="button">
+                        <i class="fas fa-plus-circle" style="font-size:15px;"></i>
+                        Añadir hallazgo
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3. EVOLUCIÓN CLÍNICA -->
+            <div class="aseg-card">
+                <div class="aseg-card-label">
+                    <i class="fas fa-clipboard-check"></i>
+                    3. Evolución Clínica
+                </div>
+                <div class="form-group">
+                    <label class="hc-label">Evolución / Procedimiento realizado</label>
+                    <textarea id="hc-evolucion" class="hc-textarea"
+                        placeholder="Describa los avances y procedimientos realizados en esta sesión..."></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="hc-label">Diagnóstico (CIE-10)</label>
+                        <div class="cie10-wrapper">
+                            <div class="cie10-input-container">
+                                <i class="fas fa-search cie10-search-icon"></i>
+                                <input type="text" id="hc-diag" class="hc-input cie10-input"
+                                    placeholder="Buscar código o descripción CIE-10..."
+                                    autocomplete="off"
+                                    oninput="buscarCIE10(this.value)"
+                                    onblur="ocultarDropdownCIE10()">
+                            </div>
+                            <div class="cie10-dropdown" id="cie10-dropdown"></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="hc-label">Plan a seguir / Tratamiento</label>
+                        <input type="text" id="hc-plan" class="hc-input"
+                            placeholder="Próxima cita / Medicamentos">
+                    </div>
+                </div>
+            </div>
+
         </div>
+        <!-- /tab-actual -->
+
+        <!-- ══════════════════════════════════════════════════════════
+             PESTAÑA 2: HISTORIAL CLÍNICO
+        ══════════════════════════════════════════════════════════ -->
+        <div class="hc-tab-panel hc-tab-hidden" id="tab-historial" role="tabpanel">
+
+            <!-- 4. HISTORIAL DE EVOLUCIONES PREVIAS -->
+            <div class="aseg-card">
+                <div class="aseg-card-label">
+                    <i class="fas fa-history"></i>
+                    4. Historial de Evoluciones
+                    <span class="hc-hist-badge" id="hist-count-badge" style="display:none;"></span>
+                </div>
+                <div id="evoluciones-container">
+                    <div style="display:flex;flex-direction:column;gap:10px;">
+                        <div class="skeleton skeleton-line" style="height:56px;border-radius:12px;"></div>
+                        <div class="skeleton skeleton-line" style="height:56px;border-radius:12px;"></div>
+                        <div class="skeleton skeleton-line w-60" style="height:56px;border-radius:12px;"></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        <!-- /tab-historial -->
 
     </main>
 
