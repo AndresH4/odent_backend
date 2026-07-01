@@ -1,43 +1,18 @@
 // =============================================================================
 // ranking.js  —  Stylo Dental · Ranking de Satisfacción
-// VERSIÓN CORREGIDA (v3)
-// =============================================================================
-//
-// CAMBIOS CLAVE respecto a la versión anterior:
-//
-// 1) ESTADO POR DEFECTO SIEMPRE ACTIVO (true), tanto en las variables
-//    iniciales como en cualquier ruta de error. Antes, un fallo de red al
-//    cargar la configuración ponía `estadoEnvioActivo = false` "por
-//    seguridad" — eso es exactamente lo que hacía parecer que el ranking
-//    "se apagaba solo" o "no se guardaba": no era un problema de guardado,
-//    era la propia UI reescribiéndose a inactivo ante cualquier error.
-//
-// 2) El estado SOLO cambia a inactivo por una de estas dos causas:
-//      a) El servidor respondió explícitamente Estado=2 (dato real de la BD).
-//      b) El usuario dio clic en el toggle y luego en "Guardar cambios".
-//    Un error de red, un fetch fallido, o una respuesta inesperada YA NO
-//    fuerzan estadoEnvioActivo a false. En su lugar, se muestra un error
-//    y se conserva el último estado conocido (o el default activo).
-//
-// 3) Se eliminó la llamada rota `fetch(`${BASE_URL}/encuesta/estado`)` que
-//    leía `estadoData.activo` (campo que el backend nunca devolvía con ese
-//    contrato). Ahora TODO el frontend usa una única función central
-//    `_obtenerEstadoDesdeServidor()` que llama a GET /config-ranking,
-//    la única fuente de verdad real.
-//
-// 4) `enviarRespuestaEncuesta()` ya no desactiva el estado local ante un
-//    error de verificación — solo lo hace si el servidor confirma Estado=2.
 // =============================================================================
 
 const BASE_URL = '/api';
 
-// Por defecto: ACTIVO. Este valor solo se usa hasta que la primera carga
-// real desde el servidor confirme el estado verdadero.
-let estadoEnvioActivo    = true;   // reflejo local del valor en DB
-let estadoPendiente      = true;   // valor seleccionado pero aún no guardado
-let cambiosPendientes    = false;  // hay cambios no persistidos
-let preguntasCache       = [];
-let idPreguntaPendente   = null;
+let estadoEnvioActivo  = true;
+let estadoPendiente    = true;
+let cambiosPendientes  = false;
+let preguntasCache     = [];
+let idPreguntaPendente = null;
+
+// Rastreo de preguntas modificadas localmente (pendientes de "Guardar cambios")
+// Estructura: Map<ID_Pregunta, { Texto_Pregunta, Orden, Activa }>
+const preguntasModificadas = new Map();
 
 // =============================================================================
 // UTILIDADES DE UI
@@ -52,21 +27,14 @@ function mostrarMensaje(elId, tipo, texto) {
     setTimeout(() => { el.style.display = 'none'; }, 6000);
 }
 
-/**
- * Toast corporativo con título y subtítulo opcionales.
- * @param {string} titulo   Texto principal
- * @param {string} subtexto Texto secundario (opcional)
- * @param {'ok'|'error'} tipo
- */
 function lanzarToast(titulo, subtexto = '', tipo = 'ok') {
-    const toast    = document.getElementById('toast-ranking');
-    const iconoEl  = document.getElementById('toast-icono');
-    const textoEl  = document.getElementById('toast-texto');
-    const subEl    = document.getElementById('toast-subtexto');
+    const toast   = document.getElementById('toast-ranking');
+    const iconoEl = document.getElementById('toast-icono');
+    const textoEl = document.getElementById('toast-texto');
+    const subEl   = document.getElementById('toast-subtexto');
 
     if (!toast) return;
 
-    // Reiniciar animación
     toast.classList.remove('show');
     void toast.offsetWidth;
 
@@ -103,7 +71,7 @@ function ocultarError(inputEl, errEl) {
 function renderEstrellas(promedio) {
     let html = '<div class="estrellas-display">';
     for (let i = 1; i <= 5; i++) {
-        if (promedio >= i)           html += '<span class="star llena">★</span>';
+        if (promedio >= i)            html += '<span class="star llena">★</span>';
         else if (promedio >= i - 0.5) html += '<span class="star media">★</span>';
         else                          html += '<span class="star">★</span>';
     }
@@ -118,6 +86,7 @@ function mostrarConfig() {
     document.getElementById('rankingView').style.display = 'none';
     document.getElementById('configView').style.display  = 'block';
     cambiosPendientes = false;
+    preguntasModificadas.clear();
     cargarPreguntas();
     cargarEstadoEnvio();
 }
@@ -129,16 +98,9 @@ function volverRanking() {
 }
 
 // =============================================================================
-// ESTADO DE ENVÍO — fuente única de verdad + carga + UI + bloqueo
+// ESTADO DE ENVÍO — fuente única de verdad
 // =============================================================================
 
-/**
- * Única función que consulta el estado real en el servidor.
- * Devuelve { ok: true, estado: 1|2 } si pudo leerlo, o { ok: false, error }
- * si hubo un problema de red/servidor. NUNCA decide por sí sola apagar el
- * envío: eso es responsabilidad de quien la llama, y solo debe hacerlo si
- * ok === true y estado === 2.
- */
 async function _obtenerEstadoDesdeServidor() {
     try {
         const res  = await fetch(`${BASE_URL}/config-ranking`);
@@ -162,41 +124,28 @@ async function _obtenerEstadoDesdeServidor() {
     }
 }
 
-/**
- * Carga el estado persistido en BD y sincroniza la UI.
- * El estado en DB es la fuente de verdad.
- *
- * CORREGIDO: si la carga falla (red caída, servidor no responde, etc.),
- * YA NO se fuerza estadoEnvioActivo = false. Se conserva el último estado
- * conocido (o el default `true` si es la primera carga) y solo se informa
- * el error, para no apagar el envío de encuestas por un problema transitorio.
- */
 async function cargarEstadoEnvio() {
     const resultado = await _obtenerEstadoDesdeServidor();
 
-    if (!resultado.ok) {
-        console.error('[cargarEstadoEnvio]', resultado.error);
-        mostrarMensaje(
-            'mensaje-global-config',
-            'error',
-            `⚠️ No se pudo verificar el estado del envío (se mantiene el último valor conocido: ${estadoEnvioActivo ? 'Activo' : 'Inactivo'}).`
-        );
-        // No tocamos estadoEnvioActivo/estadoPendiente: se conserva tal cual.
-        _aplicarEstadoUI();
-        return;
+    if (resultado.ok) {
+        estadoEnvioActivo = resultado.estado === 1;
+        estadoPendiente   = estadoEnvioActivo;
+        cambiosPendientes = false;
     }
-
-    // Éxito: el servidor es la única fuente de verdad, se adopta tal cual.
-    estadoEnvioActivo = resultado.estado === 1;
-    estadoPendiente   = estadoEnvioActivo;
-    cambiosPendientes = false;
 
     _aplicarEstadoUI();
 }
 
-/**
- * Propaga el estado visual a todos los elementos de la UI.
- */
+async function _sincronizarBannerRanking() {
+    const resultado = await _obtenerEstadoDesdeServidor();
+    if (resultado.ok) {
+        estadoEnvioActivo = resultado.estado === 1;
+        estadoPendiente   = estadoEnvioActivo;
+    }
+    _actualizarBannerEstado();
+    _bloquearControlesEnvio(!estadoEnvioActivo);
+}
+
 function _aplicarEstadoUI() {
     const btn   = document.getElementById('btn-toggle-estado');
     const label = document.getElementById('toggle-label-text');
@@ -215,13 +164,8 @@ function _aplicarEstadoUI() {
         }
     }
 
-    // Banner en vista ranking refleja el estado PERSISTIDO (no el pendiente)
     _actualizarBannerEstado();
-
-    // Controles de envío se bloquean según estado PERSISTIDO
     _bloquearControlesEnvio(!estadoEnvioActivo);
-
-    // Botón guardar: indicar si hay cambios pendientes
     _actualizarBotonGuardar();
 }
 
@@ -229,7 +173,7 @@ function _actualizarBotonGuardar() {
     const btn = document.getElementById('btn-guardar-cambios');
     if (!btn) return;
     const textoEl = btn.querySelector('.btn-guardar-texto');
-    if (cambiosPendientes) {
+    if (cambiosPendientes || preguntasModificadas.size > 0) {
         btn.style.boxShadow = '0 0 0 3px rgba(2, 132, 199, 0.18), 0 2px 12px rgba(2, 132, 199, 0.28)';
         if (textoEl) textoEl.textContent = 'Guardar cambios';
     } else {
@@ -237,10 +181,6 @@ function _actualizarBotonGuardar() {
     }
 }
 
-/**
- * Banner de advertencia en rankingView con diseño corporativo.
- * Refleja estado PERSISTIDO (estadoEnvioActivo), no el pendiente.
- */
 function _actualizarBannerEstado() {
     const bannerId = 'banner-envio-inactivo';
     let   banner   = document.getElementById(bannerId);
@@ -304,12 +244,6 @@ function _bloquearControlesEnvio(bloquear) {
 // =============================================================================
 // TOGGLE — actualiza estado pendiente (NO persiste hasta "Guardar cambios")
 // =============================================================================
-//
-// Este es el ÚNICO punto donde el usuario puede iniciar un cambio a
-// inactivo. Nada más en este archivo puede poner estadoPendiente en false
-// salvo esta función o la confirmación real del servidor en
-// cargarEstadoEnvio() / guardarCambiosConfig().
-// =============================================================================
 
 function toggleEstado() {
     estadoPendiente   = !estadoPendiente;
@@ -318,7 +252,8 @@ function toggleEstado() {
 }
 
 // =============================================================================
-// GUARDAR CAMBIOS — persiste el estado pendiente en DB (única vía de escritura)
+// GUARDAR CAMBIOS — persiste estado + todas las preguntas modificadas en BD
+// en una sola llamada atómica a /api/config-ranking/guardar-todo
 // =============================================================================
 
 async function guardarCambiosConfig() {
@@ -331,36 +266,72 @@ async function guardarCambiosConfig() {
         if (textoEl) textoEl.textContent = 'Guardando…';
     }
 
+    // ── 1. Capturar texto inline de inputs abiertos en la lista de preguntas ──
+    // Si el usuario editó el texto de una pregunta directamente en el DOM
+    // (campo inline que podría existir) lo recogemos antes de armar el payload.
+    document.querySelectorAll('.pregunta-item').forEach(item => {
+        const id     = Number(item.dataset.id);
+        const input  = item.querySelector('input[type="text"].pregunta-input-inline');
+        if (input) {
+            const texto = (input.value || '').trim();
+            if (texto) {
+                const base = preguntasCache.find(p => p.ID_Pregunta === id) || {};
+                preguntasModificadas.set(id, {
+                    ID_Pregunta:    id,
+                    Texto_Pregunta: texto,
+                    Orden:          base.Orden  ?? 0,
+                    Activa:         base.Activa ?? 1,
+                });
+            }
+        }
+    });
+
+    // ── 2. Construir payload completo ─────────────────────────────────────────
+    const payload = {
+        Estado:              estadoPendiente ? 1 : 2,
+        preguntas_modificadas: Array.from(preguntasModificadas.values()),
+    };
+
     try {
-        const res = await fetch(`${BASE_URL}/config-ranking`, {
+        const res = await fetch(`${BASE_URL}/config-ranking/guardar-todo`, {
             method:  'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ Estado: estadoPendiente ? 1 : 2 })
+            body:    JSON.stringify(payload),
         });
         const data = await res.json();
 
         if (!res.ok || !data.ok) throw new Error(data.error || 'Error al guardar la configuración');
 
-        // Confirmar con el valor que retorna el servidor (fuente de verdad)
+        // ── 3. Adoptar valores confirmados por el servidor ────────────────────
         const estadoConfirmado = data.data?.Estado ?? (estadoPendiente ? 1 : 2);
         estadoEnvioActivo      = parseInt(estadoConfirmado, 10) === 1;
         estadoPendiente        = estadoEnvioActivo;
         cambiosPendientes      = false;
+        preguntasModificadas.clear();
+
+        // Reflejar en caché los textos confirmados si el servidor los devuelve
+        if (Array.isArray(data.data?.preguntas_actualizadas)) {
+            data.data.preguntas_actualizadas.forEach(p => {
+                const cached = preguntasCache.find(c => c.ID_Pregunta === p.ID_Pregunta);
+                if (cached) cached.Texto_Pregunta = p.Texto_Pregunta;
+            });
+        }
 
         _aplicarEstadoUI();
 
-        lanzarToast(
-            'Cambios guardados correctamente',
-            estadoEnvioActivo
-                ? 'El envío automático está activo.'
-                : 'El envío automático está suspendido.',
-            'ok'
-        );
+        // Subtexto informativo con resumen de lo guardado
+        const totalPreguntas = payload.preguntas_modificadas.length;
+        const subtexto = [
+            estadoEnvioActivo ? 'Envío automático: Activo.' : 'Envío automático: Suspendido.',
+            totalPreguntas > 0
+                ? `${totalPreguntas} pregunta${totalPreguntas > 1 ? 's' : ''} actualizada${totalPreguntas > 1 ? 's' : ''}.`
+                : '',
+        ].filter(Boolean).join(' ');
+
+        lanzarToast('Cambios guardados correctamente', subtexto, 'ok');
 
     } catch (err) {
         console.error('[guardarCambiosConfig]', err);
-        // Fallo al GUARDAR: revertimos el toggle visual al último estado
-        // confirmado por el servidor (no lo forzamos a inactivo).
         estadoPendiente   = estadoEnvioActivo;
         cambiosPendientes = false;
         _aplicarEstadoUI();
@@ -378,22 +349,9 @@ async function guardarCambiosConfig() {
 // =============================================================================
 // ENVÍO DE RESPUESTA — doble validación local + servidor
 // =============================================================================
-//
-// CORREGIDO:
-//  - Se usa _obtenerEstadoDesdeServidor() (GET /config-ranking) en vez del
-//    endpoint roto `/encuesta/estado` con el campo inexistente `activo`.
-//  - Si la verificación con el servidor FALLA (red, timeout, etc.), ya NO
-//    se desactiva el estado local. Se informa el error y se detiene el
-//    envío de forma segura, pero sin reescribir la configuración persistida.
-//  - El estado local solo se pone en false aquí si el servidor CONFIRMA
-//    Estado=2, o si el propio backend rechaza el POST /respuesta con
-//    bloqueado:true (que también es una confirmación real del servidor).
-// =============================================================================
 
 async function enviarRespuestaEncuesta(citaId, preguntaId, respuesta) {
 
-    // 1. Verificación local inmediata (evita una llamada innecesaria si ya
-    //    sabemos, por la última sincronización real, que está inactivo).
     if (!estadoEnvioActivo) {
         return {
             ok:        false,
@@ -402,17 +360,14 @@ async function enviarRespuestaEncuesta(citaId, preguntaId, respuesta) {
         };
     }
 
-    // 2. Confirmación con el servidor antes de enviar (fuente de verdad real)
     const verificacion = await _obtenerEstadoDesdeServidor();
 
     if (!verificacion.ok) {
-        // Fallo de red/servidor al verificar: NO tocamos estadoEnvioActivo.
         console.error('[enviarRespuestaEncuesta] verificación fallida', verificacion.error);
         return { ok: false, error: 'No se pudo verificar el estado del sistema. Intenta nuevamente.' };
     }
 
     if (verificacion.estado === 2) {
-        // Confirmado por el servidor: sí está inactivo. Ahora sí sincronizamos.
         estadoEnvioActivo = false;
         estadoPendiente   = false;
         cambiosPendientes = false;
@@ -424,7 +379,6 @@ async function enviarRespuestaEncuesta(citaId, preguntaId, respuesta) {
         };
     }
 
-    // 3. Envío real
     try {
         const res  = await fetch(`${BASE_URL}/respuesta`, {
             method:  'POST',
@@ -435,7 +389,6 @@ async function enviarRespuestaEncuesta(citaId, preguntaId, respuesta) {
 
         if (!data.ok) {
             if (data.bloqueado) {
-                // El backend confirma explícitamente que está inactivo.
                 estadoEnvioActivo = false;
                 estadoPendiente   = false;
                 cambiosPendientes = false;
@@ -638,6 +591,9 @@ function cerrarModalBtn() {
     document.getElementById('modal-editar').style.display = 'none';
 }
 
+// guardarEdicion ahora persiste inmediatamente en BD Y registra en
+// preguntasModificadas para que quede en el próximo "Guardar cambios"
+// como confirmación redundante si algo falló en la llamada individual.
 async function guardarEdicion() {
     const id      = Number(document.getElementById('modal-pregunta-id').value);
     const inputEl = document.getElementById('modal-texto-pregunta');
@@ -667,13 +623,24 @@ async function guardarEdicion() {
 
         if (!data.ok) throw new Error(data.error || 'Error al actualizar la pregunta');
 
+        // Actualizar caché local
         preguntaActual.Texto_Pregunta = texto;
+
+        // Registrar en el mapa de modificadas para el payload de guardar-todo
+        preguntasModificadas.set(id, {
+            ID_Pregunta:    id,
+            Texto_Pregunta: texto,
+            Orden:          preguntaActual.Orden  ?? 0,
+            Activa:         preguntaActual.Activa ?? 1,
+        });
+
         const nodo = document.querySelector(`.pregunta-item[data-id="${id}"] .pregunta-texto`);
         if (nodo) nodo.textContent = texto;
         else renderizarPreguntas(preguntasCache);
 
         document.getElementById('modal-editar').style.display = 'none';
         lanzarToast('Pregunta actualizada', texto.substring(0, 50) + (texto.length > 50 ? '…' : ''));
+        _actualizarBotonGuardar();
 
     } catch (err) {
         console.error('[guardarEdicion]', err);
@@ -727,6 +694,8 @@ async function confirmarEliminar() {
             throw new Error(data.error || `Error al eliminar la pregunta (HTTP ${res.status}).`);
 
         preguntasCache = preguntasCache.filter(p => Number(p.ID_Pregunta) !== Number(id));
+        // Si estaba en modificadas, quitarla — ya no existe
+        preguntasModificadas.delete(id);
 
         const nodo = document.querySelector(`.pregunta-item[data-id="${id}"]`);
         if (nodo) nodo.remove();
@@ -751,7 +720,7 @@ async function confirmarEliminar() {
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    Promise.all([cargarRanking(), cargarEstadoEnvio()]);
+    Promise.all([cargarRanking(), _sincronizarBannerRanking()]);
 
     document.getElementById('modal-texto-pregunta')?.addEventListener('keydown', e => {
         if (e.key === 'Enter') guardarEdicion();

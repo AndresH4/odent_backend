@@ -1,17 +1,5 @@
 # =============================================================================
-# modulo_config_ranking/config_ranking.py  —  VERSIÓN CORREGIDA (v2)
-# Lógica de negocio para la tabla config_ranking.
-#
-# IMPORTANTE: get_db_connection() en db.py YA garantiza, en cada conexión,
-# que la tabla config_ranking existe, tiene la columna Estado, y contiene
-# la fila semilla Config_ID=1 (ver _asegurar_config_ranking en db.py).
-# Por lo tanto este módulo NO repite esa creación/migración — solo confía
-# en que la fila existe al momento de leer/escribir, y sigue verificando
-# rowcount + relectura para detectar cualquier fallo silencioso residual
-# (por ejemplo, si alguien más borra la fila entre la conexión y el UPDATE).
-#
-# La tabla tiene UNA sola fila de configuración (Config_ID = 1).
-# El campo Estado admite únicamente: 1 = Activo, 2 = Inactivo.
+# modulo_config_ranking/config_ranking.py
 # =============================================================================
 
 from db import get_db_connection
@@ -26,14 +14,6 @@ _LABEL_ESTADO    = {1: "Activo", 2: "Inactivo"}
 # ---------------------------------------------------------------------------
 
 def obtener_config() -> dict | None:
-    """
-    Devuelve el registro único de config_ranking como dict.
-
-    Gracias a _asegurar_config_ranking() en db.py, esta función normalmente
-    NUNCA debería devolver None (la fila siempre se crea al conectar). Aun
-    así se conserva el chequeo de None por robustez ante escenarios
-    inesperados (por ejemplo, otra conexión concurrente borrando la fila).
-    """
     con = None
     try:
         con = get_db_connection()
@@ -61,35 +41,29 @@ def actualizar_config(nuevo_estado: int) -> dict:
     """
     Actualiza el campo Estado del registro único (Config_ID = 1).
 
-    Como get_db_connection() ya garantiza la existencia de la fila antes de
-    llegar aquí, este UPDATE debería afectar siempre exactamente 1 fila.
-    Se mantienen las verificaciones explícitas de rowcount y relectura
-    porque son las que exponen fallos que antes eran silenciosos:
-      - rowcount == 0 tras un UPDATE con WHERE Config_ID=1 indica que la fila
-        desapareció entre la conexión y este punto (condición de carrera o
-        alguien la borró manualmente).
-      - la relectura tras commit() detecta si se está escribiendo en un
-        archivo .db distinto al que se lee (dos procesos con distinto cwd,
-        por ejemplo).
+    BUG CORREGIDO:
+    La versión anterior hacía con.commit() ANTES de verificar cur.rowcount.
+    Si rowcount era 0, lanzaba RuntimeError dentro del bloque try, lo que
+    ejecutaba con.rollback() en el except — pero el commit ya había ocurrido,
+    así que el rollback no tenía efecto y la excepción llegaba a routes.py
+    como un 409, haciendo que el frontend revirtiera el toggle visualmente
+    aunque el UPDATE hubiera funcionado correctamente (o no hubiera ocurrido
+    en absoluto). El usuario veía "no se guardó" aunque a veces sí se guardó.
 
-    Parámetros
-    ----------
-    nuevo_estado : int
-        1 = Activo  |  2 = Inactivo
-
-    Retorna
-    -------
-    dict con los campos actualizados o lanza ValueError / RuntimeError.
+    Orden correcto:
+      1. ejecutar UPDATE
+      2. verificar rowcount ANTES del commit
+      3. si rowcount == 0 → raise sin commit (la transacción se descarta)
+      4. si rowcount > 0  → commit()
+      5. releer para confirmar
     """
     if nuevo_estado not in _ESTADOS_VALIDOS:
         raise ValueError(
-            f"Estado inválido: '{nuevo_estado}'. Use 1 (Activo) o 2 (Inactivo)."
+            "Estado inválido: '{}'. Use 1 (Activo) o 2 (Inactivo).".format(nuevo_estado)
         )
 
     con = None
     try:
-        # get_db_connection() ya corre _asegurar_config_ranking(): al salir
-        # de esta línea, Config_ID=1 existe (creada si hacía falta).
         con = get_db_connection()
         cur = con.cursor()
 
@@ -97,34 +71,35 @@ def actualizar_config(nuevo_estado: int) -> dict:
             "UPDATE config_ranking SET Estado = ? WHERE Config_ID = ?",
             (nuevo_estado, _CONFIG_ID)
         )
+
+        # VERIFICAR ROWCOUNT ANTES DEL COMMIT
+        if cur.rowcount == 0:
+            # La fila Config_ID=1 no existe en este momento.
+            # Intentar crearla y luego actualizar.
+            cur.execute(
+                "INSERT OR REPLACE INTO config_ranking (Config_ID, Estado) VALUES (?, ?)",
+                (_CONFIG_ID, nuevo_estado)
+            )
+            if cur.rowcount == 0:
+                raise RuntimeError(
+                    "No se pudo crear ni actualizar la fila Config_ID=1 en config_ranking."
+                )
+
+        # COMMIT solo cuando hay algo que confirmar
         con.commit()
 
-        if cur.rowcount == 0:
-            # Esto solo puede ocurrir si la fila fue eliminada por otra
-            # conexión justo después de _asegurar_config_ranking() y antes
-            # de este UPDATE. Es un caso extremadamente raro, pero ya no
-            # falla en silencio: se reporta explícitamente.
-            raise RuntimeError(
-                "El UPDATE no afectó ninguna fila (Config_ID=1 no encontrada "
-                "en el momento de escribir). Verifica que ningún otro proceso "
-                "esté eliminando filas de config_ranking concurrentemente."
-            )
-
-        # Verificación de relectura: confirma que lo escrito es lo que se lee.
-        # Si esto falla, es señal casi segura de estar leyendo/escribiendo
-        # en DOS ARCHIVOS DE BASE DE DATOS DISTINTOS.
+        # Relectura de confirmación
         cur.execute(
-            "SELECT Estado FROM config_ranking WHERE Config_ID = ?",
+            "SELECT Config_ID, Estado FROM config_ranking WHERE Config_ID = ?",
             (_CONFIG_ID,)
         )
         confirmado = cur.fetchone()
-        if confirmado is None or confirmado["Estado"] != nuevo_estado:
+        if confirmado is None or int(confirmado["Estado"]) != nuevo_estado:
             raise RuntimeError(
-                "Inconsistencia tras commit: el valor leído no coincide con "
-                "el valor escrito. Revisa que DB_FILE en db.py apunte siempre "
-                "al mismo archivo .db sin importar el directorio de trabajo "
-                "desde el que se ejecuta la app (usa una ruta absoluta si "
-                "el proceso puede lanzarse desde distintos cwd)."
+                "Inconsistencia tras commit: se escribió Estado={} pero la BD devuelve Estado={}.".format(
+                    nuevo_estado,
+                    confirmado["Estado"] if confirmado else "NULL"
+                )
             )
 
         return {
@@ -135,7 +110,10 @@ def actualizar_config(nuevo_estado: int) -> dict:
 
     except Exception:
         if con:
-            con.rollback()
+            try:
+                con.rollback()
+            except Exception:
+                pass
         raise
     finally:
         if con:
@@ -147,16 +125,9 @@ def actualizar_config(nuevo_estado: int) -> dict:
 # ---------------------------------------------------------------------------
 
 def toggle_estado_config() -> dict:
-    """
-    Alterna el Estado entre 1 (Activo) y 2 (Inactivo).
-    Devuelve el nuevo estado como dict igual que actualizar_config().
-    """
     config = obtener_config()
     if config is None:
-        # Caso extremo: _asegurar_config_ranking() no pudo crear la fila.
-        # En vez de exigir un init_db.py manual, la creamos aquí también.
         return actualizar_config(1)
-
     nuevo = 2 if config["Estado"] == 1 else 1
     return actualizar_config(nuevo)
 
@@ -166,15 +137,6 @@ def toggle_estado_config() -> dict:
 # ---------------------------------------------------------------------------
 
 def reporte_historial_config() -> list[dict]:
-    """
-    Devuelve un listado de las acciones de aseguramiento relacionadas con
-    config_ranking (Accion_ID en 1, 2, 3) para tener trazabilidad de quién
-    y cuándo modificó la configuración del ranking.
-
-    Columnas devueltas:
-        AseguramientoDatos_ID, Usuario_ID, NombreCompleto, Accion_ID,
-        Nombre_Accion, Fecha, Descripcion
-    """
     con = None
     try:
         con = get_db_connection()
@@ -207,23 +169,11 @@ def reporte_historial_config() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def reporte_estado_ranking() -> dict:
-    """
-    Combina la configuración actual con las estadísticas de evaluaciones
-    almacenadas en puntuacion_especialista para dar una vista consolidada
-    del estado del módulo de ranking.
-
-    Retorna un dict con:
-        config            : dict (Config_ID, Estado, Nombre_Estado)
-        total_evaluaciones: int
-        promedio_general  : float
-        top_especialistas : list[dict] (máx. 5, ordenados por promedio DESC)
-    """
     con = None
     try:
         con = get_db_connection()
         cur = con.cursor()
 
-        # Configuración actual
         cur.execute(
             "SELECT Config_ID, Estado FROM config_ranking WHERE Config_ID = ?",
             (_CONFIG_ID,)
@@ -235,7 +185,6 @@ def reporte_estado_ranking() -> dict:
         config = dict(row_cfg)
         config["Nombre_Estado"] = _LABEL_ESTADO.get(config["Estado"], "Desconocido")
 
-        # Totales
         cur.execute("""
             SELECT
                 COUNT(*)                                           AS total_evaluaciones,
@@ -244,10 +193,9 @@ def reporte_estado_ranking() -> dict:
             WHERE Calificacion_Promedio IS NOT NULL
         """)
         row_stats = cur.fetchone()
-        total     = int(row_stats["total_evaluaciones"] or 0)
-        promedio  = float(row_stats["promedio_general"] or 0.0)
+        total    = int(row_stats["total_evaluaciones"] or 0)
+        promedio = float(row_stats["promedio_general"] or 0.0)
 
-        # Top 5 especialistas
         cur.execute("""
             SELECT
                 e.Especialista_ID,

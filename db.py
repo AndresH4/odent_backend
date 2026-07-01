@@ -1,17 +1,44 @@
 # =============================================================================
 # db.py
-# VERSIÓN VERIFICADA — se preserva 100% la lógica original del usuario.
-# Único cambio: se añade `verificar_conexion_db()` como utilidad de
-# diagnóstico OPCIONAL (no se ejecuta automáticamente, no cambia el
-# comportamiento de get_db_connection()).
+# VERSIÓN CORREGIDA (v2) — se preserva 100% la lógica original del usuario.
+#
+# CAMBIO CLAVE (causa raíz del bug de persistencia en Ranking):
+#   Antes: DB_FILE = 'odent.db'  → ruta RELATIVA.
+#   sqlite3.connect() resuelve rutas relativas contra el cwd del proceso en
+#   tiempo de ejecución, NO contra la carpeta del proyecto. app.py, en
+#   cambio, ya usaba una ruta ABSOLUTA (DB_PATH = BASE_DIR + 'odent.db') en
+#   su propia función _app_conn(). Si el proceso Flask se lanza desde un
+#   directorio de trabajo distinto a BASE_DIR (gunicorn, systemd, IDE,
+#   tarea programada, etc.), get_db_connection() y _app_conn() terminaban
+#   escribiendo/leyendo en DOS ARCHIVOS FÍSICOS odent.db DISTINTOS. El
+#   UPDATE + commit() de config_ranking se ejecutaba y confirmaba
+#   correctamente contra su propio archivo relativo, pero ese archivo no
+#   era el que veía el resto de la aplicación — de ahí que los cambios de
+#   Ranking "no se guardaran" desde la perspectiva del usuario.
+#
+#   Ahora: DB_FILE se calcula como ruta ABSOLUTA anclada a la ubicación de
+#   este mismo archivo (db.py), igual que hace BASE_DIR en app.py. Esto
+#   garantiza que TODAS las conexiones (get_db_connection() y _app_conn())
+#   apunten siempre al mismo archivo físico, sin importar el cwd desde el
+#   que se lance el proceso.
+#
+# Se añade también `verificar_conexion_db()` como utilidad de diagnóstico
+# OPCIONAL (no se ejecuta automáticamente, no cambia el comportamiento de
+# get_db_connection()).
 # =============================================================================
 
 import sqlite3
 import random
 import os
 
-# Definimos el nombre del archivo de la base de datos que creó init_db.py
-DB_FILE = 'odent.db'
+# Carpeta donde vive este archivo (db.py) — ancla estable independiente del cwd.
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Definimos el nombre del archivo de la base de datos que creó init_db.py.
+# Ahora es una ruta ABSOLUTA para evitar que dos puntos distintos del
+# sistema (db.py vs app.py) terminen apuntando a archivos .db diferentes
+# según el directorio de trabajo desde el que se ejecute el proceso.
+DB_FILE = os.path.join(_BASE_DIR, 'odent.db')
 
 
 def _asegurar_columna_codigo_cita(conexion):
@@ -94,7 +121,7 @@ def get_db_connection():
     Abre una conexión con la base de datos SQLite y la configura.
     Esta función será llamada por app.py cada vez que necesite consultar datos.
     """
-    # 1. Conectar al archivo físico
+    # 1. Conectar al archivo físico (ahora vía ruta ABSOLUTA, ver DB_FILE arriba)
     conexion = sqlite3.connect(DB_FILE)
 
     # 2. Resultados como diccionarios (indispensable para jsonify)

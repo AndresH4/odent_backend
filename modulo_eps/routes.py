@@ -1,20 +1,5 @@
 # =============================================================================
 # modulo_eps/routes.py  —  FUSIONADO con modulo_config_ranking/routes.py
-# VERSIÓN CORREGIDA
-# =============================================================================
-# Blueprints contenidos en este archivo:
-#   · eps_bp            → todos los endpoints originales del módulo EPS
-#   · config_ranking_bp → GET/PUT/POST/GET/GET de config_ranking
-#
-# CAMBIOS REALIZADOS RESPECTO A LA VERSIÓN ORIGINAL:
-#   1) Se ELIMINÓ el endpoint duplicado `/encuesta/estado` (POST) que hacía
-#      un UPDATE sin WHERE y sin verificar rowcount (fallo silencioso).
-#      Toda la lógica de lectura/escritura de config_ranking vive ahora
-#      EXCLUSIVAMENTE en config_ranking.py (obtener_config / actualizar_config).
-#   2) Se agregó un endpoint GET `/encuesta/estado` de SOLO LECTURA, simple,
-#      que el frontend puede usar para verificación rápida antes de enviar
-#      una respuesta de encuesta (devuelve {ok, activo, Estado}).
-#   3) Los códigos de error de actualizar_config ahora distinguen 400/404/409.
 # =============================================================================
 
 from flask import Blueprint, jsonify, request
@@ -499,19 +484,13 @@ def toggle_pregunta(pregunta_id):
 
 @eps_bp.route('/pregunta/<int:pregunta_id>', methods=['DELETE'])
 def borrar_pregunta(pregunta_id):
-    """
-    Elimina la pregunta y, dentro de la misma transacción, las respuestas
-    asociadas en respuesta_ranking, para que el DELETE nunca se interrumpa
-    por violación de integridad referencial. Devuelve 404 si no existía,
-    200 + ok:true si se eliminó realmente (rowcount > 0).
-    """
     try:
         eliminado = eliminar_pregunta(pregunta_id)
         if not eliminado:
             return jsonify({"ok": False, "error": "Pregunta no encontrada"}), 404
         return jsonify({
-            "ok":        True,
-            "mensaje":   "Pregunta eliminada correctamente",
+            "ok":          True,
+            "mensaje":     "Pregunta eliminada correctamente",
             "ID_Pregunta": pregunta_id
         }), 200
     except Exception as e:
@@ -543,7 +522,6 @@ def nueva_respuesta():
         return jsonify({"ok": True, "data": {"Respuesta_ID": nuevo_id}}), 201
 
     except RuntimeError as re_:
-        # Estado inactivo (Estado=2) o configuración inexistente
         return jsonify({"ok": False, "error": str(re_), "bloqueado": True}), 403
 
     except Exception as e:
@@ -551,34 +529,35 @@ def nueva_respuesta():
 
 
 # ---------------------------------------------------------------------------
-# VERIFICACIÓN DE ESTADO (SOLO LECTURA) — el front-end la usa al cargar y
-# antes de enviar una encuesta, para bloquear controles en el cliente.
-#
-# CORREGIDO: este endpoint ahora es GET y de solo lectura. Toda la escritura
-# de Estado pasa exclusivamente por PUT /config-ranking (config_ranking_bp),
-# que sí valida, hace upsert y verifica rowcount. El endpoint duplicado
-# `POST /encuesta/estado` (que hacía UPDATE sin WHERE) fue eliminado.
+# VERIFICACIÓN DE ESTADO (SOLO LECTURA)
 # ---------------------------------------------------------------------------
+
 @eps_bp.route('/encuesta/estado', methods=['GET'])
 def consultar_estado_encuesta():
+    con = None
     try:
-        data = obtener_config()
-        if data is None:
+        con = get_db_connection()
+        cur = con.cursor()
+        cur.execute("SELECT Estado FROM config_ranking WHERE Config_ID = 1")
+        fila = cur.fetchone()
+        if fila is None:
             return jsonify({
-                "ok": False,
+                "ok":    False,
                 "activo": False,
                 "error": "La configuración no existe. Ejecuta init_db.py o usa PUT /config-ranking para inicializarla."
             }), 404
-
-        activo = int(data["Estado"]) == 1
+        estado = int(fila['Estado'])
         return jsonify({
-            "ok":     True,
-            "activo": activo,
-            "Estado": data["Estado"],
-            "Nombre_Estado": data["Nombre_Estado"],
+            "ok":           True,
+            "activo":       estado == 1,
+            "Estado":       estado,
+            "Nombre_Estado": "Activo" if estado == 1 else "Inactivo",
         }), 200
     except Exception as e:
         return jsonify({"ok": False, "activo": False, "error": str(e)}), 500
+    finally:
+        if con:
+            con.close()
 
 
 @eps_bp.route('/respuesta/<int:respuesta_id>', methods=['DELETE'])
@@ -664,25 +643,40 @@ def reporte_respuestas_paciente(paciente_id):
 
 
 # =============================================================================
-# CONFIG RANKING — lectura
+# CONFIG RANKING — GET
 # =============================================================================
 
 @config_ranking_bp.route('/config-ranking', methods=['GET'])
 def leer_config_ranking():
+    con = None
     try:
-        data = obtener_config()
-        if data is None:
+        con = get_db_connection()
+        cur = con.cursor()
+        cur.execute("SELECT Config_ID, Estado FROM config_ranking WHERE Config_ID = 1")
+        fila = cur.fetchone()
+        if fila is None:
             return jsonify({
                 "ok":    False,
                 "error": "La configuración no existe. Ejecuta init_db.py."
             }), 404
-        return jsonify({"ok": True, "data": data}), 200
+        estado = int(fila['Estado'])
+        return jsonify({
+            "ok": True,
+            "data": {
+                "Config_ID":     fila['Config_ID'],
+                "Estado":        estado,
+                "Nombre_Estado": "Activo" if estado == 1 else "Inactivo",
+            }
+        }), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if con:
+            con.close()
 
 
 # =============================================================================
-# CONFIG RANKING — actualización explícita (ÚNICA fuente de escritura)
+# CONFIG RANKING — PUT (solo Estado, mantiene compatibilidad)
 # =============================================================================
 
 @config_ranking_bp.route('/config-ranking', methods=['PUT'])
@@ -700,42 +694,273 @@ def editar_config_ranking():
     except (TypeError, ValueError):
         return jsonify({"ok": False, "error": "'Estado' debe ser un entero (1 o 2)."}), 400
 
+    if estado not in (1, 2):
+        return jsonify({"ok": False, "error": "'Estado' debe ser 1 (Activo) o 2 (Inactivo)."}), 400
+
+    con = None
     try:
-        data = actualizar_config(estado)
+        con = get_db_connection()
+        cur = con.cursor()
+
+        cur.execute("SELECT Config_ID FROM config_ranking WHERE Config_ID = 1")
+        existe = cur.fetchone()
+
+        if existe is None:
+            cur.execute(
+                "INSERT INTO config_ranking (Config_ID, Estado) VALUES (1, ?)",
+                (estado,)
+            )
+        else:
+            cur.execute(
+                "UPDATE config_ranking SET Estado = ? WHERE Config_ID = 1",
+                (estado,)
+            )
+            if cur.rowcount == 0:
+                con.rollback()
+                return jsonify({
+                    "ok":    False,
+                    "error": "El UPDATE no afectó ninguna fila. La configuración no pudo guardarse."
+                }), 409
+
+        con.commit()
+
+        cur.execute("SELECT Config_ID, Estado FROM config_ranking WHERE Config_ID = 1")
+        fila = cur.fetchone()
+        if fila is None:
+            return jsonify({"ok": False, "error": "Error crítico: la fila desapareció tras el commit."}), 500
+
+        estado_confirmado = int(fila['Estado'])
+        if estado_confirmado != estado:
+            return jsonify({
+                "ok":    False,
+                "error": "Mismatch tras commit: se pidió Estado={}, BD tiene Estado={}.".format(estado, estado_confirmado)
+            }), 500
+
         return jsonify({
             "ok":      True,
             "mensaje": "Configuración actualizada correctamente.",
-            "data":    data,
+            "data": {
+                "Config_ID":     fila['Config_ID'],
+                "Estado":        estado_confirmado,
+                "Nombre_Estado": "Activo" if estado_confirmado == 1 else "Inactivo",
+            }
         }), 200
-    except ValueError as ve:
-        # Estado fuera de {1, 2}
-        return jsonify({"ok": False, "error": str(ve)}), 400
-    except RuntimeError as re_:
-        # Fallos de consistencia explícitos (fila no encontrada, rowcount 0,
-        # mismatch tras relectura, etc.) — ya NO fallan en silencio.
-        return jsonify({"ok": False, "error": str(re_)}), 409
+
     except Exception as e:
+        if con:
+            try:
+                con.rollback()
+            except Exception:
+                pass
         return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if con:
+            con.close()
 
 
 # =============================================================================
-# CONFIG RANKING — toggle Activo ↔ Inactivo
+# CONFIG RANKING — PUT /config-ranking/guardar-todo
+#
+# Endpoint atómico que persiste en una sola transacción SQLite:
+#   1. El Estado del toggle (activo/inactivo)
+#   2. El lote completo de preguntas modificadas (preguntas_modificadas[])
+#
+# Si cualquier operación falla, se ejecuta ROLLBACK y no queda ningún
+# cambio parcialmente guardado. El frontend llama a este endpoint desde
+# guardarCambiosConfig() con el payload:
+#   {
+#     "Estado": 1 | 2,
+#     "preguntas_modificadas": [
+#       { "ID_Pregunta": int, "Texto_Pregunta": str, "Orden": int, "Activa": int },
+#       ...
+#     ]
+#   }
+# =============================================================================
+
+@config_ranking_bp.route('/config-ranking/guardar-todo', methods=['PUT'])
+def guardar_todo_config_ranking():
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({"ok": False, "error": "Cuerpo JSON requerido."}), 400
+
+    # ── Validar Estado ────────────────────────────────────────────────────────
+    estado_raw = body.get("Estado")
+    if estado_raw is None:
+        return jsonify({"ok": False, "error": "El campo 'Estado' es requerido."}), 400
+    try:
+        estado = int(estado_raw)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "'Estado' debe ser un entero (1 o 2)."}), 400
+    if estado not in (1, 2):
+        return jsonify({"ok": False, "error": "'Estado' debe ser 1 (Activo) o 2 (Inactivo)."}), 400
+
+    # ── Validar lista de preguntas ────────────────────────────────────────────
+    preguntas_raw = body.get("preguntas_modificadas", [])
+    if not isinstance(preguntas_raw, list):
+        return jsonify({"ok": False, "error": "'preguntas_modificadas' debe ser un array."}), 400
+
+    preguntas_validas = []
+    for idx, p in enumerate(preguntas_raw):
+        pid   = p.get("ID_Pregunta")
+        texto = (p.get("Texto_Pregunta") or "").strip()
+        if not pid or not texto:
+            return jsonify({
+                "ok":    False,
+                "error": "Pregunta en índice {} inválida: se requieren ID_Pregunta y Texto_Pregunta.".format(idx)
+            }), 400
+        try:
+            pid = int(pid)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "ID_Pregunta en índice {} debe ser entero.".format(idx)}), 400
+
+        orden  = p.get("Orden",  0)
+        activa = p.get("Activa", 1)
+        try:
+            orden  = int(orden)
+            activa = int(activa)
+        except (TypeError, ValueError):
+            orden  = 0
+            activa = 1
+
+        preguntas_validas.append({
+            "ID_Pregunta":    pid,
+            "Texto_Pregunta": texto,
+            "Orden":          orden,
+            "Activa":         activa,
+        })
+
+    # ── Transacción única ─────────────────────────────────────────────────────
+    con = None
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+
+        # 1. Persistir Estado en config_ranking
+        cur.execute("SELECT Config_ID FROM config_ranking WHERE Config_ID = 1")
+        existe = cur.fetchone()
+        if existe is None:
+            cur.execute(
+                "INSERT INTO config_ranking (Config_ID, Estado) VALUES (1, ?)",
+                (estado,)
+            )
+        else:
+            cur.execute(
+                "UPDATE config_ranking SET Estado = ? WHERE Config_ID = 1",
+                (estado,)
+            )
+            if cur.rowcount == 0:
+                con.rollback()
+                return jsonify({
+                    "ok":    False,
+                    "error": "No se pudo actualizar el Estado en config_ranking."
+                }), 409
+
+        # 2. Actualizar cada pregunta modificada
+        preguntas_actualizadas = []
+        for p in preguntas_validas:
+            cur.execute(
+                """
+                UPDATE tabla_pregunta
+                   SET Texto_Pregunta = ?,
+                       Orden          = ?,
+                       Activa         = ?
+                 WHERE ID_Pregunta    = ?
+                """,
+                (p["Texto_Pregunta"], p["Orden"], p["Activa"], p["ID_Pregunta"])
+            )
+            if cur.rowcount == 0:
+                # La pregunta no existe — no es error fatal, se registra y continúa
+                continue
+            preguntas_actualizadas.append({
+                "ID_Pregunta":    p["ID_Pregunta"],
+                "Texto_Pregunta": p["Texto_Pregunta"],
+            })
+
+        # 3. Commit único para todo el lote
+        con.commit()
+
+        # 4. Releer Estado confirmado desde BD
+        cur.execute("SELECT Config_ID, Estado FROM config_ranking WHERE Config_ID = 1")
+        fila = cur.fetchone()
+        if fila is None:
+            return jsonify({"ok": False, "error": "Error crítico: la fila de configuración desapareció tras el commit."}), 500
+
+        estado_confirmado = int(fila["Estado"])
+        if estado_confirmado != estado:
+            return jsonify({
+                "ok":    False,
+                "error": "Mismatch tras commit: se pidió Estado={}, BD tiene Estado={}.".format(
+                    estado, estado_confirmado
+                )
+            }), 500
+
+        return jsonify({
+            "ok":      True,
+            "mensaje": "Todos los cambios guardados correctamente.",
+            "data": {
+                "Config_ID":             fila["Config_ID"],
+                "Estado":                estado_confirmado,
+                "Nombre_Estado":         "Activo" if estado_confirmado == 1 else "Inactivo",
+                "preguntas_actualizadas": preguntas_actualizadas,
+                "total_preguntas":       len(preguntas_actualizadas),
+            }
+        }), 200
+
+    except Exception as e:
+        if con:
+            try:
+                con.rollback()
+            except Exception:
+                pass
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if con:
+            con.close()
+
+
+# =============================================================================
+# CONFIG RANKING — toggle Activo ↔ Inactivo (directo en SQLite)
 # =============================================================================
 
 @config_ranking_bp.route('/config-ranking/toggle', methods=['POST'])
 def toggle_config_ranking():
+    con = None
     try:
-        data  = toggle_estado_config()
-        label = "activado" if data["Estado"] == 1 else "desactivado"
+        con = get_db_connection()
+        cur = con.cursor()
+        cur.execute("SELECT Estado FROM config_ranking WHERE Config_ID = 1")
+        fila = cur.fetchone()
+        if fila is None:
+            return jsonify({"ok": False, "error": "Configuración no encontrada."}), 404
+        nuevo_estado = 2 if int(fila['Estado']) == 1 else 1
+        cur.execute(
+            "UPDATE config_ranking SET Estado = ? WHERE Config_ID = 1",
+            (nuevo_estado,)
+        )
+        if cur.rowcount == 0:
+            con.rollback()
+            return jsonify({"ok": False, "error": "No se pudo actualizar el estado."}), 409
+        con.commit()
+        label = "activado" if nuevo_estado == 1 else "desactivado"
         return jsonify({
             "ok":      True,
-            "mensaje": f"Ranking {label}.",
-            "data":    data,
+            "mensaje": "Ranking {}.".format(label),
+            "data": {
+                "Config_ID":     1,
+                "Estado":        nuevo_estado,
+                "Nombre_Estado": "Activo" if nuevo_estado == 1 else "Inactivo",
+            }
         }), 200
-    except RuntimeError as re_:
-        return jsonify({"ok": False, "error": str(re_)}), 409
     except Exception as e:
+        if con:
+            try:
+                con.rollback()
+            except Exception:
+                pass
         return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if con:
+            con.close()
 
 
 # =============================================================================
