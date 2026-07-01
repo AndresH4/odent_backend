@@ -49,7 +49,7 @@ def read_all_especialistas():
                 u.Apellidos,
                 u.Correo
             FROM especialistas e
-            JOIN usuario u ON e.Usuario_ID = u.Usuario_ID
+            JOIN usuarios u ON e.Usuario_ID = u.Usuario_ID
             ORDER BY u.Apellidos, u.Nombres
         """).fetchall()
 
@@ -78,7 +78,7 @@ def read_especialista_by_id(especialista_id):
                 u.Apellidos,
                 u.Correo
             FROM especialistas e
-            JOIN usuario u ON e.Usuario_ID = u.Usuario_ID
+            JOIN usuarios u ON e.Usuario_ID = u.Usuario_ID
             WHERE e.Especialista_ID = ?
         """, (especialista_id,)).fetchone()
 

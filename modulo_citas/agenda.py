@@ -63,7 +63,7 @@ def read_all_agendas() -> list[dict]:
 
             FROM agenda a
             JOIN especialistas e ON a.Especialista_ID = e.Especialista_ID
-            JOIN usuario u      ON e.Usuario_ID = u.Usuario_ID
+            JOIN usuarios u      ON e.Usuario_ID = u.Usuario_ID
             JOIN estado_agenda ea ON a.Estado_ID = ea.Estado_ID
 
             ORDER BY a.Fecha DESC, a.Hora_Inicio ASC

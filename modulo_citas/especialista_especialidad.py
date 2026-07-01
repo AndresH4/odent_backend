@@ -43,7 +43,7 @@ def read_all_especialista_especialidad():
                 es.Nombre_Especialidad
             FROM especialista_especialidad ee
             JOIN especialistas e ON ee.Especialista_ID = e.Especialista_ID
-            JOIN usuario u       ON e.Usuario_ID = u.Usuario_ID
+            JOIN usuarios u       ON e.Usuario_ID = u.Usuario_ID
             JOIN especialidad es ON ee.Especialidad_ID = es.Especialidad_ID
             ORDER BY Especialista, es.Nombre_Especialidad
         """).fetchall()

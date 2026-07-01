@@ -58,7 +58,7 @@ def read_all_multas():
             FROM multa m
             JOIN cita c ON m.Cita_ID = c.Cita_ID
             JOIN paciente p ON c.Paciente_ID = p.Paciente_ID
-            JOIN usuario u ON p.Usuario_ID = u.Usuario_ID
+            JOIN usuarios u ON p.Usuario_ID = u.Usuario_ID
             JOIN estado_multa em ON m.Estado_Multa_ID = em.Estado_Multa_ID
 
             ORDER BY m.Multa_ID
@@ -96,7 +96,7 @@ def read_multa_by_id(multa_id):
             FROM multa m
             JOIN cita c ON m.Cita_ID = c.Cita_ID
             JOIN paciente p ON c.Paciente_ID = p.Paciente_ID
-            JOIN usuario u ON p.Usuario_ID = u.Usuario_ID
+            JOIN usuarios u ON p.Usuario_ID = u.Usuario_ID
             JOIN estado_multa em ON m.Estado_Multa_ID = em.Estado_Multa_ID
 
             WHERE m.Multa_ID = ?

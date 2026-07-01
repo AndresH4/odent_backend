@@ -56,7 +56,7 @@ def read_all_citas() -> list[dict]:
 
                 a.Agenda_ID,
                 a.Fecha,
-                a.Hora,
+                a.Hora_Inicio,
 
                 e.Nombre_Estado AS Estado_Cita
 
@@ -66,7 +66,7 @@ def read_all_citas() -> list[dict]:
             JOIN agenda a        ON c.Agenda_ID    = a.Agenda_ID
             LEFT JOIN estado_cita e ON c.Estado_ID = e.Estado_ID
 
-            ORDER BY a.Fecha DESC, a.Hora DESC
+            ORDER BY a.Fecha DESC, a.Hora_Inicio DESC
         """).fetchall()
 
         return [dict(r) for r in rows]
@@ -97,7 +97,7 @@ def read_cita_by_id(cita_id: int) -> dict | None:
 
                 a.Agenda_ID,
                 a.Fecha,
-                a.Hora,
+                a.Hora_Inicio,
 
                 e.Nombre_Estado AS Estado_Cita
 
