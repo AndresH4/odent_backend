@@ -327,6 +327,23 @@ body {
 #rep-pac-evolucion.report-value-readonly    { border-left-color: #f59e0b; }
 
 /* ===================================================================
+   MODAL REPORTE CLÍNICO — CAMPOS DE SOLO LECTURA (Vista Paciente)
+   Migrado desde el <style> inline de paciente.html
+   =================================================================== */
+.rp-campo-readonly {
+    background: #f8fafc;
+    border: 2px solid #e2e8f0;
+    border-radius: 1rem;
+    padding: 0.85rem 1.1rem;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #334155;
+    cursor: default;
+    outline: none;
+}
+.rp-campo-readonly:focus { outline: none; }
+
+/* ===================================================================
    INPUTS
    =================================================================== */
 .input-dental {
@@ -575,4 +592,77 @@ main { scroll-behavior: smooth; }
     color:         #dc2626;
     font-size:     12px;
     font-weight:   700;
+}
+
+/* ===================================================================
+   SINCRONIZACIÓN CON MÓDULO ESPECIALISTA
+   Badges de estado equivalentes a especialista.css (para uso opcional
+   como clases nombradas) + refuerzo visual del botón "Reporte" y de
+   los badges dinámicos que actualiza paciente.js vía polling.
+   =================================================================== */
+
+/* --- Variantes de badge de estado, equivalentes a especialista.css --- */
+.status-pendiente,
+.status-atendido,
+.status-en-proceso,
+.status-cancelada-esp {
+    padding:        7px 16px;
+    border-radius:  30px;
+    font-size:      10px;
+    font-weight:    800;
+    letter-spacing: 0.8px;
+    display:        inline-flex;
+    align-items:    center;
+    white-space:    nowrap;
+    text-transform: uppercase;
+}
+.status-pendiente     { background-color: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.status-atendido      { background-color: #f0fdf4; color: #15803d; border: 1px solid #dcfce7; }
+.status-en-proceso    { background-color: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; }
+.status-cancelada-esp { background-color: #fff1f2; color: #be123c; border: 1px solid #fecdd3; }
+
+/* --- Badge dinámico actualizado por _actualizarFilaEstadoEnDOM() ------ */
+/* Suaviza el repintado de color cuando el sondeo detecta un cambio de
+   estado (Pendiente → Cumplida, Cancelada con multa, etc.) */
+.badge-estado-cita {
+    transition: background-color 0.4s ease, color 0.4s ease, transform 0.3s ease;
+}
+.badge-estado-cita.badge-actualizado {
+    animation: badgePulseUpdate 0.6s ease;
+}
+@keyframes badgePulseUpdate {
+    0%   { transform: scale(1);    }
+    35%  { transform: scale(1.12); }
+    100% { transform: scale(1);    }
+}
+
+/* --- Botón "Reporte" del historial del paciente (solo lectura) ------- */
+button[data-reporte] {
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+button[data-reporte]:hover {
+    transform:  translateY(-2px);
+    box-shadow: 0 6px 16px rgba(2, 132, 199, 0.18);
+}
+button[data-reporte]:active {
+    transform: scale(0.96);
+}
+
+/* --- Celda de gestión del historial: alinea Reporte + Encuesta ------- */
+.celda-reporte {
+    display:         inline-flex;
+    align-items:     center;
+    justify-content: center;
+}
+
+/* --- Mis Multas: refuerzo de contraste para estado Pendiente/Pagada -- */
+.badge-multa-pendiente {
+    background-color: #fffbeb;
+    color:            #b45309;
+    border:           1px solid #fde68a;
+}
+.badge-multa-pagada {
+    background-color: #ecfdf5;
+    color:            #047857;
+    border:           1px solid #a7f3d0;
 }

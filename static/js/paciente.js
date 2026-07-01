@@ -16,6 +16,10 @@ let _encuestaCitaId        = null;
 let _encuestaPreguntas     = [];
 let _encuestaExitoTimer    = null;
 
+// ─── POLLING DE ESTADOS ───────────────────────────────────────────────────────
+let _pollingIntervalId     = null;
+const POLLING_INTERVAL_MS  = 15000; // 15 segundos
+
 // ─── MAPA DE VISTAS ───────────────────────────────────────────────────────────
 const VISTAS_PACIENTE = {
     inicio   : { el: 'vista-inicio',    btn: 'btn-inicio',    titulo: 'Paciente'           },
@@ -90,6 +94,7 @@ function _cargarSesion() {
                 _pacienteId = data.Paciente_ID;
                 _cargarCitasPaciente();
                 _cargarAfiliacionCompleta();
+                _iniciarPolling();
             }
         })
         .catch(err => console.error('[paciente] Error obteniendo Paciente_ID:', err));
@@ -118,8 +123,6 @@ async function _cargarTipoDocumento(tipoDocId, numeroDoc) {
 async function _cargarAfiliacionCompleta() {
     if (!_usuarioId) return;
     try {
-        // /api/afiliacion devuelve array plano; /api/eps y /api/regimen-eps devuelven {ok,data}
-        // /api/tipo-eps devuelve {ok,data}
         const [resAfil, resEps, resRegimen, resTipo] = await Promise.all([
             fetch('/api/afiliacion'),
             fetch('/api/eps'),
@@ -147,7 +150,6 @@ async function _cargarAfiliacionCompleta() {
         const epsId     = afil.EPS_ID     || afil.Id_EPS     || afil.eps_id     || null;
         const tipoEpsId = afil.TipoEPS_ID || afil.ID_Tipo_EPS || afil.tipoeps_id || null;
 
-        // Nombre EPS
         let nombreEPS = '';
         if (epsId) {
             const epsObj = listaEps.find(e =>
@@ -158,7 +160,6 @@ async function _cargarAfiliacionCompleta() {
         _setText('eps-menu',   nombreEPS || '—');
         _setText('perfil-eps', nombreEPS || '—');
 
-        // Nombre Régimen
         let nombreRegimen = '';
         let regimenId = afil.Regimen_ID || afil.ID_Regimen_EPS || afil.regimen_id || null;
         if (!regimenId && epsId) {
@@ -177,7 +178,6 @@ async function _cargarAfiliacionCompleta() {
         }
         _setText('regimen-menu', nombreRegimen || '—');
 
-        // Nombre Tipo EPS
         let nombreTipoEPS = '';
         if (tipoEpsId) {
             const tipoObj = listaTipos.find(t =>
@@ -297,6 +297,88 @@ async function _cargarCitasPaciente() {
     }
 }
 
+// ─── POLLING DE ESTADOS EN TIEMPO REAL ───────────────────────────────────────
+function _iniciarPolling() {
+    if (_pollingIntervalId) clearInterval(_pollingIntervalId);
+    _pollingIntervalId = setInterval(_pollEstadosCitas, POLLING_INTERVAL_MS);
+}
+
+function _detenerPolling() {
+    if (_pollingIntervalId) {
+        clearInterval(_pollingIntervalId);
+        _pollingIntervalId = null;
+    }
+}
+
+async function _pollEstadosCitas() {
+    if (!_pacienteId || !_citasData.length) return;
+    try {
+        const res = await fetch(`/api/paciente/${_pacienteId}/citas`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const nuevasCitas = await res.json();
+        if (!Array.isArray(nuevasCitas)) return;
+
+        let huboCambio = false;
+
+        nuevasCitas.forEach(citaNueva => {
+            const idx = _citasData.findIndex(c => c.Cita_ID === citaNueva.Cita_ID);
+            if (idx === -1) {
+                _citasData.push(citaNueva);
+                huboCambio = true;
+                return;
+            }
+            const citaVieja = _citasData[idx];
+            if (citaVieja.EstadoAgenda !== citaNueva.EstadoAgenda ||
+                citaVieja.EstadoMulta  !== citaNueva.EstadoMulta) {
+                _citasData[idx] = citaNueva;
+                huboCambio = true;
+                _actualizarFilaEstadoEnDOM(citaNueva);
+            }
+        });
+
+        if (huboCambio) {
+            _renderTablaCitas();
+            const vistaHistorial = document.getElementById('vista-historial');
+            if (vistaHistorial && !vistaHistorial.classList.contains('hidden')) {
+                _renderHistorial();
+            }
+        }
+    } catch (err) {
+        console.warn('[paciente][polling] Error consultando estados:', err);
+    }
+}
+
+function _actualizarFilaEstadoEnDOM(cita) {
+    const estadoInfo = _resolverEstado(cita);
+
+    // Actualizar en tabla inicio
+    const filaInicio = document.querySelector(`tr[data-cita-id="${cita.Cita_ID}"]`);
+    if (filaInicio) {
+        const badgeEl = filaInicio.querySelector('.badge-estado-cita');
+        if (badgeEl) {
+            badgeEl.className = `badge-estado-cita text-[9px] font-black uppercase px-2 py-1 rounded-full ${estadoInfo.clase}`;
+            badgeEl.textContent = estadoInfo.label;
+        }
+    }
+
+    // Actualizar en tabla historial
+    const filaHistorial = document.getElementById(`historial-row-${cita.Cita_ID}`);
+    if (filaHistorial) {
+        const badgeEl = filaHistorial.querySelector('.badge-estado-cita');
+        if (badgeEl) {
+            badgeEl.className = `badge-estado-cita text-[9px] font-black uppercase px-2 py-1 rounded-full ${estadoInfo.clase}`;
+            badgeEl.textContent = estadoInfo.label;
+        }
+        // Mostrar/ocultar botón reporte según nuevo estado
+        if ((cita.EstadoAgenda || '').toLowerCase() === 'cumplida') {
+            const celdaReporte = filaHistorial.querySelector('.celda-reporte');
+            if (celdaReporte && !celdaReporte.querySelector('button[data-reporte]')) {
+                celdaReporte.innerHTML = _htmlBotonReporte(cita.Cita_ID);
+            }
+        }
+    }
+}
+
 // ─── HELPERS DE ESTADO ───────────────────────────────────────────────────────
 function _resolverEstado(c) {
     const hoy    = new Date().toISOString().split('T')[0];
@@ -341,6 +423,18 @@ function _citaEncuestaCompletada(c) {
         || c.Encuesta_Enviada === true;
 }
 
+function _citaEsCumplida(c) {
+    return (c.EstadoAgenda || '').toLowerCase() === 'cumplida';
+}
+
+// ─── HTML BOTÓN REPORTE ───────────────────────────────────────────────────────
+function _htmlBotonReporte(citaId) {
+    return `<button data-reporte onclick="abrirReportePaciente(${citaId})"
+        class="text-[10px] bg-sky-50 text-sky-600 border border-sky-200 px-4 py-2 rounded-xl font-black hover:bg-sky-600 hover:text-white transition-all uppercase inline-flex items-center gap-1">
+        <i class="fas fa-file-medical text-sm"></i> Reporte
+    </button>`;
+}
+
 // ─── RENDER TABLA PRINCIPAL (INICIO) ─────────────────────────────────────────
 function _renderTablaCitas() {
     const tbody   = document.getElementById('tabla-citas-body');
@@ -361,6 +455,7 @@ function _renderTablaCitas() {
     activas.forEach(c => {
         const estadoInfo = _resolverEstado(c);
         const tr = document.createElement('tr');
+        tr.setAttribute('data-cita-id', c.Cita_ID);
         tr.innerHTML = `
             <td class="p-5 font-black text-slate-700 uppercase text-xs">${c.NombrePaciente || '—'}</td>
             <td class="p-5 text-xs text-slate-500">${c.NumeroDocumento || '—'}</td>
@@ -372,7 +467,7 @@ function _renderTablaCitas() {
                 </span>
             </td>
             <td class="p-5">
-                <span class="text-[9px] font-black uppercase px-2 py-1 rounded-full ${estadoInfo.clase}">
+                <span class="badge-estado-cita text-[9px] font-black uppercase px-2 py-1 rounded-full ${estadoInfo.clase}">
                     ${estadoInfo.label}
                 </span>
             </td>
@@ -398,15 +493,22 @@ function _renderHistorial() {
     const historial = _citasData.filter(_esCitaHistorial);
 
     if (historial.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="p-10 text-center text-slate-400 font-bold italic text-xs uppercase">Sin historial registrado.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="p-10 text-center text-slate-400 font-bold italic text-xs uppercase">Sin historial registrado.</td></tr>`;
         return;
     }
 
     historial.forEach(c => {
         const estadoInfo   = _resolverEstado(c);
-        const esCumplida   = (c.EstadoAgenda || '').toLowerCase() === 'cumplida';
+        const esCumplida   = _citaEsCumplida(c);
         const yaCompletada = _citaEncuestaCompletada(c);
 
+        // Celda Reporte: solo si la cita fue cumplida
+        let reporteCelda = '<span class="text-slate-300 text-[10px] font-bold">—</span>';
+        if (esCumplida) {
+            reporteCelda = _htmlBotonReporte(c.Cita_ID);
+        }
+
+        // Celda Encuesta
         let encuestaCelda = '<span class="text-slate-300 text-[10px] font-bold">—</span>';
         if (esCumplida) {
             if (yaCompletada) {
@@ -426,22 +528,168 @@ function _renderHistorial() {
 
         const tr = document.createElement('tr');
         tr.id = `historial-row-${c.Cita_ID}`;
+        tr.setAttribute('data-cita-id', c.Cita_ID);
         tr.innerHTML = `
             <td class="p-5 text-xs font-bold">${c.Fecha}<br><span class="text-slate-400">${c.Hora_Inicio || ''}</span></td>
             <td class="p-5 font-black text-sky-600 uppercase text-[10px]">${c.Nombre_Especialidad || '—'}</td>
             <td class="p-5 text-xs text-slate-600">Dr(a). ${c.NombreEspecialista || '—'}</td>
             <td class="p-5">
-                <span class="text-[9px] font-black uppercase px-2 py-1 rounded-full ${estadoInfo.clase}">
+                <span class="badge-estado-cita text-[9px] font-black uppercase px-2 py-1 rounded-full ${estadoInfo.clase}">
                     ${estadoInfo.label}
                 </span>
             </td>
             <td class="p-5 text-center">
                 <span class="text-[10px] font-bold text-slate-400">${c.Motivo_Consulta || '—'}</span>
             </td>
+            <td class="p-5 text-center celda-reporte">${reporteCelda}</td>
             <td class="p-5 text-center">${encuestaCelda}</td>`;
         tbody.appendChild(tr);
     });
 }
+
+// ─── MODAL REPORTE CLÍNICO (SOLO LECTURA PARA PACIENTE) ──────────────────────
+function _formatearHoraAmPm(horaStr) {
+    if (!horaStr || horaStr === '—') return horaStr || '—';
+    const partes = horaStr.split(':');
+    let h = parseInt(partes[0], 10);
+    const m = partes[1] || '00';
+    const ampm = h >= 12 ? 'P.M.' : 'A.M.';
+    h = h % 12 || 12;
+    return `${String(h).padStart(2, '0')}:${m} ${ampm}`;
+}
+
+function _setBox(id, val) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = (val !== undefined && val !== null && String(val).trim() !== '') ? String(val).trim() : '—';
+}
+
+function _setArea(id, val) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const FALLBACKS = {
+        'rp-diagnostico': 'Sin diagnóstico registrado',
+        'rp-evolucion':   'Sin evolución registrada',
+        'rp-tratamiento': 'Sin plan de tratamiento registrado',
+    };
+    el.value = (val !== undefined && val !== null && String(val).trim() !== '')
+        ? String(val).trim()
+        : (FALLBACKS[id] || '—');
+}
+
+function _descomprimirEvolucionTratamiento(desc) {
+    desc = (desc || '').trim();
+    if (!desc) return ['', ''];
+    if (desc.includes('---')) {
+        const partes = desc.split('---');
+        return [partes[0].trim(), partes.slice(1).join('---').trim()];
+    }
+    return [desc, desc];
+}
+
+function _leerCampoFlexible(obj, ...claves) {
+    if (!obj) return undefined;
+    for (const clave of claves) {
+        if (obj[clave] !== undefined && obj[clave] !== null) return obj[clave];
+    }
+    return undefined;
+}
+
+window.abrirReportePaciente = async function (citaId) {
+    const modal = document.getElementById('modalReportePaciente');
+    if (!modal) return;
+
+    // Limpiar y mostrar estado de carga
+    _setBox('rp-nombre',       '');
+    _setBox('rp-tipo-doc',     '');
+    _setBox('rp-num-doc',      '');
+    _setBox('rp-motivo',       '');
+    _setBox('rp-fecha',        '');
+    _setBox('rp-hora',         '');
+    _setBox('rp-especialista', '');
+    _setArea('rp-diagnostico', null);
+    _setArea('rp-evolucion',   null);
+    _setArea('rp-tratamiento', null);
+
+    const msgCargando = document.getElementById('rp-msg-cargando');
+    const msgVacio    = document.getElementById('rp-msg-vacio');
+    if (msgCargando) msgCargando.style.display = 'block';
+    if (msgVacio)    msgVacio.style.display    = 'none';
+
+    modal.style.display = 'flex';
+
+    // Datos de caché local
+    const citaLocal = _citasData.find(c => c.Cita_ID === citaId);
+    if (citaLocal) {
+        _setBox('rp-nombre',       citaLocal.NombrePaciente   || '—');
+        _setBox('rp-num-doc',      citaLocal.NumeroDocumento  || '—');
+        _setBox('rp-motivo',       citaLocal.Motivo_Consulta  || '—');
+        _setBox('rp-fecha',        citaLocal.Fecha            || '—');
+        _setBox('rp-hora',         _formatearHoraAmPm(citaLocal.Hora_Inicio));
+        _setBox('rp-especialista', citaLocal.NombreEspecialista ? `Dr(a). ${citaLocal.NombreEspecialista}` : '—');
+    }
+
+    try {
+        // Fuente primaria
+        const res = await fetch(`/api/historial/cita/${citaId}?_=${Date.now()}`, { cache: 'no-store' });
+        if (msgCargando) msgCargando.style.display = 'none';
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        if (!data.ok || !data.data) {
+            if (msgVacio) msgVacio.style.display = 'block';
+            return;
+        }
+
+        const d = data.data;
+
+        // Datos del paciente desde el backend
+        const nombre      = _leerCampoFlexible(d, 'NombrePaciente', 'nombre_paciente') || (citaLocal && citaLocal.NombrePaciente) || '—';
+        const tipoDoc     = _leerCampoFlexible(d, 'TipoDocumento')  || (citaLocal && citaLocal.TipoDocumento)  || '';
+        const numDoc      = _leerCampoFlexible(d, 'NumeroDocumento') || (citaLocal && citaLocal.NumeroDocumento) || '—';
+        const motivo      = _leerCampoFlexible(d, 'Motivo_Consulta', 'MotivoHC') || (citaLocal && citaLocal.Motivo_Consulta) || '—';
+        const fecha       = _leerCampoFlexible(d, 'Fecha')       || (citaLocal && citaLocal.Fecha)       || '—';
+        const horaCruda   = _leerCampoFlexible(d, 'Hora_Inicio') || (citaLocal && citaLocal.Hora_Inicio) || '—';
+        const especialista = _leerCampoFlexible(d, 'NombreEspecialista') || (citaLocal && citaLocal.NombreEspecialista) || '—';
+
+        _setBox('rp-nombre',       nombre);
+        _setBox('rp-tipo-doc',     tipoDoc);
+        _setBox('rp-num-doc',      numDoc);
+        _setBox('rp-motivo',       motivo);
+        _setBox('rp-fecha',        fecha);
+        _setBox('rp-hora',         _formatearHoraAmPm(horaCruda));
+        _setBox('rp-especialista', especialista && especialista !== '—' ? `Dr(a). ${especialista}` : '—');
+
+        // Campos clínicos
+        const diagVal   = _leerCampoFlexible(d, 'diagnostico', 'Diagnostico', 'diagnostico_texto');
+        const tratRaw   = _leerCampoFlexible(d, 'tratamiento', 'Tratamiento', 'tratamiento_texto') || '';
+        const evoVal    = _leerCampoFlexible(d, 'evolucion', 'Evolucion', 'evolucion_clinica', 'evolucion_texto');
+
+        const [evolucionFinal, tratamientoFinal] = _descomprimirEvolucionTratamiento(tratRaw);
+        const diagnosticoFinal = diagVal !== undefined ? diagVal : '';
+        const evolucionReal    = (evoVal !== undefined && evoVal !== null && String(evoVal).trim()) ? evoVal : evolucionFinal;
+        const tratamientoReal  = tratamientoFinal;
+
+        _setArea('rp-diagnostico', diagnosticoFinal);
+        _setArea('rp-evolucion',   evolucionReal);
+        _setArea('rp-tratamiento', tratamientoReal);
+
+        // Mostrar mensaje si no hay datos clínicos
+        const hayDatos = diagnosticoFinal || evolucionReal || tratamientoReal;
+        if (!hayDatos && msgVacio) msgVacio.style.display = 'block';
+
+    } catch (err) {
+        console.error('[paciente] Error cargando reporte:', err);
+        if (msgCargando) msgCargando.style.display = 'none';
+        if (msgVacio)    msgVacio.style.display    = 'block';
+    }
+};
+
+window.cerrarModalReportePaciente = function () {
+    const modal = document.getElementById('modalReportePaciente');
+    if (modal) modal.style.display = 'none';
+};
 
 // ─── RENDER MULTAS DEL PACIENTE (SOLO LECTURA) ───────────────────────────────
 async function _renderMultasPaciente() {
@@ -1060,7 +1308,6 @@ window.validarPasswordActual = function () {
         return;
     }
 
-    // Endpoint: POST /api/verificar-password  — body: { usuario_id, password }
     fetch('/api/verificar-password', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1124,9 +1371,6 @@ window.guardarPerfilPaciente = function () {
     if (errNueva)  errNueva.style.display  = 'none';
     if (errActual) errActual.style.display = 'none';
 
-    // Endpoint: POST /api/actualizar-perfil-paciente
-    // Body esperado por el backend: { usuario_id, nombres, apellidos, correo, telefono,
-    //   nuevaPass, contrasena_actual, eps_id, tipo_eps_id }
     const payload = {
         usuario_id:        _usuarioId,
         nombres:           nombres   || undefined,
@@ -1187,6 +1431,7 @@ window.cerrarModalSimple = function () {
 
 window.ejecutarAccionSimple = function () {
     if (_accionPendienteSimple === 'salir') {
+        _detenerPolling();
         sessionStorage.removeItem('odent_usuario');
         localStorage.removeItem('usuario_logueado');
         window.location.replace('/login');
@@ -1214,6 +1459,14 @@ document.addEventListener('DOMContentLoaded', function () {
             _closeProfileDropdown();
         }
     });
+
+    // Cerrar modal de reporte con clic fuera del contenido
+    const modalReporte = document.getElementById('modalReportePaciente');
+    if (modalReporte) {
+        modalReporte.addEventListener('click', function (e) {
+            if (e.target === modalReporte) cerrarModalReportePaciente();
+        });
+    }
 
     _cargarSesion();
     cambiarVista('inicio');
