@@ -1,19 +1,20 @@
 # =============================================================================
-# modulo_eps/routes.py
+# modulo_eps/routes.py  —  FUSIONADO con modulo_config_ranking/routes.py
+# VERSIÓN CORREGIDA
+# =============================================================================
+# Blueprints contenidos en este archivo:
+#   · eps_bp            → todos los endpoints originales del módulo EPS
+#   · config_ranking_bp → GET/PUT/POST/GET/GET de config_ranking
 #
-# Registro en app.py:
-#   from modulo_eps.routes import eps_bp
-#   app.register_blueprint(eps_bp, url_prefix='/api')
-#
-# CAMBIOS REQ 7:
-#   - GET  /api/pregunta?activas=true  → filtra solo preguntas con Activa=1
-#   - PUT  /api/pregunta/<id>          → persiste campo Activa (activa/inactiva)
-#   - POST /api/pregunta/<id>/toggle   → invierte estado Activa directamente
-#
-# CAMBIOS REQ 1/2:
-#   - GET  /api/reporte/ranking-especialistas  → consulta real a BD con promedio
-#     y total de evaluaciones (privacidad: no expone identidad de pacientes)
-#   - GET  /api/estadisticas-ranking           → métricas globales del sistema
+# CAMBIOS REALIZADOS RESPECTO A LA VERSIÓN ORIGINAL:
+#   1) Se ELIMINÓ el endpoint duplicado `/encuesta/estado` (POST) que hacía
+#      un UPDATE sin WHERE y sin verificar rowcount (fallo silencioso).
+#      Toda la lógica de lectura/escritura de config_ranking vive ahora
+#      EXCLUSIVAMENTE en config_ranking.py (obtener_config / actualizar_config).
+#   2) Se agregó un endpoint GET `/encuesta/estado` de SOLO LECTURA, simple,
+#      que el frontend puede usar para verificación rápida antes de enviar
+#      una respuesta de encuesta (devuelve {ok, activo, Estado}).
+#   3) Los códigos de error de actualizar_config ahora distinguen 400/404/409.
 # =============================================================================
 
 from flask import Blueprint, jsonify, request
@@ -47,9 +48,17 @@ from .tabla_respuesta import (
     obtener_respuestas_por_paciente, obtener_ranking_especialistas,
     actualizar_respuesta, eliminar_respuesta,
 )
+from .config_ranking import (
+    obtener_config,
+    actualizar_config,
+    toggle_estado_config,
+    reporte_estado_ranking,
+    reporte_historial_config,
+)
 from db import get_db_connection
 
-eps_bp = Blueprint("eps", __name__)
+eps_bp            = Blueprint("eps",            __name__)
+config_ranking_bp = Blueprint("config_ranking", __name__)
 
 
 # =============================================================================
@@ -413,15 +422,11 @@ def borrar_paciente(paciente_id):
 
 
 # =============================================================================
-# REQ 7 — TABLA PREGUNTA (CRUD completo + toggle de estado Activa)
+# TABLA PREGUNTA (CRUD completo + toggle de estado Activa)
 # =============================================================================
 
 @eps_bp.route('/pregunta', methods=['GET'])
 def listar_preguntas():
-    """
-    REQ 7: Si activas=true devuelve solo las preguntas Activa=1,
-    garantizando que la encuesta del paciente refleje cambios CRUD en tiempo real.
-    """
     solo_activas = request.args.get('activas', 'false').lower() == 'true'
     try:
         datos = obtener_preguntas(solo_activas=solo_activas)
@@ -435,7 +440,7 @@ def nueva_pregunta():
     body = request.get_json()
     if not body:
         return jsonify({"ok": False, "error": "Cuerpo JSON requerido"}), 400
-    texto_pregunta = body.get('Texto_Pregunta')
+    texto_pregunta = (body.get('Texto_Pregunta') or '').strip()
     orden          = body.get('Orden')
     activa         = body.get('Activa', 1)
     if not texto_pregunta:
@@ -460,11 +465,10 @@ def ver_pregunta(pregunta_id):
 
 @eps_bp.route('/pregunta/<int:pregunta_id>', methods=['PUT'])
 def editar_pregunta(pregunta_id):
-    """REQ 7: Persiste Activa junto con Texto_Pregunta."""
     body = request.get_json()
     if not body:
         return jsonify({"ok": False, "error": "Cuerpo JSON requerido"}), 400
-    texto_pregunta = body.get('Texto_Pregunta')
+    texto_pregunta = (body.get('Texto_Pregunta') or '').strip()
     orden          = body.get('Orden')
     activa         = body.get('Activa', 1)
     if not texto_pregunta:
@@ -480,18 +484,13 @@ def editar_pregunta(pregunta_id):
 
 @eps_bp.route('/pregunta/<int:pregunta_id>/toggle', methods=['POST'])
 def toggle_pregunta(pregunta_id):
-    """
-    REQ 7: Invierte el estado Activa de la pregunta (activar/desactivar).
-    Cambio instantáneo en BD; la próxima consulta del paciente reflejará
-    el nuevo estado sin recarga adicional.
-    """
     try:
         nuevo_estado = togglear_activa(pregunta_id)
         if nuevo_estado is None:
             return jsonify({"ok": False, "error": "Pregunta no encontrada"}), 404
         return jsonify({
-            "ok":     True,
-            "Activa": nuevo_estado,
+            "ok":      True,
+            "Activa":  nuevo_estado,
             "mensaje": "Pregunta " + ("activada" if nuevo_estado == 1 else "desactivada")
         }), 200
     except Exception as e:
@@ -500,11 +499,21 @@ def toggle_pregunta(pregunta_id):
 
 @eps_bp.route('/pregunta/<int:pregunta_id>', methods=['DELETE'])
 def borrar_pregunta(pregunta_id):
+    """
+    Elimina la pregunta y, dentro de la misma transacción, las respuestas
+    asociadas en respuesta_ranking, para que el DELETE nunca se interrumpa
+    por violación de integridad referencial. Devuelve 404 si no existía,
+    200 + ok:true si se eliminó realmente (rowcount > 0).
+    """
     try:
         eliminado = eliminar_pregunta(pregunta_id)
         if not eliminado:
             return jsonify({"ok": False, "error": "Pregunta no encontrada"}), 404
-        return jsonify({"ok": True, "mensaje": "Pregunta eliminada correctamente"}), 200
+        return jsonify({
+            "ok":        True,
+            "mensaje":   "Pregunta eliminada correctamente",
+            "ID_Pregunta": pregunta_id
+        }), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -513,41 +522,63 @@ def borrar_pregunta(pregunta_id):
 # TABLA RESPUESTA
 # =============================================================================
 
-@eps_bp.route('/respuesta', methods=['GET'])
-def listar_respuestas():
-    try:
-        datos = obtener_respuestas()
-        return jsonify({"ok": True, "data": datos}), 200
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-@eps_bp.route('/respuesta/<int:respuesta_id>', methods=['GET'])
-def ver_respuesta(respuesta_id):
-    try:
-        registro = obtener_respuesta_por_id(respuesta_id)
-        if registro is None:
-            return jsonify({"ok": False, "error": "Respuesta no encontrada"}), 404
-        return jsonify({"ok": True, "data": registro}), 200
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-@eps_bp.route('/respuesta/<int:respuesta_id>', methods=['PUT'])
-def editar_respuesta(respuesta_id):
+@eps_bp.route('/respuesta', methods=['POST'])
+def nueva_respuesta():
     body = request.get_json()
     if not body:
         return jsonify({"ok": False, "error": "Cuerpo JSON requerido"}), 400
-    texto_respuesta = body.get('Texto_Respuesta')
-    if not texto_respuesta:
-        return jsonify({"ok": False, "error": "El campo Texto_Respuesta es requerido"}), 400
+
+    cita_id     = body.get('Cita_ID')
+    pregunta_id = body.get('Pregunta_ID')
+    respuesta   = body.get('Respuesta')
+
+    if not all([cita_id, pregunta_id, respuesta is not None]):
+        return jsonify({
+            "ok":    False,
+            "error": "Los campos Cita_ID, Pregunta_ID y Respuesta son requeridos"
+        }), 400
+
     try:
-        modificado = actualizar_respuesta(respuesta_id, texto_respuesta)
-        if not modificado:
-            return jsonify({"ok": False, "error": "Respuesta no encontrada"}), 404
-        return jsonify({"ok": True, "mensaje": "Respuesta actualizada correctamente"}), 200
+        nuevo_id = crear_respuesta(cita_id, pregunta_id, respuesta)
+        return jsonify({"ok": True, "data": {"Respuesta_ID": nuevo_id}}), 201
+
+    except RuntimeError as re_:
+        # Estado inactivo (Estado=2) o configuración inexistente
+        return jsonify({"ok": False, "error": str(re_), "bloqueado": True}), 403
+
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# VERIFICACIÓN DE ESTADO (SOLO LECTURA) — el front-end la usa al cargar y
+# antes de enviar una encuesta, para bloquear controles en el cliente.
+#
+# CORREGIDO: este endpoint ahora es GET y de solo lectura. Toda la escritura
+# de Estado pasa exclusivamente por PUT /config-ranking (config_ranking_bp),
+# que sí valida, hace upsert y verifica rowcount. El endpoint duplicado
+# `POST /encuesta/estado` (que hacía UPDATE sin WHERE) fue eliminado.
+# ---------------------------------------------------------------------------
+@eps_bp.route('/encuesta/estado', methods=['GET'])
+def consultar_estado_encuesta():
+    try:
+        data = obtener_config()
+        if data is None:
+            return jsonify({
+                "ok": False,
+                "activo": False,
+                "error": "La configuración no existe. Ejecuta init_db.py o usa PUT /config-ranking para inicializarla."
+            }), 404
+
+        activo = int(data["Estado"]) == 1
+        return jsonify({
+            "ok":     True,
+            "activo": activo,
+            "Estado": data["Estado"],
+            "Nombre_Estado": data["Nombre_Estado"],
+        }), 200
+    except Exception as e:
+        return jsonify({"ok": False, "activo": False, "error": str(e)}), 500
 
 
 @eps_bp.route('/respuesta/<int:respuesta_id>', methods=['DELETE'])
@@ -562,18 +593,11 @@ def borrar_respuesta(respuesta_id):
 
 
 # =============================================================================
-# REQ 1 — REPORTE: RANKING DE ESPECIALISTAS
-# Privacidad: expone promedio y total de evaluaciones por especialista.
-# NO expone identidad de pacientes ni sus respuestas individuales.
+# REPORTE: RANKING DE ESPECIALISTAS
 # =============================================================================
 
 @eps_bp.route('/reporte/ranking-especialistas', methods=['GET'])
 def reporte_ranking_especialistas():
-    """
-    REQ 1: Calcula promedio de puntuación de cada especialista a partir
-    de respuesta_ranking. Ordena de mayor a menor promedio.
-    Columna 'Total_Evaluaciones' cuenta respuestas totales (anónimas).
-    """
     try:
         datos = obtener_ranking_especialistas()
         return jsonify({"ok": True, "data": datos}), 200
@@ -582,23 +606,15 @@ def reporte_ranking_especialistas():
 
 
 # =============================================================================
-# REQ 2 — ESTADÍSTICAS GENERALES DEL SISTEMA
-# Conecta las tarjetas/contadores del panel de administración.
+# ESTADÍSTICAS GENERALES DEL SISTEMA
 # =============================================================================
 
 @eps_bp.route('/estadisticas-ranking', methods=['GET'])
 def estadisticas_ranking():
-    """
-    REQ 2: Devuelve métricas globales:
-      - total_especialistas_evaluados : cantidad de especialistas con ≥1 evaluación
-      - total_evaluaciones            : total de respuestas individuales en el sistema
-      - promedio_general              : promedio combinado de todos los especialistas
-    """
     con = None
     try:
         con = get_db_connection()
         cur = con.cursor()
-
         cur.execute("""
             SELECT
                 COUNT(DISTINCT ag.Especialista_ID)          AS total_especialistas_evaluados,
@@ -643,5 +659,108 @@ def reporte_respuestas_paciente(paciente_id):
         if not datos:
             return jsonify({"ok": False, "error": "No se encontraron respuestas para el paciente indicado"}), 404
         return jsonify({"ok": True, "data": datos}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# =============================================================================
+# CONFIG RANKING — lectura
+# =============================================================================
+
+@config_ranking_bp.route('/config-ranking', methods=['GET'])
+def leer_config_ranking():
+    try:
+        data = obtener_config()
+        if data is None:
+            return jsonify({
+                "ok":    False,
+                "error": "La configuración no existe. Ejecuta init_db.py."
+            }), 404
+        return jsonify({"ok": True, "data": data}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# =============================================================================
+# CONFIG RANKING — actualización explícita (ÚNICA fuente de escritura)
+# =============================================================================
+
+@config_ranking_bp.route('/config-ranking', methods=['PUT'])
+def editar_config_ranking():
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({"ok": False, "error": "Cuerpo JSON requerido."}), 400
+
+    estado_raw = body.get("Estado")
+    if estado_raw is None:
+        return jsonify({"ok": False, "error": "El campo 'Estado' es requerido."}), 400
+
+    try:
+        estado = int(estado_raw)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "'Estado' debe ser un entero (1 o 2)."}), 400
+
+    try:
+        data = actualizar_config(estado)
+        return jsonify({
+            "ok":      True,
+            "mensaje": "Configuración actualizada correctamente.",
+            "data":    data,
+        }), 200
+    except ValueError as ve:
+        # Estado fuera de {1, 2}
+        return jsonify({"ok": False, "error": str(ve)}), 400
+    except RuntimeError as re_:
+        # Fallos de consistencia explícitos (fila no encontrada, rowcount 0,
+        # mismatch tras relectura, etc.) — ya NO fallan en silencio.
+        return jsonify({"ok": False, "error": str(re_)}), 409
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# =============================================================================
+# CONFIG RANKING — toggle Activo ↔ Inactivo
+# =============================================================================
+
+@config_ranking_bp.route('/config-ranking/toggle', methods=['POST'])
+def toggle_config_ranking():
+    try:
+        data  = toggle_estado_config()
+        label = "activado" if data["Estado"] == 1 else "desactivado"
+        return jsonify({
+            "ok":      True,
+            "mensaje": f"Ranking {label}.",
+            "data":    data,
+        }), 200
+    except RuntimeError as re_:
+        return jsonify({"ok": False, "error": str(re_)}), 409
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# =============================================================================
+# CONFIG RANKING — reporte consolidado con estadísticas
+# =============================================================================
+
+@config_ranking_bp.route('/config-ranking/reporte', methods=['GET'])
+def reporte_config_ranking():
+    try:
+        data = reporte_estado_ranking()
+        return jsonify({"ok": True, "data": data}), 200
+    except RuntimeError as re_:
+        return jsonify({"ok": False, "error": str(re_)}), 404
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# =============================================================================
+# CONFIG RANKING — historial de cambios (aseguramiento_datos)
+# =============================================================================
+
+@config_ranking_bp.route('/config-ranking/historial', methods=['GET'])
+def historial_config_ranking():
+    try:
+        data = reporte_historial_config()
+        return jsonify({"ok": True, "data": data}), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500

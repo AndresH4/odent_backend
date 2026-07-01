@@ -27,9 +27,9 @@ from modulo_historial.tabla_diagnostico             import tabla_diag_bp
 from modulo_historial.historial_diagnostico         import historial_diag_bp
 from modulo_historial.tabla_puntuacion_especialista import puntuacion_bp
 
-from modulo_usuarios.routes import usuarios_bp
-from modulo_citas.routes    import citas_bp
-from modulo_eps.routes      import eps_bp
+from modulo_usuarios.routes  import usuarios_bp
+from modulo_citas.routes     import citas_bp
+from modulo_eps.routes       import eps_bp, config_ranking_bp   # ← config_ranking_bp viene del routes fusionado
 
 from db import get_db_connection
 
@@ -50,14 +50,15 @@ app = Flask(__name__)
 app.secret_key = "CAMBIA-ESTO-POR-UNA-CLAVE-LARGA-Y-ALEATORIA"
 CORS(app, supports_credentials=True)
 
-app.register_blueprint(usuarios_bp,       url_prefix='/api')
+app.register_blueprint(usuarios_bp,          url_prefix='/api')
 app.register_blueprint(historial_bp)
-app.register_blueprint(tratamiento_bp,    url_prefix='/api')
-app.register_blueprint(tabla_diag_bp,     url_prefix='/api')
-app.register_blueprint(historial_diag_bp, url_prefix='/api')
-app.register_blueprint(puntuacion_bp,     url_prefix='/api')
-app.register_blueprint(citas_bp,          url_prefix='/api')
-app.register_blueprint(eps_bp,            url_prefix='/api')
+app.register_blueprint(tratamiento_bp,       url_prefix='/api')
+app.register_blueprint(tabla_diag_bp,        url_prefix='/api')
+app.register_blueprint(historial_diag_bp,    url_prefix='/api')
+app.register_blueprint(puntuacion_bp,        url_prefix='/api')
+app.register_blueprint(citas_bp,             url_prefix='/api')
+app.register_blueprint(eps_bp,               url_prefix='/api')
+app.register_blueprint(config_ranking_bp,    url_prefix='/api')  # ← NUEVO
 
 
 # =============================================================================

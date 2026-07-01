@@ -1,7 +1,10 @@
-# modulo_citas/routes.py
-"""
-modulo_citas/routes.py — Stylo Dental
-"""
+# =============================================================================
+# modulo_citas/routes.py  — MODIFICADO
+# REQ 2: config_ranking usa solo Estado (1=Activo, 2=Inactivo). Eliminada toda
+#        referencia a Horas_Envio. Kill-switch: Estado == 2 detiene el envío.
+# REQ 3: POST /api/respuesta calcula promedio de la encuesta de esa cita y
+#        registra UNA SOLA fila consolidada en puntuacion_especialista por cita.
+# =============================================================================
 
 from flask import Blueprint, request, jsonify
 from datetime import date, datetime, timedelta
@@ -71,15 +74,6 @@ def _json_error(mensaje, code=400):
 
 
 def _get_json_seguro():
-    """
-    FIX 400 BAD REQUEST: request.get_json() estricto lanza una excepción
-    (que Flask convierte en 400) cuando el body está vacío, no es JSON
-    válido, o el header Content-Type no es exactamente 'application/json'.
-    Esta utilidad SIEMPRE usa silent=True y nunca deja que una llamada sin
-    body, con body vacío, o con Content-Type ausente/incorrecto tumbe el
-    endpoint con un 400. Si no hay JSON parseable, devuelve {} y el
-    endpoint sigue funcionando con valores por defecto.
-    """
     try:
         datos = request.get_json(silent=True)
     except Exception:
@@ -220,13 +214,12 @@ def _garantizar_historial_clinico(cur, cita_id, diagnosticos=None,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PROMEDIO DEL ESPECIALISTA
+# PROMEDIO DEL ESPECIALISTA  (calculado desde respuesta_ranking, sin cambios)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _crear_promedio(cur, especialista_id: int) -> float:
     cur.execute("""
-        SELECT ROUND(AVG(CAST(rr.Respuesta AS REAL)), 2) AS Promedio,
-               COUNT(rr.Respuesta_ID)                    AS Total
+        SELECT ROUND(AVG(CAST(rr.Respuesta AS REAL)), 2) AS Promedio
         FROM respuesta_ranking rr
         INNER JOIN cita   c  ON rr.Cita_ID  = c.Cita_ID
         INNER JOIN agenda ag ON c.Agenda_ID = ag.Agenda_ID
@@ -316,28 +309,23 @@ def _html_encuesta_cita(nombre_paciente: str, nombre_especialista: str,
 </html>"""
 
 
+# REQ 2: eliminado parámetro horas_retraso; el hilo ya no duerme ni lee Horas_Envio.
+# Kill-switch: Estado == 2 → salida temprana sin envío.
 def _despachar_correo_encuesta(cita_id: int, correo_paciente: str,
                                 nombre_paciente: str, nombre_especialista: str,
-                                horas_retraso: int, login_url: str):
-    import time as _time
-
-    if horas_retraso > 0:
-        logger.info(
-            "[ENCUESTA] Esperando %d hora(s) antes de enviar correo a %s (cita %d)",
-            horas_retraso, correo_paciente, cita_id
-        )
-        _time.sleep(horas_retraso * 3600)
-
+                                login_url: str):
     con = None
     try:
         con = _get_conn()
         cur = con.cursor()
 
-        cur.execute("SELECT Estado_Envio FROM config_ranking LIMIT 1")
+        # REQ 2: Estado=1 → activo, Estado=2 → inactivo (kill-switch).
+        cur.execute("SELECT Estado FROM config_ranking LIMIT 1")
         cfg = cur.fetchone()
-        if cfg and cfg['Estado_Envio'] == 0:
+        if cfg and cfg['Estado'] == 2:
             logger.info(
-                "[ENCUESTA] Kill-switch INACTIVO: no se envía correo para cita %d", cita_id
+                "[ENCUESTA] Kill-switch INACTIVO (Estado=2): no se envía correo para cita %d",
+                cita_id
             )
             return
 
@@ -368,6 +356,7 @@ def _despachar_correo_encuesta(cita_id: int, correo_paciente: str,
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIGURACIÓN DE RANKING
+# REQ 2: solo campo Estado (1=Activo, 2=Inactivo). Horas_Envio eliminado.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/config-ranking', methods=['GET'])
@@ -376,15 +365,23 @@ def get_config_ranking():
     try:
         con = _get_conn()
         cur = con.cursor()
-        cur.execute("SELECT Config_ID, Horas_Envio, Estado_Envio FROM config_ranking LIMIT 1")
+        # REQ 2: migración inline — añade columna Estado si falta, elimina Horas_Envio semánticamente.
+        cur.execute("PRAGMA table_info(config_ranking)")
+        cols = [c[1] for c in cur.fetchall()]
+        if 'Estado' not in cols:
+            try:
+                cur.execute("ALTER TABLE config_ranking ADD COLUMN Estado INTEGER NOT NULL DEFAULT 1")
+                con.commit()
+            except Exception:
+                pass
+
+        cur.execute("SELECT Config_ID, Estado FROM config_ranking LIMIT 1")
         row = cur.fetchone()
         if not row:
-            cur.execute(
-                "INSERT INTO config_ranking (Horas_Envio, Estado_Envio) VALUES (2, 1)"
-            )
+            cur.execute("INSERT INTO config_ranking (Estado) VALUES (1)")
             con.commit()
-            return _json_ok({"Config_ID": 1, "Horas_Envio": 2, "Estado_Envio": 1})
-        return _json_ok(dict(row))
+            return _json_ok({"Config_ID": 1, "Estado": 1})
+        return _json_ok({"Config_ID": row['Config_ID'], "Estado": row['Estado']})
     except Exception as exc:
         return _json_error(str(exc), 500)
     finally:
@@ -393,40 +390,39 @@ def get_config_ranking():
 
 @citas_bp.route('/config-ranking', methods=['PUT'])
 def put_config_ranking():
-    datos        = _get_json_seguro()
-    horas_envio  = datos.get('Horas_Envio')
-    estado_envio = datos.get('Estado_Envio')
+    datos  = _get_json_seguro()
+    estado = datos.get('Estado')
 
-    if horas_envio is None and estado_envio is None:
-        return _json_error('Se requiere al menos Horas_Envio o Estado_Envio.')
+    if estado is None:
+        return _json_error('Se requiere el campo Estado (1=Activo, 2=Inactivo).')
+
+    estado_val = int(estado)
+    if estado_val not in (1, 2):
+        return _json_error('Estado debe ser 1 (Activo) o 2 (Inactivo).')
 
     con = None
     try:
         con = _get_conn()
         cur = con.cursor()
+
+        # REQ 2: migración inline
+        cur.execute("PRAGMA table_info(config_ranking)")
+        cols = [c[1] for c in cur.fetchall()]
+        if 'Estado' not in cols:
+            try:
+                cur.execute("ALTER TABLE config_ranking ADD COLUMN Estado INTEGER NOT NULL DEFAULT 1")
+                con.commit()
+            except Exception:
+                pass
+
         cur.execute("SELECT Config_ID FROM config_ranking LIMIT 1")
         if not cur.fetchone():
-            cur.execute(
-                "INSERT INTO config_ranking (Horas_Envio, Estado_Envio) VALUES (2, 1)"
-            )
+            cur.execute("INSERT INTO config_ranking (Estado) VALUES (1)")
             con.commit()
 
-        campos  = []
-        valores = []
-        if horas_envio is not None:
-            h = int(horas_envio)
-            if h < 0:
-                return _json_error('Horas_Envio no puede ser negativo.')
-            campos.append("Horas_Envio = ?"); valores.append(h)
-        if estado_envio is not None:
-            campos.append("Estado_Envio = ?"); valores.append(1 if estado_envio else 0)
-
-        cur.execute(
-            f"UPDATE config_ranking SET {', '.join(campos)} WHERE Config_ID = 1",
-            tuple(valores)
-        )
+        cur.execute("UPDATE config_ranking SET Estado = ? WHERE Config_ID = 1", (estado_val,))
         con.commit()
-        return _json_ok({"ok": True, "mensaje": "Configuración actualizada."})
+        return _json_ok({"ok": True, "Estado": estado_val, "mensaje": "Configuración actualizada."})
     except Exception as exc:
         if con: con.rollback()
         return _json_error(str(exc), 500)
@@ -484,7 +480,6 @@ def get_paciente_por_usuario(usuario_id):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ESPECIALIDADES — GET /api/especialidades
-# Devuelve las 8 especialidades ordenadas por Especialidad_ID (orden de registro).
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/especialidades', methods=['GET'])
@@ -597,7 +592,7 @@ def get_perfil_especialista(usuario_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# AGENDA — GET /api/agenda   POST /api/agenda   DELETE /api/agenda/<id>
+# AGENDA
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/agenda', methods=['GET'])
@@ -679,8 +674,7 @@ def crear_agenda():
             WHERE Especialista_ID = ? AND Fecha = ? AND Hora_Inicio = ?
               AND EstadoAgenda_ID IN (1, 2)
         """, (esp_id, fecha, hora_inicio))
-        duplicado = cur.fetchone()
-        if duplicado:
+        if cur.fetchone():
             cur.execute("ROLLBACK")
             return _json_error(
                 'Ya existe una disponibilidad registrada para esta fecha y horario. '
@@ -740,7 +734,7 @@ def eliminar_agenda(agenda_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CITAS — GET /api/citas   POST /api/citas
+# CITAS
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas', methods=['GET'])
@@ -795,10 +789,6 @@ def get_citas():
         if con: con.close()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# GENERAR CÓDIGO DE VERIFICACIÓN ÚNICO — GET /api/citas/generar-codigo
-# ─────────────────────────────────────────────────────────────────────────────
-
 @citas_bp.route('/citas/generar-codigo', methods=['GET'])
 def generar_codigo_verificacion_endpoint():
     con = None
@@ -812,10 +802,6 @@ def generar_codigo_verificacion_endpoint():
     finally:
         if con: con.close()
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# VERIFICAR CÓDIGO DE CITA — POST /api/citas/<id>/verificar-codigo
-# ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>/verificar-codigo', methods=['POST'])
 def verificar_codigo_cita(cita_id):
@@ -840,7 +826,6 @@ def verificar_codigo_cita(cita_id):
 
         if not row:
             return _json_error('Cita no encontrada.', 404)
-
         if row['EstadoAgenda_ID'] not in (1, 2):
             return _json_error('La cita no está en un estado que permita verificación.', 409)
 
@@ -853,7 +838,6 @@ def verificar_codigo_cita(cita_id):
             (row['Agenda_ID'],)
         )
         con.commit()
-
         return _json_ok({"ok": True, "mensaje": "Código verificado. Cita en proceso."})
 
     except Exception as exc:
@@ -975,10 +959,6 @@ def crear_cita():
         if con: con.close()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CITA INDIVIDUAL — GET /api/citas/<id>
-# ─────────────────────────────────────────────────────────────────────────────
-
 @citas_bp.route('/citas/<int:cita_id>', methods=['GET'])
 def get_cita(cita_id):
     con = None
@@ -1031,10 +1011,6 @@ def get_cita(cita_id):
         if con: con.close()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# ATENDER CITA — PUT /api/citas/<id>/atender
-# ─────────────────────────────────────────────────────────────────────────────
-
 @citas_bp.route('/citas/<int:cita_id>/atender', methods=['PUT'])
 @citas_bp.route('/citas/<int:cita_id>/en-proceso', methods=['PUT'])
 def atender_cita(cita_id):
@@ -1066,10 +1042,6 @@ def atender_cita(cita_id):
     finally:
         if con: con.close()
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# MARCAR CITA ATENDIDA — PUT /api/citas/<id>/atendido
-# ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>/atendido', methods=['PUT'])
 def marcar_atendido(cita_id):
@@ -1138,68 +1110,26 @@ def marcar_atendido(cita_id):
         if con: con.close()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# FINALIZAR CONSULTA — PUT /api/citas/<id>/finalizar-consulta
-#
-# FIX 400 BAD REQUEST (causa raíz):
-#   Este endpoint recibe ahora un body opcional desde historia_clinica.js con
-#   el detalle clínico (Diagnostico/Evolucion/Tratamiento o sus variantes en
-#   minúscula diagnostico/evolucion_clinica/tratamiento). Anteriormente NO se
-#   leía ningún JSON, pero el frontend (y/o un proxy intermedio) podía enviar
-#   Content-Type: application/json con un body vacío o inconsistente, lo que
-#   provocaba que Flask intentara parsear JSON estricto en algún punto del
-#   stack y devolviera 400 antes de llegar a la lógica de negocio.
-#
-#   SOLUCIÓN APLICADA:
-#     1) Se usa _get_json_seguro(), que llama a request.get_json(silent=True)
-#        envuelto en try/except, garantizando que CUALQUIER body (vacío, mal
-#        formado, ausente, o con Content-Type incorrecto) jamás levante un
-#        400 por fallo de parseo. Si no hay JSON válido, se usa un diccionario
-#        vacío y se continúa con valores por defecto.
-#     2) Se extraen los campos de forma tolerante con .get(..., '') aceptando
-#        tanto las claves en mayúscula (Diagnostico, Evolucion, Tratamiento)
-#        como las variantes en minúscula (diagnostico, evolucion_clinica,
-#        tratamiento) que también puede enviar el frontend.
-#     3) Si llega información clínica en el body, se persiste también aquí
-#        mediante _garantizar_historial_clinico(), sin que esto sea
-#        obligatorio: si no llega nada, el endpoint sigue funcionando igual
-#        que antes (solo marca la agenda como Cumplida y dispara la encuesta).
-#     4) La respuesta exitosa incluye explícitamente {"status": "success"}
-#        además de los campos ya existentes ("ok", "status" descriptivo,
-#        "correo_enviado", "FechaAtencion"), preservando compatibilidad con
-#        cualquier consumidor que ya revisara esos campos.
-# ─────────────────────────────────────────────────────────────────────────────
-
 @citas_bp.route('/citas/<int:cita_id>/finalizar-consulta', methods=['PUT'])
 def finalizar_consulta(cita_id):
     datos = _get_json_seguro()
 
     diagnostico = (
-        datos.get('Diagnostico')
-        or datos.get('diagnostico')
-        or ''
+        datos.get('Diagnostico') or datos.get('diagnostico') or ''
     ).strip() if isinstance(datos.get('Diagnostico') or datos.get('diagnostico'), str) else ''
 
     evolucion = (
-        datos.get('Evolucion')
-        or datos.get('evolucion_clinica')
-        or datos.get('evolucion')
-        or ''
+        datos.get('Evolucion') or datos.get('evolucion_clinica') or datos.get('evolucion') or ''
     ).strip() if isinstance(
-        datos.get('Evolucion') or datos.get('evolucion_clinica') or datos.get('evolucion'),
-        str
+        datos.get('Evolucion') or datos.get('evolucion_clinica') or datos.get('evolucion'), str
     ) else ''
 
     tratamiento = (
-        datos.get('Tratamiento')
-        or datos.get('tratamiento')
-        or ''
+        datos.get('Tratamiento') or datos.get('tratamiento') or ''
     ).strip() if isinstance(datos.get('Tratamiento') or datos.get('tratamiento'), str) else ''
 
     motivo_hc = (
-        datos.get('MotivoConsulta')
-        or datos.get('motivo_consulta')
-        or ''
+        datos.get('MotivoConsulta') or datos.get('motivo_consulta') or ''
     ).strip() if isinstance(datos.get('MotivoConsulta') or datos.get('motivo_consulta'), str) else ''
 
     con = None
@@ -1229,16 +1159,6 @@ def finalizar_consulta(cita_id):
         if not row:
             return _json_error('Cita no encontrada.', 404)
 
-        # FIX CONFLICTO DE ESTADOS: el endpoint /api/historial/finalizar
-        # (llamado primero desde historia_clinica.js) ya marca la agenda
-        # como Cumplida (EstadoAgenda_ID = 4) ANTES de que este endpoint
-        # se ejecute como segunda llamada en cadena. La validación original
-        # solo aceptaba (1, 2) — Disponible/Ocupado — y rechazaba con 400
-        # cualquier cita que ya estuviera en estado 4, aunque ese cambio de
-        # estado fuera legítimo y reciente. Ahora se acepta también el
-        # estado 4 (Cumplida) como un caso IDEMPOTENTE: si la cita ya fue
-        # finalizada (por este mismo flujo o por una llamada repetida), se
-        # continúa sin error en lugar de abortar con 400.
         if row['EstadoAgenda_ID'] not in (1, 2, 4):
             return _json_error(
                 'Solo se puede finalizar una cita en estado Disponible, Ocupado o ya Cumplida.'
@@ -1264,8 +1184,6 @@ def finalizar_consulta(cita_id):
             (fecha_hora_fin, cita_id)
         )
 
-        # Persistencia tolerante del detalle clínico recibido en el body
-        # (si el frontend lo envía). Nunca es obligatorio para finalizar.
         if diagnostico or evolucion or tratamiento or motivo_hc:
             try:
                 _garantizar_historial_clinico(
@@ -1323,12 +1241,22 @@ def finalizar_consulta(cita_id):
 
         con.commit()
 
-        cur.execute("SELECT Horas_Envio, Estado_Envio FROM config_ranking LIMIT 1")
-        cfg = cur.fetchone()
-        horas_envio  = cfg['Horas_Envio']  if cfg else 2
-        estado_envio = cfg['Estado_Envio'] if cfg else 1
+        # REQ 2: lee solo campo Estado (1=Activo, 2=Inactivo).
+        cur.execute("PRAGMA table_info(config_ranking)")
+        cfg_cols = [c[1] for c in cur.fetchall()]
+        if 'Estado' not in cfg_cols:
+            try:
+                cur.execute("ALTER TABLE config_ranking ADD COLUMN Estado INTEGER NOT NULL DEFAULT 1")
+                con.commit()
+            except Exception:
+                pass
 
-        if estado_envio == 0:
+        cur.execute("SELECT Estado FROM config_ranking LIMIT 1")
+        cfg          = cur.fetchone()
+        estado_envio = cfg['Estado'] if cfg else 1
+
+        # REQ 2: Estado=2 → kill-switch, detiene envío de encuesta.
+        if estado_envio == 2:
             return _json_ok({
                 "ok": True,
                 "status": "success",
@@ -1345,6 +1273,7 @@ def finalizar_consulta(cita_id):
         login_url = f"{base_url}/login.html"
 
         if correo_paciente:
+            # REQ 2: sin horas_retraso — el hilo dispara el correo inmediatamente.
             hilo = threading.Thread(
                 target=_despachar_correo_encuesta,
                 args=(
@@ -1352,17 +1281,13 @@ def finalizar_consulta(cita_id):
                     correo_paciente,
                     nombre_paciente,
                     nombre_especialista,
-                    horas_envio,
                     login_url,
                 ),
                 daemon=True,
                 name=f"encuesta-cita-{cita_id}",
             )
             hilo.start()
-            correo_msg = (
-                f"Correo de encuesta programado para {correo_paciente} "
-                f"con {horas_envio}h de retraso."
-            )
+            correo_msg = f"Correo de encuesta enviado a {correo_paciente}."
         else:
             correo_msg = "No se encontró correo del paciente; no se enviará notificación."
 
@@ -1384,7 +1309,7 @@ def finalizar_consulta(cita_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ENCUESTAS PENDIENTES — GET /api/paciente/<id>/encuestas-pendientes
+# ENCUESTAS PENDIENTES
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/paciente/<int:paciente_id>/encuestas-pendientes', methods=['GET'])
@@ -1431,7 +1356,7 @@ def get_encuestas_pendientes(paciente_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CANCELAR CITA SIN MULTA — PUT /api/citas/<id>/cancelar-sin-multa
+# CANCELACIONES
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/citas/<int:cita_id>/cancelar-sin-multa', methods=['PUT'])
@@ -1464,10 +1389,6 @@ def cancelar_cita_sin_multa(cita_id):
         if con: con.close()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CANCELAR CITA CON MULTA — PUT /api/citas/<id>/cancelar-con-multa
-# ─────────────────────────────────────────────────────────────────────────────
-
 @citas_bp.route('/citas/<int:cita_id>/cancelar-con-multa', methods=['PUT'])
 def cancelar_cita_con_multa(cita_id):
     con = None
@@ -1495,8 +1416,7 @@ def cancelar_cita_con_multa(cita_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# AUTOMATIZACIÓN DE MULTAS POR CUMPLIMIENTO DE TIEMPO
-# POST /api/multas/procesar-vencimientos
+# MULTAS
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _procesar_vencimientos_multas_interno(cur):
@@ -1525,14 +1445,12 @@ def _procesar_vencimientos_multas_interno(cur):
             "UPDATE agenda SET EstadoAgenda_ID = 3 WHERE Agenda_ID = ?",
             (agenda_id,)
         )
-
         cur.execute(
             "SELECT Multa_ID FROM multa WHERE Cita_ID = ?", (cita_id,)
         )
         if cur.fetchone():
             procesadas += 1
             continue
-
         cur.execute(
             "INSERT INTO multa (Cita_ID, EstadoMulta_ID) VALUES (?, 1)",
             (cita_id,)
@@ -1550,9 +1468,7 @@ def procesar_vencimientos_multas():
         con.execute("PRAGMA foreign_keys = ON")
         cur = con.cursor()
         cur.execute("BEGIN TRANSACTION")
-
         procesadas = _procesar_vencimientos_multas_interno(cur)
-
         cur.execute("COMMIT")
         con.commit()
         return _json_ok({
@@ -1569,10 +1485,6 @@ def procesar_vencimientos_multas():
     finally:
         if con: con.close()
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# CITAS POR PACIENTE — GET /api/paciente/<id>/citas
-# ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/paciente/<int:paciente_id>/citas', methods=['GET'])
 def get_citas_paciente(paciente_id):
@@ -1621,10 +1533,6 @@ def get_citas_paciente(paciente_id):
         if con: con.close()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CITAS POR ESPECIALISTA — GET /api/especialista/<id>/citas
-# ─────────────────────────────────────────────────────────────────────────────
-
 @citas_bp.route('/especialista/<int:especialista_id>/citas', methods=['GET'])
 def get_citas_especialista(especialista_id):
     con = None
@@ -1669,10 +1577,6 @@ def get_citas_especialista(especialista_id):
     finally:
         if con: con.close()
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# MULTAS
-# ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/multas', methods=['GET'])
 def get_multas():
@@ -1779,7 +1683,7 @@ def get_multas_paciente(paciente_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# HISTORIAL CLÍNICO — POST /api/historial-clinico
+# HISTORIAL CLÍNICO
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/historial-clinico', methods=['POST'])
@@ -1815,10 +1719,6 @@ def crear_historial_clinico():
     finally:
         if con: con.close()
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# HISTORIAL CLÍNICO — GET /api/historial-clinico/<cita_id>
-# ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/historial-clinico/<int:cita_id>', methods=['GET'])
 def get_historial_clinico(cita_id):
@@ -1886,6 +1786,10 @@ def get_historial_clinico(cita_id):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # RANKING — POST /api/respuesta
+# REQ 2: verifica Estado (1=Activo, 2=Inactivo) antes de aceptar respuestas.
+# REQ 3: al completarse todas las preguntas de la cita, calcula el promedio
+#         de esa encuesta y registra UNA SOLA fila consolidada en
+#         puntuacion_especialista (Calificacion_Promedio = promedio de esa cita).
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/respuesta', methods=['POST'])
@@ -1913,9 +1817,19 @@ def crear_respuesta_ranking():
         con = _get_conn()
         cur = con.cursor()
 
-        cur.execute("SELECT Estado_Envio FROM config_ranking LIMIT 1")
+        # REQ 2: Estado=2 → inactivo, bloquear respuestas.
+        cur.execute("PRAGMA table_info(config_ranking)")
+        cfg_cols = [c[1] for c in cur.fetchall()]
+        if 'Estado' not in cfg_cols:
+            try:
+                cur.execute("ALTER TABLE config_ranking ADD COLUMN Estado INTEGER NOT NULL DEFAULT 1")
+                con.commit()
+            except Exception:
+                pass
+
+        cur.execute("SELECT Estado FROM config_ranking LIMIT 1")
         cfg = cur.fetchone()
-        if cfg and cfg['Estado_Envio'] == 0:
+        if cfg and cfg['Estado'] == 2:
             return _json_error(
                 'El sistema de evaluaciones está temporalmente desactivado.', 503
             )
@@ -1968,18 +1882,9 @@ def crear_respuesta_ranking():
             WHERE c.Cita_ID = ?
         """, (cita_id_final,))
         esp_row = cur.fetchone()
-        if esp_row:
-            especialista_id = esp_row['Especialista_ID']
-            cur.execute("""
-                INSERT INTO puntuacion_especialista (Especialista_ID, Respuesta_ID)
-                VALUES (?, ?)
-            """, (especialista_id, respuesta_id))
-            nuevo_promedio = _crear_promedio(cur, especialista_id)
-            logger.info(
-                "[RANKING] Especialista %d — nuevo promedio: %.2f",
-                especialista_id, nuevo_promedio
-            )
+        especialista_id = esp_row['Especialista_ID'] if esp_row else None
 
+        # REQ 3: verificar si se completaron TODAS las preguntas activas de esta cita.
         cur.execute(
             "SELECT COUNT(*) AS total FROM preguntas_ranking WHERE Activa = 1"
         )
@@ -1990,7 +1895,59 @@ def crear_respuesta_ranking():
         )
         total_respondidas = cur.fetchone()['respondidas']
 
-        if total_respondidas >= total_preguntas:
+        if total_respondidas >= total_preguntas and especialista_id:
+            # REQ 3: calcular promedio de las respuestas de ESTA encuesta (esta cita).
+            cur.execute("""
+                SELECT ROUND(AVG(CAST(Respuesta AS REAL)), 2) AS PromedioCita
+                FROM respuesta_ranking
+                WHERE Cita_ID = ?
+            """, (cita_id_final,))
+            prom_row       = cur.fetchone()
+            promedio_cita  = float(prom_row['PromedioCita']) if prom_row and prom_row['PromedioCita'] is not None else float(valor_int)
+
+            # REQ 3: migración inline — añade columna Calificacion_Promedio si no existe.
+            cur.execute("PRAGMA table_info(puntuacion_especialista)")
+            pe_cols = [c[1] for c in cur.fetchall()]
+            if 'Calificacion_Promedio' not in pe_cols:
+                try:
+                    cur.execute(
+                        "ALTER TABLE puntuacion_especialista ADD COLUMN Calificacion_Promedio REAL"
+                    )
+                except Exception:
+                    pass
+
+            # REQ 3: una sola fila por cita en puntuacion_especialista.
+            # Si ya existe (idempotencia ante llamadas repetidas), actualiza el promedio.
+            cur.execute("""
+                SELECT Puntuacion_ID FROM puntuacion_especialista
+                WHERE Especialista_ID = ? AND Respuesta_ID IN (
+                    SELECT Respuesta_ID FROM respuesta_ranking WHERE Cita_ID = ?
+                )
+                LIMIT 1
+            """, (especialista_id, cita_id_final))
+            existente_pe = cur.fetchone()
+
+            if existente_pe:
+                cur.execute("""
+                    UPDATE puntuacion_especialista
+                    SET Calificacion_Promedio = ?
+                    WHERE Puntuacion_ID = ?
+                """, (promedio_cita, existente_pe['Puntuacion_ID']))
+            else:
+                cur.execute("""
+                    INSERT INTO puntuacion_especialista
+                        (Especialista_ID, Respuesta_ID, Calificacion_Promedio)
+                    VALUES (?, ?, ?)
+                """, (especialista_id, respuesta_id, promedio_cita))
+
+            nuevo_promedio = _crear_promedio(cur, especialista_id)
+            logger.info(
+                "[RANKING] Cita %d completada — promedio encuesta: %.2f — "
+                "promedio acumulado especialista %d: %.2f",
+                cita_id_final, promedio_cita, especialista_id, nuevo_promedio
+            )
+
+            # Marcar encuesta_pendiente como completada.
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS encuesta_pendiente (
                     Pendiente_ID   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2017,7 +1974,7 @@ def crear_respuesta_ranking():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# VERIFICAR CONTRASEÑA — POST /api/verificar-password
+# CONTRASEÑAS Y PERFIL
 # ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/verificar-password', methods=['POST'])
@@ -2054,10 +2011,6 @@ def verificar_password():
     finally:
         if con: con.close()
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# ACTUALIZAR PERFIL PACIENTE — POST /api/actualizar-perfil-paciente
-# ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/actualizar-perfil-paciente', methods=['POST'])
 def actualizar_perfil_paciente():
@@ -2160,10 +2113,6 @@ def actualizar_perfil_paciente():
         if con: con.close()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# TIPOS DE DOCUMENTO — GET /api/tipos_documento
-# ─────────────────────────────────────────────────────────────────────────────
-
 @citas_bp.route('/tipos_documento', methods=['GET'])
 def get_tipos_documento():
     con = None
@@ -2177,10 +2126,6 @@ def get_tipos_documento():
     finally:
         if con: con.close()
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# ACTUALIZAR USUARIO — PUT /api/usuarios/<id>
-# ─────────────────────────────────────────────────────────────────────────────
 
 @citas_bp.route('/usuarios/<int:usuario_id>', methods=['PUT'])
 def actualizar_usuario(usuario_id):

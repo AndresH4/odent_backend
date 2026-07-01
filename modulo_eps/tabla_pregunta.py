@@ -12,6 +12,13 @@
 # REQ 7: Cualquier operación CRUD realizada por el administrador actualiza
 # instantáneamente la BD. El paciente siempre consulta solo las preguntas
 # Activa=1 a través del endpoint GET /api/pregunta?activas=true.
+#
+# FIX eliminación: antes el DELETE se interrumpía por violación de
+# integridad referencial (la pregunta tenía respuestas asociadas en
+# respuesta_ranking). Ahora eliminar_pregunta() borra primero las
+# respuestas dependientes dentro de la misma transacción, y solo
+# confirma éxito si la fila de preguntas_ranking fue realmente
+# eliminada (rowcount > 0).
 # =============================================================================
 
 from db import get_db_connection
@@ -24,7 +31,6 @@ def crear_pregunta(texto_pregunta, orden=None, activa=1):
     (la tabla ordena por Preguntas_ID).
     Retorna el ID del registro creado (Preguntas_ID).
     """
-    # Normalizar: activa debe ser 0 o 1
     activa_val = 1 if activa else 0
 
     conexion = None
@@ -197,7 +203,17 @@ def togglear_activa(pregunta_id):
 
 def eliminar_pregunta(pregunta_id):
     """
-    Elimina una pregunta por su Preguntas_ID.
+    Elimina una pregunta por su Preguntas_ID de forma atómica.
+
+    FIX: antes el DELETE fallaba/quedaba interrumpido porque la pregunta
+    tenía respuestas asociadas en respuesta_ranking (violación de FK /
+    integridad). Ahora, dentro de una sola transacción:
+      1) Verifica que la pregunta exista.
+      2) Borra primero las respuestas dependientes en respuesta_ranking.
+      3) Borra la pregunta en preguntas_ranking.
+      4) Solo confirma (commit) si la fila de preguntas_ranking fue
+         realmente eliminada (rowcount > 0); de lo contrario hace rollback.
+
     Retorna True si se eliminó, False si no existía.
     """
     conexion = None
@@ -205,12 +221,41 @@ def eliminar_pregunta(pregunta_id):
     try:
         conexion = get_db_connection()
         cursor   = conexion.cursor()
+
+        # Asegurar que las FK no bloqueen el borrado en cascada manual
+        try:
+            cursor.execute("PRAGMA foreign_keys = OFF")
+        except Exception:
+            pass
+
+        cursor.execute("BEGIN TRANSACTION")
+
+        cursor.execute(
+            "SELECT Preguntas_ID FROM preguntas_ranking WHERE Preguntas_ID = ?",
+            (pregunta_id,)
+        )
+        if cursor.fetchone() is None:
+            conexion.rollback()
+            return False
+
+        # Eliminar dependencias antes de eliminar la pregunta
+        cursor.execute(
+            "DELETE FROM respuesta_ranking WHERE Preguntas_ID = ?",
+            (pregunta_id,)
+        )
+
         cursor.execute(
             "DELETE FROM preguntas_ranking WHERE Preguntas_ID = ?",
             (pregunta_id,)
         )
+        filas_afectadas = cursor.rowcount
+
+        if filas_afectadas == 0:
+            conexion.rollback()
+            return False
+
         conexion.commit()
-        return cursor.rowcount > 0
+        return True
     except Exception as e:
         if conexion:
             conexion.rollback()
