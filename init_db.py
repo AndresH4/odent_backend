@@ -1,15 +1,30 @@
-"""
-init_db.py — Stylo Dental
-==========================
-Script de inicialización de la base de datos SQLite.
-
-SEGURO PARA BD EXISTENTE:
-  - CREATE TABLE IF NOT EXISTS  → nunca destruye datos existentes.
-  - INSERT OR IGNORE             → evita duplicados en catálogos.
-  - ALTER TABLE dinámico         → añade columnas faltantes sin recrear tablas.
-  - CREATE INDEX IF NOT EXISTS   → añade restricciones nuevas sin recrear tablas.
-  - Sin DROP TABLE en ningún caso.
-"""
+# =============================================================================
+# init_db.py — UNIFICADO
+#
+# Combina los dos scripts de inicialización sin eliminar nada:
+#
+#   • config_ranking conserva Horas_Envio + Estado_Envio (archivo 2)
+#     Y añade la columna Estado (1=Activo, 2=Inactivo) del archivo 1.
+#     La migración Estado_Envio → Estado se realiza de forma segura.
+#
+#   • puntuacion_especialista añade Calificacion_Promedio REAL (archivo 1).
+#
+#   • diagnostico recibe la columna Codigo (migración: Codigo_CIE10 → Codigo
+#     si existía con ese nombre) y se recarga con el catálogo oficial CIE-10
+#     de 26 diagnósticos (archivo 2). El historial_diagnostico se repuebla
+#     respetando los nuevos IDs.
+#
+#   • Helpers _add_column_if_missing y _rename_column_if_exists presentes.
+#   • Índices idx_agenda_unica_activa e idx_diagnostico_codigo.
+#   • INSERT OR IGNORE en todos los catálogos y relaciones: nunca destruye datos.
+#   • Sin DROP TABLE en ningún caso.
+#
+# SEGURO PARA BD EXISTENTE:
+#   - CREATE TABLE IF NOT EXISTS  → no destruye tablas existentes.
+#   - INSERT OR IGNORE             → evita duplicados.
+#   - ALTER TABLE dinámico         → añade columnas faltantes sin recrear tablas.
+#   - CREATE INDEX IF NOT EXISTS   → no falla si el índice ya existe.
+# =============================================================================
 
 import sqlite3
 from sqlite3 import Error
@@ -17,7 +32,7 @@ from werkzeug.security import generate_password_hash
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# UTILIDAD: añadir columna si no existe
+# UTILIDADES DE MIGRACIÓN
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _add_column_if_missing(cursor, table: str, column: str, col_def: str):
@@ -29,8 +44,31 @@ def _add_column_if_missing(cursor, table: str, column: str, col_def: str):
         print(f"  ✚ columna '{column}' añadida a '{table}'")
 
 
+def _rename_column_if_exists(cursor, connection, table: str, old_col: str, new_col: str):
+    """
+    Renombra una columna usando ALTER TABLE … RENAME COLUMN (SQLite >= 3.25).
+    Si la columna destino ya existe, no hace nada.
+    Si la columna origen no existe, no hace nada.
+    """
+    cursor.execute(f"PRAGMA table_info({table})")
+    cols = [row[1] for row in cursor.fetchall()]
+    if new_col in cols:
+        print(f"  ✔ columna '{new_col}' ya existe en '{table}', no se renombra")
+        return
+    if old_col not in cols:
+        print(f"  ✔ columna '{old_col}' no existe en '{table}', nada que renombrar")
+        return
+    cursor.execute(f"ALTER TABLE {table} RENAME COLUMN {old_col} TO {new_col}")
+    connection.commit()
+    print(f"  ✚ columna '{old_col}' renombrada a '{new_col}' en '{table}'")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # DDL: tablas base (todas con IF NOT EXISTS)
+#
+# config_ranking mantiene Horas_Envio + Estado_Envio (archivo 2) porque son
+# datos existentes. La columna Estado (archivo 1) se añade dinámicamente en
+# la sección de migraciones para no romper BDs que ya tienen la tabla.
 # ─────────────────────────────────────────────────────────────────────────────
 
 SQL_TABLAS = """
@@ -66,14 +104,11 @@ CREATE TABLE IF NOT EXISTS regimen_eps (
   Descripcion VARCHAR(20) NOT NULL
 );
 
--- Tabla actualizada: tipo_afiliacion_eps (reemplaza tipo_eps en la nueva versión)
 CREATE TABLE IF NOT EXISTS tipo_afiliacion_eps (
   TipoEPS_ID  INTEGER PRIMARY KEY AUTOINCREMENT,
   Nombre_Tipo VARCHAR(50) NOT NULL
 );
 
--- Alias legacy por si alguna parte del código aún referencia tipo_eps
--- Se crea igual para compatibilidad, pero la FK en afiliacion apunta a tipo_afiliacion_eps
 CREATE TABLE IF NOT EXISTS tipo_eps (
   TipoEPS_ID  INTEGER PRIMARY KEY AUTOINCREMENT,
   Nombre_Tipo VARCHAR(50) NOT NULL
@@ -92,7 +127,6 @@ CREATE TABLE IF NOT EXISTS estado_multa (
 CREATE TABLE IF NOT EXISTS preguntas_ranking (
   Preguntas_ID   INTEGER PRIMARY KEY AUTOINCREMENT,
   Texto_Pregunta VARCHAR(150) NOT NULL
-  -- columna 'Activa' se añade dinámicamente más abajo si falta
 );
 
 CREATE TABLE IF NOT EXISTS accion_aseguramiento (
@@ -101,15 +135,13 @@ CREATE TABLE IF NOT EXISTS accion_aseguramiento (
 );
 
 CREATE TABLE IF NOT EXISTS diagnostico (
-  Diagnostico_ID    INTEGER PRIMARY KEY AUTOINCREMENT,
+  Diagnostico_ID     INTEGER PRIMARY KEY AUTOINCREMENT,
   Nombre_Diagnostico VARCHAR(100) NOT NULL
+  -- columna 'Codigo' se añade/renombra dinámicamente más abajo
 );
 
--- ── CONFIGURACIÓN GLOBAL DE RANKING ─────────────────────────────────────────
--- Una sola fila (Config_ID = 1) almacena los parámetros que el administrador
--- gestiona desde la vista de Configuración de Encuesta:
---   Horas_Envio  : retraso en horas desde la finalización de la consulta
---   Estado_Envio : 1 = ACTIVO (se envían correos), 0 = INACTIVO (kill-switch)
+-- config_ranking: conserva Horas_Envio + Estado_Envio.
+-- La columna Estado (1=Activo, 2=Inactivo) se añade dinámicamente.
 CREATE TABLE IF NOT EXISTS config_ranking (
   Config_ID    INTEGER PRIMARY KEY AUTOINCREMENT,
   Horas_Envio  INTEGER NOT NULL DEFAULT 2,
@@ -178,8 +210,6 @@ CREATE TABLE IF NOT EXISTS afiliacion (
   Fecha_Afiliacion DATE NOT NULL,
   FOREIGN KEY (Usuario_ID) REFERENCES usuarios(Usuario_ID),
   FOREIGN KEY (EPS_ID)     REFERENCES eps(EPS_ID)
-  -- TipoEPS_ID referencia tipo_afiliacion_eps en la nueva versión;
-  -- se omite FK explícita aquí para compatibilidad con ambas tablas.
 );
 
 CREATE TABLE IF NOT EXISTS aseguramiento_datos (
@@ -208,8 +238,6 @@ CREATE TABLE IF NOT EXISTS cita (
   Paciente_ID     INT NOT NULL,
   Agenda_ID       INT NOT NULL,
   Motivo_Consulta VARCHAR(50) NOT NULL,
-  -- Encuesta_Enviada: 0=no enviada, 1=enviada
-  -- Se añade dinámicamente si la tabla ya existe sin esta columna.
   FOREIGN KEY (Paciente_ID) REFERENCES paciente(Paciente_ID),
   FOREIGN KEY (Agenda_ID)   REFERENCES agenda(Agenda_ID)
 );
@@ -231,10 +259,13 @@ CREATE TABLE IF NOT EXISTS respuesta_ranking (
   FOREIGN KEY (Preguntas_ID) REFERENCES preguntas_ranking(Preguntas_ID)
 );
 
+-- puntuacion_especialista: incluye Calificacion_Promedio REAL (archivo 1).
+-- Se añade dinámicamente para BDs existentes que aún no la tengan.
 CREATE TABLE IF NOT EXISTS puntuacion_especialista (
-  Puntuacion_ID   INTEGER PRIMARY KEY AUTOINCREMENT,
-  Especialista_ID INT NOT NULL,
-  Respuesta_ID    INT NOT NULL,
+  Puntuacion_ID        INTEGER PRIMARY KEY AUTOINCREMENT,
+  Especialista_ID      INT NOT NULL,
+  Respuesta_ID         INT NOT NULL,
+  Calificacion_Promedio REAL,
   FOREIGN KEY (Especialista_ID) REFERENCES especialista(Especialista_ID),
   FOREIGN KEY (Respuesta_ID)    REFERENCES respuesta_ranking(Respuesta_ID)
 );
@@ -262,26 +293,23 @@ CREATE TABLE IF NOT EXISTS tratamiento (
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
-# DDL: índices (todos con IF NOT EXISTS, no destructivos)
+# DDL: índices
 # ─────────────────────────────────────────────────────────────────────────────
 
-# REQ 4 — VALIDACIÓN ESTRICTA DE DISPONIBILIDADES DUPLICADAS.
-# Índice UNIQUE parcial: un mismo especialista no puede tener dos filas en
-# 'agenda' con la misma Fecha + Hora_Inicio mientras el bloque esté activo
-# (EstadoAgenda_ID 1=Disponible o 2=Ocupado). Slots Cancelados (3) o
-# Cumplidos (4) no participan en la restricción, de modo que el historial
-# nunca se ve afectado y un horario liberado puede reutilizarse sin choques.
-# Esto es la defensa de última línea a nivel de BD; el backend en
-# modulo_citas/routes.py ya valida esto explícitamente antes de insertar,
-# pero el índice evita condiciones de carrera entre solicitudes concurrentes.
 SQL_INDICES = """
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agenda_unica_activa
 ON agenda (Especialista_ID, Fecha, Hora_Inicio)
 WHERE EstadoAgenda_ID IN (1, 2);
 """
 
+SQL_INDICE_DIAGNOSTICO = """
+CREATE UNIQUE INDEX IF NOT EXISTS idx_diagnostico_codigo
+ON diagnostico (Codigo)
+WHERE Codigo IS NOT NULL;
+"""
+
 # ─────────────────────────────────────────────────────────────────────────────
-# DML: catálogos con INSERT OR IGNORE (nunca duplica)
+# DML: catálogos con INSERT OR IGNORE
 # ─────────────────────────────────────────────────────────────────────────────
 
 SQL_CATALOGOS = """
@@ -317,11 +345,9 @@ INSERT OR IGNORE INTO especialidad (Especialidad_ID, Nombre_Especialidad) VALUES
 INSERT OR IGNORE INTO regimen_eps (Regimen_ID, Descripcion) VALUES
   (1, 'Contributivo'), (2, 'Subsidiado');
 
--- tipo_afiliacion_eps (nueva tabla)
 INSERT OR IGNORE INTO tipo_afiliacion_eps (TipoEPS_ID, Nombre_Tipo) VALUES
   (1, 'Cotizante'), (2, 'Beneficiario');
 
--- tipo_eps (tabla legacy — mismos datos para compatibilidad)
 INSERT OR IGNORE INTO tipo_eps (TipoEPS_ID, Nombre_Tipo) VALUES
   (1, 'Cotizante'), (2, 'Beneficiario');
 
@@ -334,7 +360,6 @@ INSERT OR IGNORE INTO eps (EPS_ID, Nombre_EPS, Telefono_EPS, Regimen_ID) VALUES
   (6, 'CapitalSalud', '601 7427257', 2),
   (7, 'Sura',         '601 4897941', 1);
 
--- 1=Disponible, 2=Ocupado, 3=Cancelado, 4=Cumplida
 INSERT OR IGNORE INTO estado_agenda (EstadoAgenda_ID, Nombre_Estado) VALUES
   (1, 'Disponible'), (2, 'Ocupado'), (3, 'Cancelado'), (4, 'Cumplida');
 
@@ -348,25 +373,48 @@ INSERT OR IGNORE INTO preguntas_ranking (Preguntas_ID, Texto_Pregunta) VALUES
   (1, '¿El odontologo fue amable durante la consulta?'),
   (2, '¿Te explico claramente el diagnostico?');
 
-INSERT OR IGNORE INTO diagnostico (Diagnostico_ID, Nombre_Diagnostico) VALUES
-  (1,  'Caries Dental Profunda'),
-  (2,  'Gingivitis Cronica'),
-  (3,  'Periodontitis Avanzada'),
-  (4,  'Absceso Periapical'),
-  (5,  'Tercer Molar Impactado'),
-  (6,  'Pulpite Irreversible'),
-  (7,  'Maloclusion Clase II'),
-  (8,  'Bruxismo Severo'),
-  (9,  'Evolucion de Tratamiento General'),
-  (10, 'Consulta de Control Preventivo');
-
--- Fila única de configuración de ranking (solo si no existe)
+-- config_ranking: fila única con todos los campos (Horas_Envio, Estado_Envio, Estado).
+-- Estado se añade dinámicamente; este INSERT cubre Horas_Envio y Estado_Envio.
 INSERT OR IGNORE INTO config_ranking (Config_ID, Horas_Envio, Estado_Envio)
   VALUES (1, 2, 1);
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
-# DML: nuevas especialidades solicitadas (idempotente — no duplica por nombre)
+# CATÁLOGO OFICIAL CIE-10 ODONTOLÓGICO — 26 diagnósticos canónicos
+# Formato SIN punto decimal en todos los códigos.
+# ─────────────────────────────────────────────────────────────────────────────
+
+CATALOGO_CIE10_ODONTOLOGICO = [
+    ("Z012", "EXAMEN ODONTOLOGICO"),
+    ("K020", "CARIES LIMITADA AL ESMALTE"),
+    ("K021", "CARIES DE LA DENTINA"),
+    ("K022", "CARIES DEL CEMENTO"),
+    ("K023", "CARIES DENTARIA DETENIDA"),
+    ("K029", "CARIES DENTAL, NO ESPECIFICADA"),
+    ("K040", "PULPITIS"),
+    ("K041", "NECROSIS DE LA PULPA"),
+    ("K044", "PERIODONTITIS APICAL AGUDA ORIGINADA EN LA PULPA"),
+    ("K045", "PERIODONTITIS APICAL CRONICA"),
+    ("K046", "ABSCESO PERIAPICAL CON FISTULA"),
+    ("K047", "ABSCESO PERIAPICAL SIN FISTULA"),
+    ("K050", "GINGIVITIS AGUDA"),
+    ("K051", "GINGIVITIS CRONICA"),
+    ("K052", "PERIODONTITIS AGUDA"),
+    ("K053", "PERIODONTITIS CRONICA"),
+    ("K060", "RETRACCION GINGIVAL"),
+    ("K010", "DIENTES INCLUIDOS"),
+    ("K011", "DIENTES IMPACTADOS"),
+    ("K083", "RAIZ DENTAL RETENIDA"),
+    ("K103", "ALVEOLITIS DEL MAXILAR"),
+    ("K120", "ESTOMATITIS AFTOSA RECURRENTE"),
+    ("S025", "FRACTURA DE LOS DIENTES"),
+    ("S032", "LUXACION DE DIENTE"),
+    ("Z463", "PRUEBA Y AJUSTE DE PROTESIS DENTAL"),
+    ("Z464", "PRUEBA Y AJUSTE DE DISPOSITIVO ORTODONCICO"),
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DML: especialidades nuevas (idempotente)
 # ─────────────────────────────────────────────────────────────────────────────
 
 SQL_ESPECIALIDADES_NUEVAS = """
@@ -479,8 +527,9 @@ INSERT OR IGNORE INTO multa (Multa_ID, Cita_ID, EstadoMulta_ID) VALUES
 INSERT OR IGNORE INTO respuesta_ranking (Respuesta_ID, Cita_ID, Preguntas_ID, Respuesta) VALUES
   (1,1,1,5),(2,2,2,5);
 
-INSERT OR IGNORE INTO puntuacion_especialista (Puntuacion_ID, Especialista_ID, Respuesta_ID) VALUES
-  (1,1,1),(2,2,2);
+-- puntuacion_especialista: incluye Calificacion_Promedio (del archivo 1).
+INSERT OR IGNORE INTO puntuacion_especialista (Puntuacion_ID, Especialista_ID, Respuesta_ID, Calificacion_Promedio) VALUES
+  (1,1,1,5.0),(2,2,2,5.0);
 
 INSERT OR IGNORE INTO aseguramiento_datos (AseguramientoDatos_ID, Usuario_ID, Accion_ID, Fecha, Descripcion) VALUES
   (1,1,1,'2025-10-22','Datos asegurados'),(2,2,1,'2025-10-23','Datos asegurados'),
@@ -499,9 +548,6 @@ INSERT OR IGNORE INTO aseguramiento_datos (AseguramientoDatos_ID, Usuario_ID, Ac
   (27,30,1,'2025-11-17','Datos asegurados'),(28,31,1,'2025-11-18','Datos asegurados');
 
 INSERT OR IGNORE INTO historial_clinico (Historial_ID, Cita_ID) VALUES
-  (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(8,8),(9,9),(10,10);
-
-INSERT OR IGNORE INTO historial_diagnostico (Historial_ID, Diagnostico_ID) VALUES
   (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(8,8),(9,9),(10,10);
 
 INSERT OR IGNORE INTO tratamiento (Tratamiento_ID, Historial_ID, Descripcion) VALUES
@@ -534,34 +580,63 @@ def create_database_and_tables():
         print("Creando tablas (si no existen)...")
         cursor.executescript(SQL_TABLAS)
 
-        # ── 2. ALTER TABLE: añadir columnas nuevas dinámicamente ──────────────
+        # ── 2. ALTER TABLE: añadir / renombrar columnas dinámicamente ─────────
         print("Verificando columnas adicionales...")
 
-        # preguntas_ranking.Activa (nueva versión)
+        # preguntas_ranking.Activa
         _add_column_if_missing(
             cursor, 'preguntas_ranking', 'Activa',
             'INTEGER NOT NULL DEFAULT 1'
         )
 
-        # cita.Encuesta_Enviada (nueva versión)
+        # cita.Encuesta_Enviada
         _add_column_if_missing(
             cursor, 'cita', 'Encuesta_Enviada',
             'INTEGER NOT NULL DEFAULT 0'
         )
 
+        # ── config_ranking: añadir columna Estado (REQ 2 / archivo 1) ─────────
+        # Horas_Envio y Estado_Envio ya existen en la tabla base; Estado es nueva.
+        _add_column_if_missing(
+            cursor, 'config_ranking', 'Estado',
+            'INTEGER NOT NULL DEFAULT 1'
+        )
+        # Migración Estado_Envio → Estado para BDs existentes:
+        # Estado_Envio=1 (activo) → Estado=1; Estado_Envio=0 (inactivo) → Estado=2.
+        cursor.execute("PRAGMA table_info(config_ranking)")
+        cfg_cols = [row[1] for row in cursor.fetchall()]
+        if 'Estado_Envio' in cfg_cols:
+            cursor.execute("""
+                UPDATE config_ranking
+                SET Estado = CASE WHEN Estado_Envio = 0 THEN 2 ELSE 1 END
+                WHERE Estado IS NULL OR Estado NOT IN (1, 2)
+            """)
+            print("  ✚ Estado_Envio migrado a Estado en config_ranking")
         connection.commit()
 
-        # ── 3. Actualizar Activa=1 en preguntas ya existentes (migración) ─────
+        # ── diagnostico: renombrar Codigo_CIE10 → Codigo si aún existe ────────
+        _rename_column_if_exists(cursor, connection, 'diagnostico', 'Codigo_CIE10', 'Codigo')
+        # Si la columna no existía con ningún nombre, crearla como 'Codigo'
+        _add_column_if_missing(
+            cursor, 'diagnostico', 'Codigo',
+            'VARCHAR(10)'
+        )
+
+        # ── puntuacion_especialista: Calificacion_Promedio (REQ 3 / archivo 1) ─
+        _add_column_if_missing(
+            cursor, 'puntuacion_especialista', 'Calificacion_Promedio',
+            'REAL'
+        )
+
+        connection.commit()
+
+        # ── 3. Migración: Activa=1 en preguntas ya existentes ─────────────────
         cursor.execute(
             "UPDATE preguntas_ranking SET Activa = 1 WHERE Activa IS NULL"
         )
         connection.commit()
 
-        # ── 4. Crear índices (IF NOT EXISTS) ───────────────────────────────────
-        # REQ 4: si la BD ya tenía filas duplicadas activas antes de este
-        # cambio, CREATE UNIQUE INDEX fallará con "UNIQUE constraint failed".
-        # En ese caso se informa por consola sin abortar el resto del script,
-        # para que el operador pueda limpiar manualmente esas filas legacy.
+        # ── 4. Crear índice sobre agenda (IF NOT EXISTS) ───────────────────────
         print("Verificando índices adicionales...")
         try:
             cursor.executescript(SQL_INDICES)
@@ -578,26 +653,74 @@ def create_database_and_tables():
         cursor.executescript(SQL_CATALOGOS)
         connection.commit()
 
-        # ── 5.1 Insertar/garantizar especialidades nuevas solicitadas ─────────
+        # ── 5.1 Especialidades nuevas ─────────────────────────────────────────
         print("Verificando especialidades adicionales...")
         cursor.executescript(SQL_ESPECIALIDADES_NUEVAS)
         connection.commit()
 
-        # ── 6. Insertar usuarios con contraseñas hasheadas ────────────────────
+        # ── 6. RESET + RECARGA DE diagnostico con catálogo CIE-10 ────────────
+        # Se desactivan temporalmente las FK para borrar las tablas dependientes,
+        # se vacía diagnostico y se recarga con los 26 diagnósticos oficiales.
+        # historial_diagnostico se repuebla con los nuevos IDs canónicos.
+        print("Vaciando tabla 'diagnostico' y tablas dependientes...")
+        cursor.execute("PRAGMA foreign_keys = OFF")
+        cursor.execute("DELETE FROM historial_diagnostico")
+        cursor.execute("DELETE FROM diagnostico")
+        cursor.execute(
+            "DELETE FROM sqlite_sequence WHERE name = 'diagnostico'"
+        )
+        cursor.execute("PRAGMA foreign_keys = ON")
+        connection.commit()
+
+        print("Insertando catálogo oficial CIE-10 Odontológico (26 diagnósticos)...")
+        for codigo, nombre in CATALOGO_CIE10_ODONTOLOGICO:
+            cursor.execute(
+                "INSERT INTO diagnostico (Codigo, Nombre_Diagnostico) VALUES (?, ?)",
+                (codigo, nombre)
+            )
+        connection.commit()
+
+        # Índice único sobre Codigo ahora que la tabla está limpia
+        try:
+            cursor.executescript(SQL_INDICE_DIAGNOSTICO)
+            connection.commit()
+            print("  ✚ índice único 'idx_diagnostico_codigo' verificado en 'diagnostico'")
+        except sqlite3.IntegrityError as idx_err:
+            print(
+                "  ⚠ No se pudo crear 'idx_diagnostico_codigo': "
+                f"códigos duplicados detectados. Detalle: {idx_err}"
+            )
+
+        # Repoblar historial_diagnostico con los nuevos IDs canónicos (primeros 10)
+        print("Reinsertando historial_diagnostico con IDs del catálogo oficial...")
+        cursor.execute(
+            "SELECT Diagnostico_ID FROM diagnostico ORDER BY Diagnostico_ID LIMIT 10"
+        )
+        nuevos_ids = [row[0] for row in cursor.fetchall()]
+        for historial_id, diagnostico_id in enumerate(nuevos_ids, start=1):
+            cursor.execute(
+                "INSERT OR IGNORE INTO historial_diagnostico "
+                "(Historial_ID, Diagnostico_ID) VALUES (?, ?)",
+                (historial_id, diagnostico_id)
+            )
+        connection.commit()
+
+        # ── 7. Insertar usuarios con contraseñas hasheadas ────────────────────
         print("Insertando usuarios con contraseñas hasheadas (solo nuevos)...")
         for u in USUARIOS_DATA:
             (nombres, apellidos, tipo_doc, documento, contrasena_plana,
              fecha_nac, genero_id, correo, telefono, estado_id, rol_id) = u
 
-            # Verificar si ya existe el usuario (por documento)
             cursor.execute(
                 "SELECT Usuario_ID FROM usuarios WHERE NumeroDocumento = ?",
                 (documento,)
             )
             if cursor.fetchone():
-                continue  # ya existe, no duplicar
+                continue
 
-            contrasena_hash = generate_password_hash(contrasena_plana, method='scrypt')
+            contrasena_hash = generate_password_hash(
+                contrasena_plana, method='scrypt'
+            )
             cursor.execute(
                 """INSERT INTO usuarios
                    (Nombres, Apellidos, TipoDoc_ID, NumeroDocumento, Contrasena,
@@ -609,7 +732,7 @@ def create_database_and_tables():
 
         connection.commit()
 
-        # ── 7. Insertar relaciones y datos dependientes ───────────────────────
+        # ── 8. Insertar relaciones y datos dependientes ───────────────────────
         print("Insertando relaciones (INSERT OR IGNORE)...")
         cursor.executescript(SQL_RELACIONES)
         connection.commit()

@@ -225,14 +225,24 @@
                     <span class="text-[9px] bg-sky-500 px-3 py-1.5 rounded-full font-black uppercase tracking-widest">Sin eliminaciones</span>
                 </div>
                 <div class="overflow-x-auto">
-                    <table class="w-full text-left min-w-[1100px]">
+                    <table class="w-full text-left min-w-[1300px]" style="table-layout:fixed;">
+                        <colgroup>
+                            <col style="width:13%">
+                            <col style="width:15%">
+                            <col style="width:17%">
+                            <col style="width:14%">
+                            <col style="width:17%">
+                            <col style="width:12%">
+                            <col style="width:12%">
+                        </colgroup>
                         <thead class="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
                             <tr>
-                                <th class="p-5">Fecha</th>
-                                <th class="p-5">Especialidad</th>
-                                <th class="p-5">Médico / Servicio</th>
-                                <th class="p-5">Estado Histórico</th>
+                                <th class="p-5 text-left">Fecha</th>
+                                <th class="p-5 text-left">Especialidad</th>
+                                <th class="p-5 text-left">Médico / Servicio</th>
+                                <th class="p-5 text-left">Estado Histórico</th>
                                 <th class="p-5 text-center">Motivo</th>
+                                <th class="p-5 text-center">Reporte</th>
                                 <th class="p-5 text-center">Encuesta</th>
                             </tr>
                         </thead>
@@ -242,9 +252,7 @@
             </div>
         </div>
 
-        <!-- ============================================================
-             VISTA: MIS MULTAS
-        ============================================================ -->
+        <!-- VISTA: MIS MULTAS -->
         <div id="vista-multas" class="hidden animate-in">
             <div class="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
                 <div class="p-6 border-b border-slate-100 bg-gradient-to-r from-slate-900 to-rose-950 text-white flex flex-wrap justify-between items-center gap-4">
@@ -265,7 +273,6 @@
                     </div>
                 </div>
 
-                <!-- Leyenda de estados -->
                 <div class="px-8 py-4 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-4">
                     <div class="flex items-center gap-2">
                         <span class="inline-flex items-center gap-1.5 text-[9px] font-black uppercase px-3 py-1.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
@@ -562,6 +569,117 @@
                     <div id="encuesta-exito-bar" class="h-full bg-green-500 rounded-full transition-all" style="width:100%;"></div>
                 </div>
                 <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-3">Cerrando automáticamente...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         MODAL: REPORTE CLÍNICO (Solo Lectura — Vista Paciente)
+    ============================================================ -->
+    <div id="modalReportePaciente" class="modal-overlay" style="display:none;">
+        <div class="modal-content overflow-hidden flex flex-col" style="max-width:860px; max-height:90vh;">
+            <!-- Cabecera -->
+            <div class="bg-gradient-to-r from-sky-700 to-sky-900 p-10 flex justify-between items-start text-white rounded-t-[45px] flex-shrink-0">
+                <div class="flex items-center gap-4">
+                    <div class="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center border border-white/20 flex-shrink-0">
+                        <i class="fas fa-file-medical-alt text-2xl text-sky-200"></i>
+                    </div>
+                    <div>
+                        <p class="text-sky-300 text-[10px] font-black uppercase tracking-[0.4em] mb-1">Reporte Clínico — Solo Lectura</p>
+                        <h3 class="font-black text-2xl tracking-tight uppercase">Reporte de Atención</h3>
+                    </div>
+                </div>
+                <button onclick="cerrarModalReportePaciente()" class="text-white/40 hover:text-white transition-all mt-1">
+                    <i class="fas fa-times-circle text-4xl"></i>
+                </button>
+            </div>
+
+            <!-- Cuerpo scrollable -->
+            <div class="p-10 overflow-y-auto flex-grow" style="max-height:65vh;">
+
+                <!-- Datos del Paciente -->
+                <div class="bg-slate-50 rounded-3xl border border-slate-200/80 p-8 mb-6">
+                    <p class="text-[10px] font-black text-sky-600 uppercase tracking-[0.3em] mb-5 flex items-center gap-2">
+                        <i class="fas fa-user-circle"></i> Datos del Paciente
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                        <div class="md:col-span-3">
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Nombre Completo</label>
+                            <div id="rp-nombre" class="bg-white border border-slate-200 rounded-2xl px-5 py-4 text-lg font-black text-slate-800 uppercase shadow-sm tracking-tight">—</div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Tipo de Documento</label>
+                            <div id="rp-tipo-doc" class="bg-slate-50/60 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">—</div>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Número de Documento</label>
+                            <div id="rp-num-doc" class="bg-slate-50/60 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">—</div>
+                        </div>
+                        <div class="md:col-span-3">
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Motivo de la Consulta</label>
+                            <div id="rp-motivo" class="bg-slate-50/60 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm min-h-[3rem]">—</div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Fecha de la Cita</label>
+                            <div id="rp-fecha" class="bg-slate-50/60 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">—</div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Hora de la Cita</label>
+                            <div id="rp-hora" class="bg-slate-50/60 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">—</div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Especialista</label>
+                            <div id="rp-especialista" class="bg-slate-50/60 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">—</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Diagnóstico -->
+                <div class="bg-white rounded-3xl border border-slate-100 p-8 shadow-sm mb-6">
+                    <label class="block text-[10px] font-black text-sky-600 uppercase tracking-[0.3em] mb-3 flex items-center gap-2">
+                        <i class="fas fa-stethoscope"></i> Diagnóstico
+                    </label>
+                    <textarea id="rp-diagnostico" readonly rows="2"
+                        class="rp-campo-readonly w-full resize-none"></textarea>
+                </div>
+
+                <!-- Evolución -->
+                <div class="bg-white rounded-3xl border border-slate-100 p-8 shadow-sm mb-6">
+                    <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em] mb-3 flex items-center gap-2">
+                        <i class="fas fa-chart-line"></i> Evolución de la Consulta
+                    </label>
+                    <textarea id="rp-evolucion" readonly rows="4"
+                        class="rp-campo-readonly w-full resize-none"></textarea>
+                </div>
+
+                <!-- Tratamiento -->
+                <div class="bg-white rounded-3xl border border-slate-100 p-8 shadow-sm mb-2">
+                    <label class="block text-[10px] font-black text-violet-600 uppercase tracking-[0.3em] mb-3 flex items-center gap-2">
+                        <i class="fas fa-pills"></i> Plan y Tratamiento a Seguir
+                    </label>
+                    <textarea id="rp-tratamiento" readonly rows="4"
+                        class="rp-campo-readonly w-full resize-none"></textarea>
+                </div>
+
+                <!-- Estado vacío -->
+                <p id="rp-msg-cargando" class="text-sky-600 text-xs font-bold uppercase tracking-widest mt-4 text-center" style="display:none;">
+                    <i class="fas fa-spinner fa-spin mr-2"></i> Cargando reporte...
+                </p>
+                <p id="rp-msg-vacio" class="text-amber-600 text-xs font-bold uppercase tracking-widest mt-4 text-center" style="display:none;">
+                    El especialista aún no ha registrado el reporte clínico de esta cita.
+                </p>
+            </div>
+
+            <!-- Pie -->
+            <div class="px-10 pb-10 flex items-center justify-between flex-wrap gap-4 flex-shrink-0 border-t border-slate-100 pt-6">
+                <div class="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3">
+                    <i class="fas fa-lock text-amber-500 text-sm"></i>
+                    <p class="text-amber-700 text-[10px] font-black uppercase tracking-widest">Documento de solo lectura — No editable</p>
+                </div>
+                <button onclick="cerrarModalReportePaciente()"
+                    class="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-sky-600 transition-colors shadow-xl active:scale-95">
+                    Cerrar Reporte
+                </button>
             </div>
         </div>
     </div>

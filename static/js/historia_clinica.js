@@ -20,101 +20,50 @@ console.log('[HC][INIT] data-paciente-id=', document.body.dataset.pacienteId,
 let mapaDental           = {};
 let dienteSeleccionado   = null;
 let hallazgosData        = [];
-let _diagSelectedID      = null;
-let _diagSelectedNombre  = '';
+let _diagSelectedID      = null;   // Diagnostico_ID numérico (null si no es de la BD)
+let _diagSelectedCodigo  = '';     // Código CIE-10 seleccionado (ej. "K020")
+let _diagSelectedNombre  = '';     // Nombre completo seleccionado
 let _cie10ActiveIdx      = -1;
 let _diagBDLoaded        = false;
-let _diagBDCache         = [];
+let _diagBDCache         = [];     // [ {id, codigo, nombre}, ... ]  ← catálogo de la BD
 
-// ─── CATÁLOGO CIE-10 DENTAL (estático de respaldo) ────────────────────────────
-const CIE10_DENTAL = [
-    { id: null, codigo: 'K00.0', desc: 'Anodoncia' },
-    { id: null, codigo: 'K00.1', desc: 'Dientes supernumerarios' },
-    { id: null, codigo: 'K00.2', desc: 'Anomalías del tamaño y forma de los dientes' },
-    { id: null, codigo: 'K00.3', desc: 'Dientes moteados (fluorosis dental)' },
-    { id: null, codigo: 'K00.4', desc: 'Perturbaciones en la formación de los dientes' },
-    { id: null, codigo: 'K00.5', desc: 'Anomalías hereditarias de la estructura dentaria' },
-    { id: null, codigo: 'K00.6', desc: 'Perturbaciones en la erupción de los dientes' },
-    { id: null, codigo: 'K00.8', desc: 'Otros trastornos del desarrollo de los dientes' },
-    { id: null, codigo: 'K01.0', desc: 'Dientes incluidos' },
-    { id: null, codigo: 'K01.1', desc: 'Dientes impactados' },
-    { id: null, codigo: 'K02.0', desc: 'Caries del esmalte (mancha blanca)' },
-    { id: null, codigo: 'K02.1', desc: 'Caries de la dentina' },
-    { id: null, codigo: 'K02.2', desc: 'Caries del cemento' },
-    { id: null, codigo: 'K02.3', desc: 'Caries dental detenida' },
-    { id: null, codigo: 'K02.4', desc: 'Odontoclasia' },
-    { id: null, codigo: 'K02.5', desc: 'Caries con exposición pulpar' },
-    { id: null, codigo: 'K02.8', desc: 'Otras caries dentales' },
-    { id: null, codigo: 'K02.9', desc: 'Caries dental no especificada' },
-    { id: null, codigo: 'K03.0', desc: 'Atrición excesiva de los dientes' },
-    { id: null, codigo: 'K03.1', desc: 'Abrasión de los dientes' },
-    { id: null, codigo: 'K03.2', desc: 'Erosión de los dientes' },
-    { id: null, codigo: 'K03.3', desc: 'Reabsorción patológica de los dientes' },
-    { id: null, codigo: 'K03.4', desc: 'Hipercementosis' },
-    { id: null, codigo: 'K03.5', desc: 'Anquilosis dental' },
-    { id: null, codigo: 'K03.6', desc: 'Depósitos en los dientes (cálculo, sarro)' },
-    { id: null, codigo: 'K03.7', desc: 'Cambios posteruptivos del color del esmalte' },
-    { id: null, codigo: 'K04.0', desc: 'Pulpitis' },
-    { id: null, codigo: 'K04.1', desc: 'Necrosis de la pulpa' },
-    { id: null, codigo: 'K04.2', desc: 'Degeneración de la pulpa' },
-    { id: null, codigo: 'K04.3', desc: 'Formación anormal de tejido duro en la pulpa' },
-    { id: null, codigo: 'K04.4', desc: 'Periodontitis apical aguda de origen pulpar' },
-    { id: null, codigo: 'K04.5', desc: 'Periodontitis apical crónica' },
-    { id: null, codigo: 'K04.6', desc: 'Absceso periapical con fístula' },
-    { id: null, codigo: 'K04.7', desc: 'Absceso periapical sin fístula' },
-    { id: null, codigo: 'K04.8', desc: 'Quiste radicular' },
-    { id: null, codigo: 'K04.9', desc: 'Otras enfermedades de la pulpa y tejidos periapicales' },
-    { id: null, codigo: 'K05.0', desc: 'Gingivitis aguda' },
-    { id: null, codigo: 'K05.1', desc: 'Gingivitis crónica' },
-    { id: null, codigo: 'K05.2', desc: 'Periodontitis aguda' },
-    { id: null, codigo: 'K05.3', desc: 'Periodontitis crónica' },
-    { id: null, codigo: 'K05.4', desc: 'Periodontosis (periodontitis juvenil)' },
-    { id: null, codigo: 'K05.5', desc: 'Otras enfermedades periodontales' },
-    { id: null, codigo: 'K06.0', desc: 'Recesión gingival' },
-    { id: null, codigo: 'K06.1', desc: 'Agrandamiento gingival (hipertrofia)' },
-    { id: null, codigo: 'K06.2', desc: 'Lesiones gingivales y periodontales por trauma' },
-    { id: null, codigo: 'K07.0', desc: 'Anomalías del tamaño de los maxilares' },
-    { id: null, codigo: 'K07.1', desc: 'Anomalías de la relación entre los maxilares' },
-    { id: null, codigo: 'K07.2', desc: 'Anomalías de la relación de los arcos dentarios' },
-    { id: null, codigo: 'K07.3', desc: 'Anomalías de la posición del diente' },
-    { id: null, codigo: 'K07.4', desc: 'Maloclusión no especificada' },
-    { id: null, codigo: 'K07.5', desc: 'Anomalías dentofaciales funcionales' },
-    { id: null, codigo: 'K07.6', desc: 'Trastornos de la articulación temporomandibular (ATM)' },
-    { id: null, codigo: 'K08.0', desc: 'Exfoliación de dientes por causas sistémicas' },
-    { id: null, codigo: 'K08.1', desc: 'Pérdida de dientes por accidente o extracción' },
-    { id: null, codigo: 'K08.2', desc: 'Atrofia del reborde alveolar desdentado' },
-    { id: null, codigo: 'K08.3', desc: 'Raíz dental retenida' },
-    { id: null, codigo: 'K08.8', desc: 'Otros trastornos de los dientes y sus estructuras' },
-    { id: null, codigo: 'K09.0', desc: 'Quistes odontogénicos del desarrollo' },
-    { id: null, codigo: 'K09.1', desc: 'Quistes de las fisuras (no odontogénicos)' },
-    { id: null, codigo: 'K09.2', desc: 'Otros quistes de los maxilares' },
-    { id: null, codigo: 'K10.0', desc: 'Trastornos del desarrollo de los maxilares' },
-    { id: null, codigo: 'K10.1', desc: 'Granuloma central de células gigantes' },
-    { id: null, codigo: 'K10.2', desc: 'Enfermedades inflamatorias de los maxilares' },
-    { id: null, codigo: 'K10.3', desc: 'Alveolitis del maxilar (alveolo seco)' },
-    { id: null, codigo: 'K11.0', desc: 'Atrofia de glándula salival' },
-    { id: null, codigo: 'K11.2', desc: 'Sialoadenitis' },
-    { id: null, codigo: 'K11.3', desc: 'Absceso de glándula salival' },
-    { id: null, codigo: 'K11.5', desc: 'Sialolitiasis (cálculo salival)' },
-    { id: null, codigo: 'K11.6', desc: 'Mucocele de glándula salival' },
-    { id: null, codigo: 'K11.7', desc: 'Trastornos de la secreción salival (xerostomía)' },
-    { id: null, codigo: 'K12.0', desc: 'Estomatitis aftosa recurrente (aftas)' },
-    { id: null, codigo: 'K12.1', desc: 'Otras formas de estomatitis' },
-    { id: null, codigo: 'K12.2', desc: 'Celulitis y absceso de boca' },
-    { id: null, codigo: 'K13.0', desc: 'Enfermedades de los labios (queilitis)' },
-    { id: null, codigo: 'K13.2', desc: 'Leucoplasia y otras alteraciones del epitelio bucal' },
-    { id: null, codigo: 'K13.4', desc: 'Granuloma y lesiones similares de la mucosa bucal' },
-    { id: null, codigo: 'K13.6', desc: 'Hiperplasia irritativa de la mucosa bucal' },
-    { id: null, codigo: 'K14.0', desc: 'Glositis' },
-    { id: null, codigo: 'K14.1', desc: 'Lengua geográfica (glositis migratoria benigna)' },
-    { id: null, codigo: 'K14.3', desc: 'Hipertrofia de papilas linguales (lengua vellosa)' },
-    { id: null, codigo: 'K14.5', desc: 'Lengua fisurada (plegada)' },
-    { id: null, codigo: 'K14.6', desc: 'Glosodinia (ardor de lengua)' },
-    { id: null, codigo: 'S02.5', desc: 'Fractura del diente' },
-    { id: null, codigo: 'S02.6', desc: 'Fractura del maxilar inferior' },
-    { id: null, codigo: 'S03.2', desc: 'Luxación del diente' },
-    { id: null, codigo: 'Z29.0', desc: 'Profilaxis dental (limpieza / control periódico)' },
-    { id: null, codigo: 'Z46.3', desc: 'Adaptación y ajuste de aparato dental (ortodoncia)' },
+// ─── CATÁLOGO CIE-10 ESTÁTICO (respaldo offline / fusión si BD falla) ─────────
+// Se usa solo cuando el fetch a /api/diagnosticos no devuelve datos.
+const CIE10_DENTAL_FALLBACK = [
+    { id: null, codigo: 'K00.0', nombre: 'Anodoncia' },
+    { id: null, codigo: 'K00.1', nombre: 'Dientes supernumerarios' },
+    { id: null, codigo: 'K00.2', nombre: 'Anomalías del tamaño y forma de los dientes' },
+    { id: null, codigo: 'K00.3', nombre: 'Dientes moteados (fluorosis dental)' },
+    { id: null, codigo: 'K00.4', nombre: 'Perturbaciones en la formación de los dientes' },
+    { id: null, codigo: 'K00.5', nombre: 'Anomalías hereditarias de la estructura dentaria' },
+    { id: null, codigo: 'K00.6', nombre: 'Perturbaciones en la erupción de los dientes' },
+    { id: null, codigo: 'K00.8', nombre: 'Otros trastornos del desarrollo de los dientes' },
+    { id: null, codigo: 'K01.0', nombre: 'Dientes incluidos' },
+    { id: null, codigo: 'K01.1', nombre: 'Dientes impactados' },
+    { id: null, codigo: 'K02.0', nombre: 'Caries limitada al esmalte' },
+    { id: null, codigo: 'K02.1', nombre: 'Caries de la dentina' },
+    { id: null, codigo: 'K02.2', nombre: 'Caries del cemento' },
+    { id: null, codigo: 'K02.3', nombre: 'Caries dental detenida' },
+    { id: null, codigo: 'K02.9', nombre: 'Caries dental no especificada' },
+    { id: null, codigo: 'K04.0', nombre: 'Pulpitis' },
+    { id: null, codigo: 'K04.1', nombre: 'Necrosis de la pulpa' },
+    { id: null, codigo: 'K04.4', nombre: 'Periodontitis apical aguda originada en la pulpa' },
+    { id: null, codigo: 'K04.5', nombre: 'Periodontitis apical crónica' },
+    { id: null, codigo: 'K04.6', nombre: 'Absceso periapical con fístula' },
+    { id: null, codigo: 'K04.7', nombre: 'Absceso periapical sin fístula' },
+    { id: null, codigo: 'K05.0', nombre: 'Gingivitis aguda' },
+    { id: null, codigo: 'K05.1', nombre: 'Gingivitis crónica' },
+    { id: null, codigo: 'K05.2', nombre: 'Periodontitis aguda' },
+    { id: null, codigo: 'K05.3', nombre: 'Periodontitis crónica' },
+    { id: null, codigo: 'K06.0', nombre: 'Retracción gingival' },
+    { id: null, codigo: 'K08.3', nombre: 'Raíz dental retenida' },
+    { id: null, codigo: 'K10.3', nombre: 'Alveolitis del maxilar' },
+    { id: null, codigo: 'K12.0', nombre: 'Estomatitis aftosa recurrente' },
+    { id: null, codigo: 'S02.5', nombre: 'Fractura de los dientes' },
+    { id: null, codigo: 'S03.2', nombre: 'Luxación de diente' },
+    { id: null, codigo: 'Z01.2', nombre: 'Examen odontológico' },
+    { id: null, codigo: 'Z46.3', nombre: 'Prueba y ajuste de prótesis dental' },
+    { id: null, codigo: 'Z46.4', nombre: 'Prueba y ajuste de dispositivo ortodóncico' },
 ];
 
 // ─── TOAST ─────────────────────────────────────────────────────────────────────
@@ -173,95 +122,229 @@ function cambiarTab(tabId) {
     }
 }
 
-// ─── DIAGNÓSTICO: CARGA DESDE BD + FUSIÓN CON CIE-10 ──────────────────────────
+// ─── DIAGNÓSTICO: CARGA DESDE BD ──────────────────────────────────────────────
+/**
+ * Carga el catálogo CIE-10 desde el endpoint de la BD.
+ * Se ejecuta en DOMContentLoaded (precarga en background) y también
+ * bajo demanda la primera vez que el usuario empieza a escribir.
+ *
+ * El backend devuelve:
+ *   { "ok": true, "data": [ {"id":1, "codigo":"Z012", "nombre":"EXAMEN ODONTOLOGICO"}, ... ] }
+ *
+ * Cada entrada queda en _diagBDCache con la forma normalizada:
+ *   { id, codigo, codigoConPunto, nombre }
+ * donde codigoConPunto convierte "K020" → "K02.0" para matching bidireccional.
+ */
 async function _cargarDiagnosticosBD() {
     if (_diagBDLoaded) return;
     try {
-        const res  = await fetch('/api/diagnosticos');
+        const res  = await fetch('/api/diagnosticos', { cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        if (data.ok && Array.isArray(data.data)) {
+
+        if (data.ok && Array.isArray(data.data) && data.data.length > 0) {
             _diagBDCache = data.data.map(d => ({
-                id:     d.id,
-                codigo: '',
-                desc:   d.nombre,
+                id:            d.id,
+                codigo:        (d.codigo || '').toUpperCase(),
+                codigoConPunto: _agregarPunto(d.codigo || ''),
+                nombre:        d.nombre,
             }));
+            console.log(`[HC][CIE-10] Catálogo BD cargado: ${_diagBDCache.length} diagnósticos`);
+        } else {
+            throw new Error('Respuesta vacía o inválida');
         }
     } catch (err) {
-        console.warn('[HC] No se pudieron cargar diagnósticos desde BD:', err);
-        _diagBDCache = [];
+        console.warn('[HC][CIE-10] Fallback al catálogo estático:', err.message);
+        // Poblar con el catálogo estático si la BD falla
+        _diagBDCache = CIE10_DENTAL_FALLBACK.map(d => ({
+            id:             d.id,
+            codigo:         (d.codigo || '').toUpperCase().replace('.', ''),
+            codigoConPunto: d.codigo,
+            nombre:         d.nombre,
+        }));
     }
     _diagBDLoaded = true;
 }
 
-function _fusionarCatalogoDiag() {
-    const fusionado = [..._diagBDCache];
-    const nombresEnBD = new Set(_diagBDCache.map(d => d.desc.toLowerCase()));
-    CIE10_DENTAL.forEach(item => {
-        const etiqueta = item.codigo ? `${item.codigo} — ${item.desc}` : item.desc;
-        if (!nombresEnBD.has(item.desc.toLowerCase())) {
-            fusionado.push({ id: null, codigo: item.codigo, desc: item.desc, etiqueta });
-        }
-    });
-    return fusionado;
+/**
+ * Convierte un código sin punto a su forma con punto decimal estándar.
+ * Regla: el punto va después de la(s) letra(s) y los primeros 2 dígitos.
+ * Ej: "K020" → "K02.0"  |  "Z012" → "Z01.2"  |  "S025" → "S02.5"
+ * Si ya tiene punto o es muy corto, lo devuelve tal cual.
+ */
+function _agregarPunto(codigo) {
+    if (!codigo) return '';
+    const c = codigo.trim().toUpperCase();
+    if (c.includes('.')) return c;
+    // Formato esperado: 1-2 letras + dígitos
+    const m = c.match(/^([A-Z]+\d{2})(\d+)$/);
+    return m ? `${m[1]}.${m[2]}` : c;
 }
 
-// ─── CIE-10 / DIAGNÓSTICO: AUTOCOMPLETE ───────────────────────────────────────
+/**
+ * Normaliza una cadena de búsqueda para comparación bidireccional:
+ * elimina puntos y convierte a minúsculas.
+ */
+function _normQ(str) {
+    return (str || '').toLowerCase().replace(/\./g, '');
+}
+
+// ─── CIE-10 AUTOCOMPLETE ───────────────────────────────────────────────────────
+/**
+ * Filtra el catálogo en memoria buscando coincidencias en código Y nombre,
+ * con tolerancia a punto decimal (K020 y K02.0 devuelven el mismo resultado).
+ * Dispara desde 1 carácter.
+ */
 async function buscarCIE10(query) {
     const dropdown = document.getElementById('cie10-dropdown');
     if (!dropdown) return;
     _cie10ActiveIdx = -1;
 
-    const q = query.trim().toLowerCase();
+    const q = query.trim();
+
     if (q.length < 1) {
-        dropdown.classList.remove('open');
-        _diagSelectedID     = null;
-        _diagSelectedNombre = '';
+        _cerrarDropdown(dropdown);
+        _limpiarSeleccionDiag();
         return;
     }
 
-    await _cargarDiagnosticosBD();
-    const catalogo = _fusionarCatalogoDiag();
+    // Asegurar catálogo cargado antes de filtrar
+    if (!_diagBDLoaded) {
+        await _cargarDiagnosticosBD();
+    }
 
-    const resultados = catalogo.filter(item => {
-        const haystack = `${item.codigo} ${item.desc}`.toLowerCase();
-        return haystack.includes(q);
-    }).slice(0, 15);
+    const qNorm = _normQ(q);  // sin punto, minúsculas
+
+    const coincidentes = _diagBDCache.filter(item => {
+        const codigoNorm  = _normQ(item.codigo);
+        const nombreNorm  = (item.nombre || '').toLowerCase();
+        return codigoNorm.includes(qNorm) || nombreNorm.includes(qNorm);
+    });
+
+    // Ordenar: coincidencia al inicio del código primero
+    coincidentes.sort((a, b) => {
+        const aStart = _normQ(a.codigo).startsWith(qNorm) ? 0 : 1;
+        const bStart = _normQ(b.codigo).startsWith(qNorm) ? 0 : 1;
+        return aStart - bStart;
+    });
+
+    const resultados = coincidentes.slice(0, 20);
 
     if (resultados.length === 0) {
-        dropdown.innerHTML = `<div class="cie10-empty"><i class="fas fa-search" style="margin-right:6px;opacity:.5;"></i>Sin coincidencias para "${query}"</div>`;
+        dropdown.innerHTML = `<div class="cie10-empty" style="padding:12px 14px;font-size:13px;color:#94a3b8;">
+            <i class="fas fa-search" style="margin-right:6px;opacity:.5;"></i>
+            Sin coincidencias para "<strong>${_escapeHtml(q)}</strong>"
+        </div>`;
     } else {
+        const qReg = new RegExp(`(${_escapeRegex(qNorm)})`, 'gi');
+
         dropdown.innerHTML = resultados.map((item, i) => {
-            const etiqueta = item.codigo ? `${item.codigo} — ${item.desc}` : item.desc;
-            const idAttr   = item.id !== null ? item.id : 'null';
-            return `
-            <div class="cie10-option" data-idx="${i}"
-                 onmousedown="seleccionarCIE10(${idAttr}, '${item.codigo}', '${item.desc.replace(/'/g, "\\'")}')">
-                ${item.codigo ? `<span class="cie10-code">${item.codigo}</span>` : ''}
-                <span class="cie10-desc">${item.desc}</span>
+            const codigoDisplay = item.codigoConPunto || item.codigo;
+            const nombreEsc     = _escapeHtml(item.nombre);
+
+            // Resaltar coincidencia en el nombre (sobre texto normalizado)
+            const nombreHL = nombreEsc.replace(
+                new RegExp(`(${_escapeRegex(q.replace(/\./g, ''))})`, 'gi'),
+                '<mark>$1</mark>'
+            );
+
+            const idAttr    = item.id !== null ? item.id : 'null';
+            const codigoStr = _escapeAttr(codigoDisplay);
+            const nombreStr = item.nombre.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+            return `<div
+                class="cie10-option"
+                role="option"
+                data-idx="${i}"
+                style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;border-bottom:1px solid #f1f5f9;"
+                onmousedown="seleccionarCIE10(${idAttr}, '${codigoStr}', '${nombreStr}')">
+                    ${codigoDisplay
+                        ? `<span class="cie10-code" style="font-weight:700;font-size:12px;color:#0ea5e9;min-width:52px;">${_escapeHtml(codigoDisplay)}</span>`
+                        : ''}
+                    <span class="cie10-desc" style="font-size:13px;color:#334155;">${nombreHL}</span>
             </div>`;
         }).join('');
     }
+
+    _abrirDropdown(dropdown);
+}
+
+function _abrirDropdown(dropdown) {
+    if (!dropdown) return;
+    dropdown.style.display = 'block';
     dropdown.classList.add('open');
 }
 
-function seleccionarCIE10(id, codigo, desc) {
-    const input = document.getElementById('hc-diag');
-    const etiqueta = codigo ? `${codigo} — ${desc}` : desc;
-    if (input) {
-        input.value = etiqueta;
-        input.classList.remove('hc-field-error');
-    }
-    _diagSelectedID     = (id !== null && id !== undefined && String(id) !== 'null') ? parseInt(id, 10) : null;
-    _diagSelectedNombre = etiqueta;
+function _cerrarDropdown(dropdown) {
+    if (!dropdown) return;
+    dropdown.style.display = 'none';
+    dropdown.classList.remove('open');
+}
+
+function _limpiarSeleccionDiag() {
+    _diagSelectedID     = null;
+    _diagSelectedCodigo = '';
+    _diagSelectedNombre = '';
+    _setInput('hc-diag-id', '');
+}
+
+function _escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function _escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function _escapeAttr(str) {
+    return String(str || '').replace(/'/g, "\\'");
+}
+
+/**
+ * Al seleccionar una opción del dropdown:
+ *  - Pinta en el input visual: "[K02.0] CARIES LIMITADA AL ESMALTE"
+ *  - Asigna el Diagnostico_ID al campo oculto #hc-diag-id
+ *  - Guarda codigo y nombre en las variables de estado
+ *  - Cierra el dropdown
+ *  - Limpia estado de error si lo había
+ */
+function seleccionarCIE10(id, codigo, nombre) {
+    const input   = document.getElementById('hc-diag');
+    const hidden  = document.getElementById('hc-diag-id');
     const dropdown = document.getElementById('cie10-dropdown');
-    if (dropdown) dropdown.classList.remove('open');
+
+    // Formato visual obligatorio: "[K02.0] NOMBRE"
+    const etiquetaVisual = codigo ? `[${codigo}] ${nombre}` : nombre;
+
+    if (input) {
+        input.value = etiquetaVisual;
+        _limpiarErrorCampo(input);
+    }
+
+    _diagSelectedID     = (id !== null && id !== undefined && String(id) !== 'null')
+                          ? parseInt(id, 10)
+                          : null;
+    _diagSelectedCodigo = codigo || '';
+    _diagSelectedNombre = etiquetaVisual;
+
+    // El campo oculto recibe el ID numérico si existe, o el código como texto
+    if (hidden) {
+        hidden.value = _diagSelectedID !== null
+            ? String(_diagSelectedID)
+            : _diagSelectedCodigo;
+    }
+
+    _cerrarDropdown(dropdown);
 }
 
 function ocultarDropdownCIE10() {
     setTimeout(() => {
-        const dropdown = document.getElementById('cie10-dropdown');
-        if (dropdown) dropdown.classList.remove('open');
+        _cerrarDropdown(document.getElementById('cie10-dropdown'));
     }, 200);
 }
 
@@ -283,7 +366,7 @@ function _cie10KeyNav(e) {
         e.preventDefault();
         opciones[_cie10ActiveIdx].dispatchEvent(new MouseEvent('mousedown'));
     } else if (e.key === 'Escape') {
-        dropdown.classList.remove('open');
+        _cerrarDropdown(dropdown);
     }
 }
 
@@ -292,36 +375,54 @@ function _cie10Highlight(opciones) {
     if (_cie10ActiveIdx >= 0) opciones[_cie10ActiveIdx].scrollIntoView({ block: 'nearest' });
 }
 
-// ─── VALIDACIÓN CAMPOS OBLIGATORIOS ───────────────────────────────────────────
+// ─── VALIDACIÓN CAMPOS OBLIGATORIOS ────────────────────────────────────────────
+function _marcarErrorCampo(el) {
+    if (!el) return;
+    el.classList.add('hc-field-error');
+    const errMsgId = el.getAttribute('aria-describedby');
+    if (errMsgId) {
+        const errEl = document.getElementById(errMsgId);
+        if (errEl) errEl.classList.add('visible');
+    }
+}
+
+function _limpiarErrorCampo(el) {
+    if (!el) return;
+    el.classList.remove('hc-field-error');
+    const errMsgId = el.getAttribute('aria-describedby');
+    if (errMsgId) {
+        const errEl = document.getElementById(errMsgId);
+        if (errEl) errEl.classList.remove('visible');
+    }
+}
+
 function _validarCamposObligatorios() {
     const diagEl      = document.getElementById('hc-diag');
     const evolucionEl = document.getElementById('hc-evolucion');
     const planEl      = document.getElementById('hc-plan');
 
-    const diagVal   = diagEl      ? diagEl.value.trim()      : '';
-    const evoVal    = evolucionEl ? evolucionEl.value.trim() : '';
-    const planVal   = planEl      ? planEl.value.trim()      : '';
+    const diagVal  = diagEl      ? diagEl.value.trim()      : '';
+    const evoVal   = evolucionEl ? evolucionEl.value.trim() : '';
+    const planVal  = planEl      ? planEl.value.trim()      : '';
 
     const errores = [];
 
-    [diagEl, evolucionEl, planEl].forEach(el => {
-        if (el) el.classList.remove('hc-field-error');
-    });
+    [diagEl, evolucionEl, planEl].forEach(el => _limpiarErrorCampo(el));
 
     const errContainer = document.getElementById('hc-validation-errors');
     if (errContainer) errContainer.style.display = 'none';
 
     if (!evoVal) {
         errores.push('Evolución / Procedimiento realizado');
-        if (evolucionEl) evolucionEl.classList.add('hc-field-error');
+        _marcarErrorCampo(evolucionEl);
     }
     if (!diagVal) {
         errores.push('Diagnóstico (CIE-10)');
-        if (diagEl) diagEl.classList.add('hc-field-error');
+        _marcarErrorCampo(diagEl);
     }
     if (!planVal) {
         errores.push('Plan a seguir / Tratamiento');
-        if (planEl) planEl.classList.add('hc-field-error');
+        _marcarErrorCampo(planEl);
     }
 
     if (errores.length > 0) {
@@ -342,6 +443,13 @@ function _validarCamposObligatorios() {
         return false;
     }
     return true;
+}
+
+function _limpiarErrorEnInput(el) {
+    if (!el) return;
+    el.addEventListener('input', () => {
+        if (el.value.trim()) _limpiarErrorCampo(el);
+    });
 }
 
 // ─── FETCH: DATOS DEL PACIENTE ─────────────────────────────────────────────────
@@ -409,7 +517,7 @@ function _renderAlertas(p) {
     }
 }
 
-// ─── FETCH: EVOLUCIONES ────────────────────────────────────────────────────────
+// ─── FETCH Y RENDER DE EVOLUCIONES (acordeón) ─────────────────────────────────
 async function cargarEvoluciones() {
     if (!_HC_PACIENTE_ID) return;
 
@@ -418,13 +526,13 @@ async function cargarEvoluciones() {
 
     cont.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:10px;">
-            <div class="skeleton skeleton-line" style="height:56px;border-radius:12px;"></div>
-            <div class="skeleton skeleton-line" style="height:56px;border-radius:12px;"></div>
-            <div class="skeleton skeleton-line w-60" style="height:56px;border-radius:12px;"></div>
+            <div class="skeleton skeleton-line" style="height:58px;border-radius:12px;"></div>
+            <div class="skeleton skeleton-line" style="height:58px;border-radius:12px;"></div>
+            <div class="skeleton skeleton-line w-60" style="height:58px;border-radius:12px;"></div>
         </div>`;
 
     try {
-        const url = `/api/historial/paciente/${_HC_PACIENTE_ID}/evoluciones`;
+        const url  = `/api/historial/paciente/${_HC_PACIENTE_ID}/evoluciones`;
         const res  = await fetch(url, { cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
@@ -469,46 +577,79 @@ async function cargarEvoluciones() {
             'Cancelada': 'badge-cancelada',
         };
 
-        cont.innerHTML = data.data.map((ev, idx) => `
-            <div class="evolucion-item${idx === 0 ? '' : ' collapsed'}" id="ev-item-${idx}">
-                <div class="evolucion-header" onclick="toggleEvolucion(${idx})">
+        cont.innerHTML = data.data.map((ev, idx) => {
+            const esCitaActual = ev.Cita_ID === _HC_CITA_ID;
+            const colapsado    = esCitaActual ? '' : ' collapsed';
+            const tieneDatos   = ev.Diagnostico || ev.Evolucion || ev.Tratamiento;
+
+            return `
+            <div class="evolucion-item${colapsado}" id="ev-item-${idx}">
+                <div class="evolucion-header" onclick="toggleEvolucion(${idx})"
+                     role="button" aria-expanded="${esCitaActual}" tabindex="0"
+                     onkeydown="if(event.key==='Enter'||event.key===' '){toggleEvolucion(${idx})}">
                     <div class="evolucion-meta">
                         <span class="evolucion-fecha">
                             <i class="fas fa-calendar-alt" style="margin-right:4px;"></i>
                             ${ev.Fecha || '—'}${ev.Hora_Inicio ? ' · ' + ev.Hora_Inicio : ''}
                         </span>
-                        <span class="evolucion-esp">${ev.NombreEspecialista || '—'}</span>
+                        <span class="evolucion-esp">${_escapeHtml(ev.NombreEspecialista || '—')}</span>
                         <span class="badge ${estadoClase[ev.EstadoAgenda] || 'badge-ocupado'}">
-                            ${ev.EstadoAgenda || '—'}
+                            ${_escapeHtml(ev.EstadoAgenda || '—')}
                         </span>
                         ${ev.Nombre_Especialidad
-                            ? `<span class="evolucion-especialidad">${ev.Nombre_Especialidad}</span>`
+                            ? `<span class="evolucion-especialidad">${_escapeHtml(ev.Nombre_Especialidad)}</span>`
                             : ''}
                         ${ev.Motivo_Consulta
-                            ? `<span class="evolucion-motivo-chip">${ev.Motivo_Consulta}</span>`
+                            ? `<span class="evolucion-motivo-chip">${_escapeHtml(ev.Motivo_Consulta)}</span>`
+                            : ''}
+                        ${esCitaActual
+                            ? `<span class="badge-actual"><i class="fas fa-circle" style="font-size:6px;margin-right:4px;"></i>Actual</span>`
                             : ''}
                     </div>
-                    <i class="fas fa-chevron-down evolucion-toggle-icon"></i>
+                    <i class="fas fa-chevron-down evolucion-toggle-icon" aria-hidden="true"></i>
                 </div>
+
                 <div class="evolucion-body">
-                    ${ev.Motivo_Consulta
-                        ? `<div class="evolucion-campo"><span class="evolucion-campo-label">Motivo:</span><span class="evolucion-campo-val">${ev.Motivo_Consulta}</span></div>`
-                        : ''}
-                    ${ev.Diagnostico && ev.Diagnostico.trim()
-                        ? `<div class="evolucion-campo"><span class="evolucion-campo-label">Diagnóstico:</span><span class="evolucion-campo-val evolucion-diag">${ev.Diagnostico}</span></div>`
-                        : ''}
-                    ${ev.Evolucion && ev.Evolucion.trim()
-                        ? `<div class="evolucion-campo"><span class="evolucion-campo-label">Evolución:</span><span class="evolucion-campo-val">${ev.Evolucion}</span></div>`
-                        : ''}
-                    ${ev.Tratamiento && ev.Tratamiento.trim()
-                        ? `<div class="evolucion-campo"><span class="evolucion-campo-label">Plan:</span><span class="evolucion-campo-val">${ev.Tratamiento}</span></div>`
-                        : ''}
-                    ${!ev.Diagnostico && !ev.Evolucion && !ev.Tratamiento
-                        ? `<p class="evolucion-vacia">Sin historial clínico registrado aún.</p>`
-                        : ''}
+                    ${ev.Motivo_Consulta ? `
+                    <div class="evolucion-campo">
+                        <span class="evolucion-campo-label">
+                            <i class="fas fa-comment-medical"></i> Motivo
+                        </span>
+                        <span class="evolucion-campo-val">${_escapeHtml(ev.Motivo_Consulta)}</span>
+                    </div>` : ''}
+
+                    ${ev.Diagnostico && ev.Diagnostico.trim() ? `
+                    <div class="evolucion-campo">
+                        <span class="evolucion-campo-label">
+                            <i class="fas fa-stethoscope"></i> Diagnóstico
+                        </span>
+                        <span class="evolucion-campo-val evolucion-diag">${_escapeHtml(ev.Diagnostico)}</span>
+                    </div>` : ''}
+
+                    ${ev.Evolucion && ev.Evolucion.trim() ? `
+                    <div class="evolucion-campo">
+                        <span class="evolucion-campo-label">
+                            <i class="fas fa-clipboard-check"></i> Evolución
+                        </span>
+                        <span class="evolucion-campo-val">${_escapeHtml(ev.Evolucion)}</span>
+                    </div>` : ''}
+
+                    ${ev.Tratamiento && ev.Tratamiento.trim() ? `
+                    <div class="evolucion-campo">
+                        <span class="evolucion-campo-label">
+                            <i class="fas fa-notes-medical"></i> Plan
+                        </span>
+                        <span class="evolucion-campo-val">${_escapeHtml(ev.Tratamiento)}</span>
+                    </div>` : ''}
+
+                    ${!tieneDatos ? `
+                    <p class="evolucion-vacia">
+                        <i class="fas fa-info-circle" style="margin-right:5px;"></i>
+                        Sin historial clínico registrado para esta consulta.
+                    </p>` : ''}
                 </div>
-            </div>`
-        ).join('');
+            </div>`;
+        }).join('');
 
     } catch (err) {
         console.error('[HC] cargarEvoluciones:', err);
@@ -517,7 +658,7 @@ async function cargarEvoluciones() {
                 <div class="hc-error-alert">
                     <i class="fas fa-exclamation-circle"></i>
                     <p>No se pudo cargar el historial de evoluciones.</p>
-                    <button class="btn-retry" onclick="cargarEvoluciones()">
+                    <button class="btn-retry" onclick="cargarEvoluciones()" type="button">
                         <i class="fas fa-redo"></i> Reintentar carga
                     </button>
                 </div>`;
@@ -525,10 +666,13 @@ async function cargarEvoluciones() {
     }
 }
 
-// ─── COLLAPSIBLE EVOLUCIONES ────────────────────────────────────────────────────
+// ─── TOGGLE ACORDEÓN ───────────────────────────────────────────────────────────
 function toggleEvolucion(idx) {
     const item = document.getElementById(`ev-item-${idx}`);
-    if (item) item.classList.toggle('collapsed');
+    if (!item) return;
+    const estaColapsado = item.classList.toggle('collapsed');
+    const header = item.querySelector('.evolucion-header');
+    if (header) header.setAttribute('aria-expanded', String(!estaColapsado));
 }
 
 // ─── ODONTOGRAMA ───────────────────────────────────────────────────────────────
@@ -738,7 +882,7 @@ async function finalizarConsulta() {
     }
 }
 
-// ─── GUARDAR HISTORIA ──────────────────────────────────────────────────────────
+// ─── GUARDAR HISTORIA (borrador) ───────────────────────────────────────────────
 async function guardarHistoria(finalizar = false) {
     if (finalizar) {
         return finalizarConsulta();
@@ -808,23 +952,34 @@ window.addEventListener('DOMContentLoaded', () => {
 
     cargarDatosPaciente();
     cargarEvoluciones();
+
+    // Precarga del catálogo BD en background (sin bloquear la UI)
     _cargarDiagnosticosBD();
 
+    // Cerrar selector odontograma y dropdown CIE-10 al hacer clic fuera
     document.addEventListener('click', (e) => {
         cerrarSelector();
         const cie10 = document.getElementById('cie10-dropdown');
         if (cie10 && !e.target.closest('.cie10-wrapper')) {
-            cie10.classList.remove('open');
+            _cerrarDropdown(cie10);
         }
     });
 
+    // Input diagnóstico: navegación por teclado + búsqueda reactiva desde BD
     const diagInput = document.getElementById('hc-diag');
     if (diagInput) {
         diagInput.addEventListener('keydown', _cie10KeyNav);
         diagInput.addEventListener('input', (e) => {
-            _diagSelectedID     = null;
-            _diagSelectedNombre = '';
+            // Limpiar error visual al escribir
+            if (e.target.value.trim()) _limpiarErrorCampo(e.target);
+            // Resetear selección guardada: el usuario está editando manualmente
+            _limpiarSeleccionDiag();
+            // Lanzar búsqueda predictiva desde 1 carácter
             buscarCIE10(e.target.value);
         });
     }
+
+    // Limpiar errores en tiempo real para Evolución y Plan
+    _limpiarErrorEnInput(document.getElementById('hc-evolucion'));
+    _limpiarErrorEnInput(document.getElementById('hc-plan'));
 });

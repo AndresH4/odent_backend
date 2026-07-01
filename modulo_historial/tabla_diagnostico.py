@@ -4,33 +4,43 @@ from db import get_db_connection
 # Blueprint exclusivo para la tabla maestra del catálogo de enfermedades
 tabla_diag_bp = Blueprint('tabla_diagnostico', __name__)
 
+
+def _row_to_dict(fila):
+    """
+    Serializa una fila de diagnostico al formato canónico requerido por el frontend.
+    Retorna: {'id': ..., 'codigo': ..., 'nombre': ...}
+    """
+    return {
+        'id':     fila['Diagnostico_ID'],
+        'codigo': fila['Codigo']          if fila['Codigo'] else '',
+        'nombre': fila['Nombre_Diagnostico'],
+    }
+
+
 # =============================================================================
 # 1. VER TODO EL CATÁLOGO DE ENFERMEDADES (GET /api/diagnosticos)
 # =============================================================================
 @tabla_diag_bp.route('/diagnosticos', methods=['GET'])
 def obtener_catalogo_diagnosticos():
     conexion = None
-    cursor = None
     try:
         conexion = get_db_connection()
-        # Retiramos dictionary=True porque SQLite no lo soporta de esta manera
+        conexion.row_factory = __import__('sqlite3').Row
         cursor = conexion.cursor()
 
-        cursor.execute("SELECT Diagnostico_ID, Nombre_Diagnostico FROM diagnostico")
-
+        cursor.execute(
+            "SELECT Diagnostico_ID, Codigo, Nombre_Diagnostico "
+            "FROM diagnostico "
+            "ORDER BY Codigo"
+        )
         filas = cursor.fetchall()
-        
-        # Convertimos las filas de SQLite (Row) a diccionarios estándar
-        lista_diagnosticos = [dict(fila) for fila in filas]
+        lista_diagnosticos = [_row_to_dict(f) for f in filas]
 
-        return jsonify({"ok": True, "diagnosticos": lista_diagnosticos}), 200
+        return jsonify({"ok": True, "data": lista_diagnosticos}), 200
 
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
     finally:
-        # Cierre seguro del cursor y la conexión
-        if cursor:
-            cursor.close()
         if conexion:
             conexion.close()
 
@@ -40,37 +50,40 @@ def obtener_catalogo_diagnosticos():
 # =============================================================================
 @tabla_diag_bp.route('/diagnosticos/crear', methods=['POST'])
 def crear_diagnostico_maestro():
-    datos = request.get_json()
-    nombre_diagnostico = datos.get('Nombre_Diagnostico')
+    datos              = request.get_json() or {}
+    nombre_diagnostico = datos.get('Nombre_Diagnostico', '').strip()
+    codigo             = datos.get('Codigo', '').strip().upper().replace('.', '')
 
     if not nombre_diagnostico:
         return jsonify({"ok": False, "error": "El campo Nombre_Diagnostico es obligatorio"}), 400
 
     conexion = None
-    cursor = None
     try:
         conexion = get_db_connection()
-        # Retiramos dictionary=True
+        conexion.row_factory = __import__('sqlite3').Row
         cursor = conexion.cursor()
 
-        # Cambiamos el %s (MySQL) por el ? (SQLite)
         cursor.execute(
-            "INSERT INTO diagnostico (Nombre_Diagnostico) VALUES (?)",
-            (nombre_diagnostico,)
+            "INSERT INTO diagnostico (Codigo, Nombre_Diagnostico) VALUES (?, ?)",
+            (codigo if codigo else None, nombre_diagnostico)
         )
         conexion.commit()
 
+        nuevo_id = cursor.lastrowid
+        cursor.execute(
+            "SELECT Diagnostico_ID, Codigo, Nombre_Diagnostico FROM diagnostico WHERE Diagnostico_ID = ?",
+            (nuevo_id,)
+        )
+        fila = cursor.fetchone()
+
         return jsonify({
-            "ok": True,
+            "ok":      True,
             "mensaje": "Nueva enfermedad agregada al catálogo de ODENT",
-            "Diagnostico_ID": cursor.lastrowid
+            "data":    _row_to_dict(fila),
         }), 201
 
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 400
     finally:
-        # Cierre seguro del cursor y la conexión
-        if cursor:
-            cursor.close()
         if conexion:
             conexion.close()

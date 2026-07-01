@@ -111,8 +111,6 @@
         <div class="hc-tab-panel" id="tab-actual" role="tabpanel">
 
             <!-- BANNER DE ERRORES DE VALIDACIÓN -->
-            <!-- REQ 2: contenedor de errores de validación, oculto por defecto,
-                 activado por JS en _validarCamposObligatorios() -->
             <div id="hc-validation-errors" style="display:none;" class="hc-validation-errors-wrap"></div>
 
             <!-- 1. MOTIVO DE LA CONSULTA -->
@@ -188,7 +186,6 @@
             </div>
 
             <!-- 3. EVOLUCIÓN CLÍNICA -->
-            <!-- REQ 2: campos obligatorios con estructura preparada para clases de error -->
             <div class="aseg-card">
                 <div class="aseg-card-label">
                     <i class="fas fa-clipboard-check"></i>
@@ -207,7 +204,6 @@
                         placeholder="Describa los avances y procedimientos realizados en esta sesión..."
                         aria-required="true"
                         aria-describedby="hc-evolucion-err"></textarea>
-                    <!-- Mensaje de error inline (activado por JS con display:block) -->
                     <span class="hc-field-error-msg" id="hc-evolucion-err" role="alert">
                         <i class="fas fa-exclamation-circle"></i>
                         Este campo es obligatorio para finalizar la consulta.
@@ -217,14 +213,18 @@
                 <div class="form-row">
 
                     <!-- Campo obligatorio: Diagnóstico CIE-10 -->
-                    <!-- REQ 3 y 4: input de diagnóstico con contenedor flotante de autocompletado -->
                     <div class="form-group hc-required-group">
                         <label class="hc-label hc-label-required" for="hc-diag">
                             Diagnóstico (CIE-10)
                             <span class="hc-required-star" aria-hidden="true">*</span>
                         </label>
-                        <!-- Wrapper relativo para anclar el dropdown -->
-                        <div class="cie10-wrapper">
+
+                        <!--
+                            Contenedor relativo que ancla el dropdown flotante.
+                            El campo oculto #hc-diag-id almacena el Diagnostico_ID
+                            o el codigo que se enviará al backend.
+                        -->
+                        <div class="cie10-wrapper" style="position:relative;">
                             <div class="cie10-input-container">
                                 <i class="fas fa-search cie10-search-icon" aria-hidden="true"></i>
                                 <input
@@ -240,14 +240,45 @@
                                     oninput="buscarCIE10(this.value)"
                                     onblur="ocultarDropdownCIE10()">
                             </div>
-                            <!-- REQ 3 y 4: dropdown flotante de sugerencias CIE-10 -->
+
+                            <!--
+                                Campo oculto que almacena el Diagnostico_ID (número)
+                                o el código CIE-10 (texto) del elemento seleccionado.
+                                El payload de guardado/finalización lo lee como DiagnosticoID.
+                            -->
+                            <input
+                                type="hidden"
+                                id="hc-diag-id"
+                                name="DiagnosticoID"
+                                value="">
+
+                            <!--
+                                Dropdown flotante con scroll vertical.
+                                Posicionado absolute respecto al .cie10-wrapper.
+                                Clase "open" añadida/quitada por JS para mostrar/ocultar.
+                            -->
                             <div
                                 class="cie10-dropdown"
                                 id="cie10-dropdown"
                                 role="listbox"
-                                aria-label="Sugerencias de diagnósticos CIE-10">
+                                aria-label="Sugerencias de diagnósticos CIE-10"
+                                style="
+                                    position: absolute;
+                                    top: 100%;
+                                    left: 0;
+                                    right: 0;
+                                    z-index: 999;
+                                    max-height: 260px;
+                                    overflow-y: auto;
+                                    display: none;
+                                    background: #fff;
+                                    border: 1px solid #e2e8f0;
+                                    border-radius: 10px;
+                                    box-shadow: 0 8px 24px rgba(0,0,0,.12);
+                                ">
                             </div>
                         </div>
+
                         <span class="hc-field-error-msg" id="hc-diag-err" role="alert">
                             <i class="fas fa-exclamation-circle"></i>
                             Selecciona un diagnóstico para continuar.
@@ -282,7 +313,6 @@
         <!-- ══════════════════════════════════════════════════════════
              PESTAÑA 2: HISTORIAL CLÍNICO
         ══════════════════════════════════════════════════════════ -->
-        <!-- REQ 1: sección de historial con acordeón colapsable -->
         <div class="hc-tab-panel hc-tab-hidden" id="tab-historial" role="tabpanel">
 
             <div class="aseg-card">
@@ -292,15 +322,12 @@
                     <span class="hc-hist-badge" id="hist-count-badge" style="display:none;"></span>
                 </div>
 
-                <!-- Instrucción contextual -->
                 <p class="hc-historial-hint">
                     <i class="fas fa-hand-pointer"></i>
                     Haz clic en cualquier registro para ver el detalle de esa consulta.
                 </p>
 
-                <!-- Contenedor de evoluciones: el JS inyecta los .evolucion-item aquí -->
                 <div id="evoluciones-container">
-                    <!-- Estado de carga inicial (esqueletos) -->
                     <div class="hc-skeleton-list">
                         <div class="skeleton skeleton-line" style="height:58px;border-radius:12px;"></div>
                         <div class="skeleton skeleton-line" style="height:58px;border-radius:12px;"></div>
